@@ -3,6 +3,7 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 
+const CONFIG_PATH = join(import.meta.dir, "../../config/tmux.conf");
 const CMUXX_PATH = join(import.meta.dir, "cmuxx.ts");
 
 function isInsideTmux(): boolean {
@@ -11,9 +12,8 @@ function isInsideTmux(): boolean {
 
 function startTmuxSession(): void {
   const tmux = spawn("tmux", [
+    "-f", CONFIG_PATH,
     "new-session",
-    ";",
-    "source-file", "-q", "~/.tmux.conf",
     ";",
     "bind", "-n", "M-Space", "run-shell", CMUXX_PATH
   ], {
