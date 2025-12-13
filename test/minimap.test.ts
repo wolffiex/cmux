@@ -67,18 +67,20 @@ describe("renderMinimap", () => {
     expect(lines[9][0]).toBe("└");
   });
 
-  test("pane title is centered", () => {
+  test("homerow label is rendered", () => {
     const window: WindowInfo = {
       width: 100,
       height: 50,
-      panes: [{ id: "%0", width: 100, height: 50, left: 0, top: 0, title: "test" }],
+      panes: [{ id: "%0", width: 100, height: 50, left: 0, top: 0, title: "" }],
     };
 
     const lines = renderMinimap(window, { width: 20, height: 10 });
 
-    // Title "test" should appear somewhere in the middle rows
-    const hasTitle = lines.some(line => line.includes("test"));
-    expect(hasTitle).toBe(true);
+    // First pane should have "A" label rendered with mini font
+    // The font renders multi-line, so check that something other than borders/spaces exists
+    const innerContent = lines.slice(1, -1).map(l => l.slice(1, -1)).join("");
+    const hasContent = innerContent.replace(/ /g, "").length > 0;
+    expect(hasContent).toBe(true);
   });
 
   test("odd width minimap", () => {
