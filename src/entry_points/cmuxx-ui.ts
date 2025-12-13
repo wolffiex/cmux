@@ -3,6 +3,9 @@
 import { getWindowInfo } from "../tmux.ts";
 import { renderMinimap } from "../minimap.ts";
 
+// Hide cursor
+process.stdout.write("\x1b[?25l");
+
 const window = getWindowInfo();
 
 // Get popup dimensions from terminal size
@@ -23,5 +26,7 @@ console.log(lines.map(line => leftPad + line).join("\n"));
 process.stdin.setRawMode(true);
 process.stdin.resume();
 process.stdin.once("data", () => {
+  // Show cursor before exit
+  process.stdout.write("\x1b[?25h");
   process.exit(0);
 });

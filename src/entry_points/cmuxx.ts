@@ -7,7 +7,8 @@ function calculatePopupSize(window: { width: number; height: number }): {
   width: number;
   height: number;
 } {
-  const width = Math.floor(window.width * 0.8);
+  // Force even width for centering
+  const width = Math.floor(window.width * 0.8) & ~1;
   // Scale height proportionally, then add rows for header/footer chrome
   const chromeRows = 6;
   const scaledHeight = Math.floor(window.height * 0.8);
