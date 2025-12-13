@@ -16,28 +16,24 @@ export interface WindowInfo {
 }
 
 export function getWindowInfo(): WindowInfo {
-  const sizeOutput = execSync(
-    "tmux display-message -p '#{window_width} #{window_height}'"
-  )
-    .toString()
-    .trim();
-  const [width, height] = sizeOutput.split(" ").map(Number);
-
-  const paneFormat =
-    "#{pane_id}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_title}";
-  const panesOutput = execSync(`tmux list-panes -F '${paneFormat}'`)
+  // Single tmux command to get both window size and pane info
+  const format = "#{window_width}:#{window_height}:#{pane_id}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_title}";
+  const output = execSync(`tmux list-panes -F '${format}'`)
     .toString()
     .trim();
 
-  const panes = panesOutput.split("\n").map((line) => {
-    const [id, paneWidth, paneHeight, left, top, title] = line.split(":");
+  const lines = output.split("\n");
+  const [width, height] = lines[0].split(":").slice(0, 2).map(Number);
+
+  const panes = lines.map((line) => {
+    const parts = line.split(":");
     return {
-      id,
-      width: Number(paneWidth),
-      height: Number(paneHeight),
-      left: Number(left),
-      top: Number(top),
-      title: title || "",
+      id: parts[2],
+      width: Number(parts[3]),
+      height: Number(parts[4]),
+      left: Number(parts[5]),
+      top: Number(parts[6]),
+      title: parts[7] || "",
     };
   });
 

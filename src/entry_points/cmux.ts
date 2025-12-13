@@ -1,13 +1,22 @@
 #!/usr/bin/env bun
 
 import { spawn } from "node:child_process";
+import { join } from "node:path";
+
+const CMUXX_PATH = join(import.meta.dir, "cmuxx.ts");
 
 function isInsideTmux(): boolean {
   return !!process.env.TMUX;
 }
 
 function startTmuxSession(): void {
-  const tmux = spawn("tmux", ["new-session"], {
+  const tmux = spawn("tmux", [
+    "new-session",
+    ";",
+    "source-file", "-q", "~/.tmux.conf",
+    ";",
+    "bind", "-n", "M-Space", "run-shell", CMUXX_PATH
+  ], {
     stdio: "inherit",
   });
 

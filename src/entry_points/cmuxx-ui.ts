@@ -1,13 +1,19 @@
 #!/usr/bin/env bun
 
 import { execSync } from "node:child_process";
-import { getWindowInfo } from "../tmux.ts";
+import type { WindowInfo } from "../tmux.ts";
 import { renderMinimap, HOMEROW_KEYS } from "../minimap.ts";
 
 // Hide cursor
 process.stdout.write("\x1b[?25l");
 
-const windowInfo = getWindowInfo();
+// Receive window info from cmuxx as base64-encoded JSON arg
+const encoded = process.argv[2];
+if (!encoded) {
+  console.error("Usage: cmuxx-ui <base64-encoded-window-info>");
+  process.exit(1);
+}
+const windowInfo: WindowInfo = JSON.parse(Buffer.from(encoded, "base64").toString());
 
 // Get popup dimensions from terminal size
 const cols = process.stdout.columns;

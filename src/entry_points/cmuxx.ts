@@ -17,18 +17,20 @@ function calculatePopupSize(window: { width: number; height: number }): {
   return { width, height };
 }
 
-function openPopup(size: { width: number; height: number }): void {
+function openPopup(size: { width: number; height: number }, panesJson: string): void {
   const uiPath = new URL("./cmuxx-ui.ts", import.meta.url).pathname;
+  // Pass pane data as base64 to avoid shell escaping issues
+  const encoded = Buffer.from(panesJson).toString("base64");
   execSync(
-    `tmux display-popup -w ${size.width} -h ${size.height} -E ${uiPath}`,
+    `tmux display-popup -w ${size.width} -h ${size.height} -E "${uiPath} ${encoded}"`,
     { stdio: "inherit" }
   );
 }
 
 function main(): void {
-  const { width, height } = getWindowInfo();
-  const popupSize = calculatePopupSize({ width, height });
-  openPopup(popupSize);
+  const windowInfo = getWindowInfo();
+  const popupSize = calculatePopupSize(windowInfo);
+  openPopup(popupSize, JSON.stringify(windowInfo));
 }
 
 main();
