@@ -1,6 +1,7 @@
 import { execSync, spawn } from "node:child_process"
 import { join } from "node:path"
 import { ALL_LAYOUTS, resolveLayout, type LayoutTemplate } from "./layouts"
+import { renderLayoutPreview } from "./layout-preview"
 import { getWindows, getWindowInfo, type TmuxWindow } from "./tmux"
 import { generateLayoutString } from "./tmux-layout"
 
@@ -86,37 +87,18 @@ const box = {
 }
 
 // ── Layout rendering ───────────────────────────────────────────────────────
-function renderLayoutPreview(
+function drawLayoutPreview(
   template: LayoutTemplate,
   x: number,
   y: number,
   w: number,
   h: number
 ): string {
+  const lines = renderLayoutPreview(template, w, h)
   let out = ""
-  const innerW = w - 2
-  const innerH = h - 2
-
-  // Draw outer border
-  out += ansi.moveTo(x, y) + box.tl + box.h.repeat(innerW) + box.tr
-  for (let row = 1; row < h - 1; row++) {
-    out += ansi.moveTo(x, y + row) + box.v + " ".repeat(innerW) + box.v
-  }
-  out += ansi.moveTo(x, y + h - 1) + box.bl + box.h.repeat(innerW) + box.br
-
-  // Simple preview: use normalized coords directly (ignore min-height complexity)
-  template.panes.forEach((pane, i) => {
-    // Convert normalized 0-1 coords to preview coords
-    const px = pane.x >= 0 ? pane.x : 0
-    const py = pane.y >= 0 ? pane.y : 0.7 // negative y = near bottom
-    const pw = pane.width
-    const ph = pane.height > 0 && pane.height <= 1 ? pane.height : 0.3
-
-    const cx = x + 1 + Math.floor((px + pw / 2) * innerW)
-    const cy = y + 1 + Math.floor((py + ph / 2) * innerH)
-    out += ansi.moveTo(cx, cy) + (i + 1).toString()
+  lines.forEach((line, i) => {
+    out += ansi.moveTo(x, y + i) + line
   })
-
   return out
 }
 
@@ -144,7 +126,7 @@ function render(): void {
   const previewH = Math.min(height - 6, 12)
   const previewX = Math.floor((width - previewW) / 2)
   const previewY = 3
-  out += renderLayoutPreview(layout, previewX, previewY, previewW, previewH)
+  out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH)
 
   // Layout name and counter
   const paneCount = layout.panes.length
