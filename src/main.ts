@@ -8,6 +8,8 @@ const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf")
 const SELF_PATH = import.meta.path
 
 // ── State ──────────────────────────────────────────────────────────────────
+type Focus = "window" | "layout"
+
 interface State {
   windows: TmuxWindow[]
   currentWindowIndex: number
@@ -15,6 +17,7 @@ interface State {
   overlayOpen: boolean
   searchQuery: string
   overlaySelection: number
+  focus: Focus
 }
 
 function initState(): State {
@@ -51,6 +54,7 @@ function initState(): State {
     overlayOpen: false,
     searchQuery: "",
     overlaySelection: 0,
+    focus: "layout" as Focus,
   }
 }
 
@@ -137,7 +141,11 @@ function render(): void {
 
   // Window name (top)
   const windowName = state.windows[state.currentWindowIndex]?.name || "?"
-  out += ansi.moveTo(startX + 2, startY + 1) + ansi.bold + windowName + ansi.reset + " ▼"
+  const windowFocused = state.focus === "window"
+  out += ansi.moveTo(startX + 2, startY + 1)
+  if (windowFocused) out += ansi.inverse
+  out += " " + windowName + " ▼ "
+  out += ansi.reset
 
   // Separator
   out += ansi.moveTo(startX, startY + 2) + box.ltee + box.h.repeat(width - 2) + box.rtee
@@ -152,15 +160,18 @@ function render(): void {
 
   // Layout name and counter
   const paneCount = layout.panes.length
+  const layoutFocused = state.focus === "layout"
   const counter = `${paneCount} pane${paneCount > 1 ? 's' : ''} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`
   out += ansi.moveTo(startX + Math.floor((width - counter.length) / 2), previewY + previewH)
-  out += ansi.dim + counter + ansi.reset
+  if (layoutFocused) out += ansi.inverse
+  out += ` ${counter} `
+  out += ansi.reset
 
   // Separator
   out += ansi.moveTo(startX, startY + height - 3) + box.ltee + box.h.repeat(width - 2) + box.rtee
 
   // Key hints (bottom)
-  const hints = "h/l layout  space search  ⏎ apply"
+  const hints = "tab focus  hjkl nav  ⏎ apply"
   out += ansi.moveTo(startX + 2, startY + height - 2) + ansi.dim + hints + ansi.reset
 
   // Overlay (if open)
@@ -215,6 +226,27 @@ function handleKey(key: string): boolean {
 
 function handleMainKey(key: string): boolean {
   switch (key) {
+    case "\t": // Tab - switch focus
+      state.focus = state.focus === "window" ? "layout" : "window"
+      break
+    case "j": // Down
+      if (state.focus === "window") {
+        state.overlayOpen = true
+        state.searchQuery = ""
+        state.overlaySelection = 0
+      } else {
+        state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
+      }
+      break
+    case "k": // Up
+      if (state.focus === "window") {
+        state.overlayOpen = true
+        state.searchQuery = ""
+        state.overlaySelection = 0
+      } else {
+        state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
+      }
+      break
     case "h":
       state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
       break
@@ -222,13 +254,16 @@ function handleMainKey(key: string): boolean {
       state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
       break
     case " ":
-      state.overlayOpen = true
-      state.searchQuery = ""
-      state.overlaySelection = 0
-      break
     case "\r": // Enter
-      applyAndExit()
-      return false
+      if (state.focus === "window") {
+        state.overlayOpen = true
+        state.searchQuery = ""
+        state.overlaySelection = 0
+      } else {
+        applyAndExit()
+        return false
+      }
+      break
     case "\x1b": // Escape
     case "q":
       return false
@@ -238,6 +273,7 @@ function handleMainKey(key: string): boolean {
         state.overlayOpen = true
         state.searchQuery = key
         state.overlaySelection = 0
+        state.focus = "window"
       }
   }
   return true
