@@ -334,7 +334,7 @@ function startTmuxSession(): void {
     "-f", CONFIG_PATH,
     "new-session",
     ";",
-    "bind", "-n", "M-Space", "display-popup", "-w", "50", "-h", "20", "-E", `bun ${SELF_PATH}`
+    "bind", "-n", "M-Space", "display-popup", "-w", "80%", "-h", "80%", "-E", `bun ${SELF_PATH}`
   ], {
     stdio: "inherit",
   })
