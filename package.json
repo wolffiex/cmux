@@ -1,0 +1,15 @@
+{
+  "name": "cmux",
+  "version": "2.0.0",
+  "type": "module",
+  "bin": {
+    "cmux": "./src/main.ts"
+  },
+  "scripts": {
+    "start": "bun src/main.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

@@ -135,6 +135,14 @@ export function getLayoutsForCount(count: number): LayoutTemplate[] | null {
   return layoutsByCount[count] || null;
 }
 
+// Flat list of all layouts for cycling with h/l
+export const ALL_LAYOUTS: LayoutTemplate[] = [
+  ...layouts1,
+  ...layouts2,
+  ...layouts3,
+  ...layouts4,
+];
+
 /**
  * Convert a layout template to absolute coordinates for a given window size.
  * Handles special values:
