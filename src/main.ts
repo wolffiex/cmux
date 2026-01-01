@@ -122,61 +122,49 @@ function renderLayoutPreview(
 
 // ── Main render ────────────────────────────────────────────────────────────
 function render(): void {
-  const cols = process.stdout.columns || 80
-  const rows = process.stdout.rows || 24
-
-  const width = Math.min(40, cols - 2)
-  const height = Math.min(18, rows - 2)
-  const startX = Math.floor((cols - width) / 2)
-  const startY = Math.floor((rows - height) / 2)
+  const width = process.stdout.columns || 80
+  const height = process.stdout.rows || 24
 
   let out = ansi.clear
 
-  // Main box
-  out += ansi.moveTo(startX, startY) + box.tl + box.h.repeat(width - 2) + box.tr
-  for (let row = 1; row < height - 1; row++) {
-    out += ansi.moveTo(startX, startY + row) + box.v + " ".repeat(width - 2) + box.v
-  }
-  out += ansi.moveTo(startX, startY + height - 1) + box.bl + box.h.repeat(width - 2) + box.br
-
-  // Window name (top)
+  // Window name (top row)
   const windowName = state.windows[state.currentWindowIndex]?.name || "?"
   const windowFocused = state.focus === "window"
-  out += ansi.moveTo(startX + 2, startY + 1)
+  out += ansi.moveTo(1, 0)
   if (windowFocused) out += ansi.inverse
   out += " " + windowName + " ▼ "
   out += ansi.reset
 
   // Separator
-  out += ansi.moveTo(startX, startY + 2) + box.ltee + box.h.repeat(width - 2) + box.rtee
+  out += ansi.moveTo(0, 1) + box.h.repeat(width)
 
-  // Layout preview (center)
+  // Layout preview (center area)
   const layout = ALL_LAYOUTS[state.layoutIndex]
-  const previewW = Math.min(24, width - 6)
-  const previewH = Math.min(8, height - 8)
-  const previewX = startX + Math.floor((width - previewW) / 2)
-  const previewY = startY + 4
+  const previewW = Math.min(width - 4, 40)
+  const previewH = Math.min(height - 6, 12)
+  const previewX = Math.floor((width - previewW) / 2)
+  const previewY = 3
   out += renderLayoutPreview(layout, previewX, previewY, previewW, previewH)
 
   // Layout name and counter
   const paneCount = layout.panes.length
   const layoutFocused = state.focus === "layout"
   const counter = `${paneCount} pane${paneCount > 1 ? 's' : ''} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`
-  out += ansi.moveTo(startX + Math.floor((width - counter.length) / 2), previewY + previewH)
+  out += ansi.moveTo(Math.floor((width - counter.length - 2) / 2), previewY + previewH)
   if (layoutFocused) out += ansi.inverse
   out += ` ${counter} `
   out += ansi.reset
 
   // Separator
-  out += ansi.moveTo(startX, startY + height - 3) + box.ltee + box.h.repeat(width - 2) + box.rtee
+  out += ansi.moveTo(0, height - 2) + box.h.repeat(width)
 
-  // Key hints (bottom)
+  // Key hints (bottom row)
   const hints = "tab focus  hjkl nav  ⏎ apply"
-  out += ansi.moveTo(startX + 2, startY + height - 2) + ansi.dim + hints + ansi.reset
+  out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset
 
   // Overlay (if open)
   if (state.overlayOpen) {
-    out += renderOverlay(startX + 1, startY + 1, width - 2, height - 4)
+    out += renderOverlay(0, 0, width, height - 2)
   }
 
   process.stdout.write(out)
