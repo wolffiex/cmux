@@ -1,4 +1,7 @@
-import { execSync } from "node:child_process";
+import { execSync, exec } from "node:child_process";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 
 export interface PaneInfo {
   id: string;
@@ -153,4 +156,83 @@ export function getWindowInfoRemote(host: string): WindowInfo | null {
   } catch (e) {
     return null;
   }
+}
+
+export interface PaneContext {
+  workdir: string;
+  program: string;
+  transcript: string;
+  gitBranch: string | null;
+}
+
+export interface WindowContext {
+  windowId: number;
+  windowName: string;
+  panes: PaneContext[];
+}
+
+/**
+ * Get rich context for a specific pane.
+ */
+async function getPaneContext(windowTarget: string, paneIndex: number): Promise<PaneContext> {
+  const target = `${windowTarget}.${paneIndex}`;
+
+  // Get workdir and program in parallel
+  const [workdirResult, programResult, transcriptResult] = await Promise.all([
+    execAsync(`tmux display-message -p -t '${target}' '#{pane_current_path}'`).catch(() => ({ stdout: "" })),
+    execAsync(`tmux display-message -p -t '${target}' '#{pane_current_command}'`).catch(() => ({ stdout: "" })),
+    execAsync(`tmux capture-pane -p -t '${target}' -S -50`).catch(() => ({ stdout: "" })),
+  ]);
+
+  const workdir = workdirResult.stdout.trim();
+  const program = programResult.stdout.trim();
+  const transcript = transcriptResult.stdout.trimEnd();
+
+  // Check for git branch (fails silently for non-git directories)
+  let gitBranch: string | null = null;
+  if (workdir) {
+    try {
+      const gitResult = await execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`);
+      const branch = gitResult.stdout.trim();
+      if (branch) {
+        gitBranch = branch;
+      }
+    } catch {
+      // Not a git repo or git not available
+    }
+  }
+
+  return {
+    workdir,
+    program,
+    transcript,
+    gitBranch,
+  };
+}
+
+/**
+ * Get rich context for all panes in a window.
+ */
+export async function getWindowContext(windowId: number): Promise<WindowContext> {
+  const windowTarget = `@${windowId}`;
+
+  // Get window name and pane list
+  const [nameResult, panesResult] = await Promise.all([
+    execAsync(`tmux display-message -p -t '${windowTarget}' '#{window_name}'`),
+    execAsync(`tmux list-panes -t '${windowTarget}' -F '#{pane_index}'`),
+  ]);
+
+  const windowName = nameResult.stdout.trim();
+  const paneIndices = panesResult.stdout.trim().split("\n").map(Number);
+
+  // Get context for all panes in parallel
+  const panes = await Promise.all(
+    paneIndices.map((paneIndex) => getPaneContext(windowTarget, paneIndex))
+  );
+
+  return {
+    windowId,
+    windowName,
+    panes,
+  };
 }
