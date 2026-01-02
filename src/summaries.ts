@@ -1,21 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { PaneContext, WindowContext } from "./tmux";
 
-// Interfaces for window/pane context (will be consolidated with tmux.ts later)
-interface PaneContext {
-  workdir: string;
-  program: string;
-  transcript: string;
-  gitBranch: string | null;
+// Lazy Anthropic client initialization
+let _client: Anthropic | null = null;
+
+function getClient(): Anthropic | null {
+  if (_client === null && process.env.ANTHROPIC_API_KEY) {
+    _client = new Anthropic();
+  }
+  return _client;
 }
-
-interface WindowContext {
-  windowId: number;
-  windowName: string;
-  panes: PaneContext[];
-}
-
-// Anthropic client setup
-const anthropic = new Anthropic();
 
 const SYSTEM_PROMPT =
   "Generate a 5-10 word summary of this tmux window. Focus on what's being worked on. Examples: 'React dev server', 'Git commits review', 'Python tests running'";
@@ -64,23 +58,34 @@ function formatContextForPrompt(context: WindowContext): string {
  * Generate a summary for a window context using the Anthropic API
  */
 export async function generateSummary(context: WindowContext): Promise<string> {
-  const prompt = formatContextForPrompt(context);
+  const client = getClient();
+  if (!client) {
+    // No API key available, return window name as fallback
+    return context.windowName;
+  }
 
-  const message = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 50,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-  });
+  try {
+    const prompt = formatContextForPrompt(context);
 
-  // Extract text from the response
-  const textBlock = message.content.find((block) => block.type === "text");
-  return textBlock ? textBlock.text.trim() : context.windowName;
+    const message = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 50,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
+
+    // Extract text from the response
+    const textBlock = message.content.find((block) => block.type === "text");
+    return textBlock ? textBlock.text.trim() : context.windowName;
+  } catch {
+    // API error, return window name as fallback
+    return context.windowName;
+  }
 }
 
 /**
@@ -125,5 +130,5 @@ export async function getSummariesForWindows(
   return results;
 }
 
-// Export types for use by other modules
+// Re-export types for use by other modules
 export type { PaneContext, WindowContext };
