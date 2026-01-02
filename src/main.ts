@@ -15,9 +15,8 @@ interface State {
   windows: TmuxWindow[]
   currentWindowIndex: number
   layoutIndex: number
-  overlayOpen: boolean
-  searchQuery: string
-  overlaySelection: number
+  windowPopoverOpen: boolean
+  windowPopoverSelection: number  // offset from current window
   focus: Focus
 }
 
@@ -52,9 +51,8 @@ function initState(): State {
     windows,
     currentWindowIndex,
     layoutIndex,
-    overlayOpen: false,
-    searchQuery: "",
-    overlaySelection: 0,
+    windowPopoverOpen: false,
+    windowPopoverSelection: 0,
     focus: "layout" as Focus,
   }
 }
@@ -144,52 +142,51 @@ function render(): void {
   const hints = "tab focus  hjkl nav  ⏎ apply"
   out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset
 
-  // Overlay (if open)
-  if (state.overlayOpen) {
-    out += renderOverlay(0, 0, width, height - 2)
+  // Window popover (if open)
+  if (state.windowPopoverOpen) {
+    out += renderWindowPopover(1, 1, height - 4)
   }
 
   process.stdout.write(out)
 }
 
-function getFilteredWindows(): TmuxWindow[] {
-  const query = state.searchQuery.toLowerCase()
-  return state.windows.filter(win =>
-    query === "" || win.name.toLowerCase().includes(query)
-  )
+function getRotatedWindows(): TmuxWindow[] {
+  // Rotate window list so current window is first
+  const n = state.windows.length
+  if (n === 0) return []
+  const idx = state.currentWindowIndex
+  return [
+    ...state.windows.slice(idx),
+    ...state.windows.slice(0, idx)
+  ]
 }
 
-function renderOverlay(x: number, y: number, w: number, h: number): string {
+function renderWindowPopover(x: number, y: number, maxH: number): string {
   let out = ""
+  const rotated = getRotatedWindows()
+  const h = Math.min(rotated.length, maxH)
+  const w = Math.max(...rotated.map(w => w.name.length)) + 6
 
-  // Clear overlay area with background
+  // Draw popover box
+  out += ansi.moveTo(x, y) + box.tl + box.h.repeat(w - 2) + box.tr
   for (let row = 0; row < h; row++) {
-    out += ansi.moveTo(x, y + row) + " ".repeat(w)
-  }
-
-  // Search input
-  const prompt = "> " + state.searchQuery
-  out += ansi.moveTo(x, y) + ansi.bold + prompt + ansi.reset + "│"
-
-  // Filtered windows
-  const filtered = getFilteredWindows()
-
-  filtered.slice(0, h - 1).forEach((win, i) => {
-    const isCurrent = win.index === state.windows[state.currentWindowIndex]?.index
-    const isSelected = i === state.overlaySelection
-    out += ansi.moveTo(x, y + 1 + i)
+    const win = rotated[row]
+    const isCurrent = row === 0
+    const isSelected = row === state.windowPopoverSelection
+    out += ansi.moveTo(x, y + 1 + row) + box.v
     if (isSelected) out += ansi.inverse
-    out += (isCurrent ? "● " : "  ") + win.name.padEnd(w - 4)
-    out += ansi.reset
-  })
+    out += (isCurrent ? " ● " : "   ") + win.name.padEnd(w - 5)
+    out += ansi.reset + box.v
+  }
+  out += ansi.moveTo(x, y + h + 1) + box.bl + box.h.repeat(w - 2) + box.br
 
   return out
 }
 
 // ── Input handling ─────────────────────────────────────────────────────────
 function handleKey(key: string): boolean {
-  if (state.overlayOpen) {
-    return handleOverlayKey(key)
+  if (state.windowPopoverOpen) {
+    return handlePopoverKey(key)
   }
   return handleMainKey(key)
 }
@@ -201,35 +198,43 @@ function handleMainKey(key: string): boolean {
       break
     case "j": // Down
       if (state.focus === "window") {
-        state.overlayOpen = true
-        state.searchQuery = ""
-        state.overlaySelection = 0
+        if (state.windows.length > 1) {
+          state.windowPopoverOpen = true
+          state.windowPopoverSelection = 1 // start on next window
+        }
       } else {
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
       }
       break
     case "k": // Up
       if (state.focus === "window") {
-        state.overlayOpen = true
-        state.searchQuery = ""
-        state.overlaySelection = 0
+        if (state.windows.length > 1) {
+          state.windowPopoverOpen = true
+          state.windowPopoverSelection = state.windows.length - 1 // start on prev window
+        }
       } else {
         state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
       }
       break
     case "h":
-      state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
+      if (state.focus === "window") {
+        // Remove current window
+        removeCurrentWindow()
+      } else {
+        state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
+      }
       break
     case "l":
-      state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
+      if (state.focus === "window") {
+        // Create new window
+        createNewWindow()
+      } else {
+        state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
+      }
       break
     case " ":
     case "\r": // Enter
-      if (state.focus === "window") {
-        state.overlayOpen = true
-        state.searchQuery = ""
-        state.overlaySelection = 0
-      } else {
+      if (state.focus === "layout") {
         applyAndExit()
         return false
       }
@@ -237,50 +242,57 @@ function handleMainKey(key: string): boolean {
     case "\x1b": // Escape
     case "q":
       return false
-    default:
-      // Start typing = open overlay with that char
-      if (key.length === 1 && key >= "a" && key <= "z") {
-        state.overlayOpen = true
-        state.searchQuery = key
-        state.overlaySelection = 0
-        state.focus = "window"
-      }
   }
   return true
 }
 
-function handleOverlayKey(key: string): boolean {
-  const filtered = getFilteredWindows()
-
+function handlePopoverKey(key: string): boolean {
+  const n = state.windows.length
   switch (key) {
-    case "\x1b": // Escape
-      state.overlayOpen = false
-      break
-    case "\r": // Enter - select current selection
-      if (filtered.length > 0) {
-        const selected = filtered[state.overlaySelection]
-        const idx = state.windows.findIndex(w => w.index === selected.index)
-        if (idx >= 0) state.currentWindowIndex = idx
-      }
-      state.overlayOpen = false
-      break
     case "j": // Down
-      state.overlaySelection = Math.min(state.overlaySelection + 1, filtered.length - 1)
+      state.windowPopoverSelection = (state.windowPopoverSelection + 1) % n
       break
     case "k": // Up
-      state.overlaySelection = Math.max(state.overlaySelection - 1, 0)
+      state.windowPopoverSelection = (state.windowPopoverSelection - 1 + n) % n
       break
-    case "\x7f": // Backspace
-      state.searchQuery = state.searchQuery.slice(0, -1)
-      state.overlaySelection = 0
-      break
-    default:
-      if (key.length === 1 && key >= " ") {
-        state.searchQuery += key
-        state.overlaySelection = 0
+    case "\r": // Enter - select window
+      if (state.windowPopoverSelection > 0) {
+        // Switch to selected window
+        const rotated = getRotatedWindows()
+        const selected = rotated[state.windowPopoverSelection]
+        state.currentWindowIndex = state.windows.findIndex(w => w.index === selected.index)
       }
+      state.windowPopoverOpen = false
+      break
+    case "\x1b": // Escape
+      state.windowPopoverOpen = false
+      break
   }
   return true
+}
+
+function createNewWindow(): void {
+  try {
+    execSync("tmux new-window -d")  // -d = don't switch to it
+    // Refresh window list
+    state.windows = getWindows()
+    // Stay on current window (don't change currentWindowIndex)
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+function removeCurrentWindow(): void {
+  if (state.windows.length <= 1) return // Don't remove last window
+  try {
+    execSync("tmux kill-window")
+    // Refresh window list
+    state.windows = getWindows()
+    state.currentWindowIndex = state.windows.findIndex(w => w.active)
+    if (state.currentWindowIndex < 0) state.currentWindowIndex = 0
+  } catch (e) {
+    // Ignore errors
+  }
 }
 
 function applyAndExit(): void {
