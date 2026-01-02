@@ -11,6 +11,7 @@ const SELF_PATH = import.meta.path
 // ── State ──────────────────────────────────────────────────────────────────
 type Focus = "window" | "layout"
 type WindowBarSelection = "minus" | "name" | "plus"
+type AnimationDirection = "left" | "right" | null
 
 interface State {
   windows: TmuxWindow[]
@@ -20,6 +21,11 @@ interface State {
   windowPopoverSelection: number  // offset from current window
   focus: Focus
   windowBarSelection: WindowBarSelection
+  // Animation state
+  animating: boolean
+  animationDirection: AnimationDirection
+  animationFrame: number
+  previousLayoutIndex: number
 }
 
 function initState(): State {
@@ -57,6 +63,11 @@ function initState(): State {
     windowPopoverSelection: 0,
     focus: "window" as Focus,
     windowBarSelection: "name" as WindowBarSelection,
+    // Animation state
+    animating: false,
+    animationDirection: null,
+    animationFrame: 0,
+    previousLayoutIndex: layoutIndex,
   }
 }
 
@@ -101,6 +112,132 @@ function drawLayoutPreview(
     out += ansi.moveTo(x, y + i) + line
   })
   return out
+}
+
+// ── Animation constants ────────────────────────────────────────────────────
+const ANIMATION_FRAMES = 6
+const ANIMATION_FRAME_MS = 16
+
+// ── Animation rendering ────────────────────────────────────────────────────
+function renderAnimationFrame(
+  prevLayout: LayoutTemplate,
+  nextLayout: LayoutTemplate,
+  direction: AnimationDirection,
+  frame: number,
+  previewX: number,
+  previewY: number,
+  previewW: number,
+  previewH: number
+): string {
+  // Render both layouts
+  const prevLines = renderLayoutPreview(prevLayout, previewW, previewH)
+  const nextLines = renderLayoutPreview(nextLayout, previewW, previewH)
+
+  // Calculate offset based on animation progress (0 to 1)
+  const progress = frame / ANIMATION_FRAMES
+  // Use ease-out for smooth deceleration
+  const eased = 1 - Math.pow(1 - progress, 2)
+  const offset = Math.round(previewW * eased)
+
+  let out = ""
+
+  for (let row = 0; row < previewH; row++) {
+    const prevLine = prevLines[row] || ""
+    const nextLine = nextLines[row] || ""
+
+    // Build the visible portion of this row
+    let visibleChars = ""
+
+    if (direction === "right") {
+      // New layout slides in from right: prev moves left, next enters from right
+      // At frame 0: show prev fully
+      // At final frame: show next fully
+      for (let col = 0; col < previewW; col++) {
+        const sourceCol = col + offset
+        if (sourceCol < previewW) {
+          // Still showing prev layout (shifted left)
+          visibleChars += prevLine[sourceCol] || " "
+        } else {
+          // Showing next layout entering from right
+          const nextCol = sourceCol - previewW
+          visibleChars += nextLine[nextCol] || " "
+        }
+      }
+    } else {
+      // direction === "left": New layout slides in from left
+      // prev moves right, next enters from left
+      for (let col = 0; col < previewW; col++) {
+        const sourceCol = col - offset
+        if (sourceCol >= 0) {
+          // Still showing prev layout (shifted right)
+          visibleChars += prevLine[sourceCol] || " "
+        } else {
+          // Showing next layout entering from left
+          const nextCol = previewW + sourceCol
+          visibleChars += nextLine[nextCol] || " "
+        }
+      }
+    }
+
+    out += ansi.moveTo(previewX, previewY + row) + visibleChars
+  }
+
+  return out
+}
+
+function startAnimation(direction: AnimationDirection): void {
+  state.animating = true
+  state.animationDirection = direction
+  state.animationFrame = 0
+
+  const prevLayout = ALL_LAYOUTS[state.previousLayoutIndex]
+  const nextLayout = ALL_LAYOUTS[state.layoutIndex]
+
+  const width = process.stdout.columns || 80
+  const height = process.stdout.rows || 24
+  const previewW = Math.min(width - 4, 40)
+  const previewH = Math.min(height - 6, 12)
+  const previewX = Math.floor((width - previewW) / 2)
+  const previewY = 3
+
+  // Update the counter immediately (shows new layout info)
+  const paneCount = nextLayout.panes.length
+  const layoutFocused = state.focus === "layout"
+  const counter = `${paneCount} pane${paneCount > 1 ? 's' : ''} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`
+  let counterOut = ansi.moveTo(Math.floor((width - counter.length - 2) / 2), previewY + previewH)
+  if (layoutFocused) counterOut += ansi.inverse
+  counterOut += ` ${counter} `
+  counterOut += ansi.reset
+  process.stdout.write(counterOut)
+
+  const tick = () => {
+    state.animationFrame++
+
+    if (state.animationFrame >= ANIMATION_FRAMES) {
+      // Animation complete
+      state.animating = false
+      state.animationDirection = null
+      render() // Full clean render
+      return
+    }
+
+    // Render animation frame
+    const out = renderAnimationFrame(
+      prevLayout,
+      nextLayout,
+      direction,
+      state.animationFrame,
+      previewX,
+      previewY,
+      previewW,
+      previewH
+    )
+    process.stdout.write(out)
+
+    setTimeout(tick, ANIMATION_FRAME_MS)
+  }
+
+  setTimeout(tick, ANIMATION_FRAME_MS)
 }
 
 // ── Main render ────────────────────────────────────────────────────────────
@@ -210,6 +347,13 @@ function handleKey(key: string): boolean {
 }
 
 function handleMainKey(key: string): boolean {
+  // During animation, ignore layout navigation keys but allow other actions
+  if (state.animating && (key === "h" || key === "j" || key === "k" || key === "l")) {
+    if (state.focus === "layout") {
+      return true // Ignore layout nav during animation, but don't quit
+    }
+  }
+
   switch (key) {
     case "\t": // Tab - switch focus
       state.focus = state.focus === "window" ? "layout" : "window"
@@ -222,7 +366,10 @@ function handleMainKey(key: string): boolean {
           state.windowPopoverSelection = 1 // start on next window
         }
       } else {
+        state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
+        startAnimation("right")
+        return true // Don't call render(), animation handles it
       }
       break
     case "k": // Up
@@ -232,7 +379,10 @@ function handleMainKey(key: string): boolean {
           state.windowPopoverSelection = state.windows.length - 1 // start on prev window
         }
       } else {
+        state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
+        startAnimation("left")
+        return true // Don't call render(), animation handles it
       }
       break
     case "h":
@@ -241,7 +391,10 @@ function handleMainKey(key: string): boolean {
         if (state.windowBarSelection === "plus") state.windowBarSelection = "name"
         else if (state.windowBarSelection === "name") state.windowBarSelection = "minus"
       } else {
+        state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
+        startAnimation("left")
+        return true // Don't call render(), animation handles it
       }
       break
     case "l":
@@ -250,7 +403,10 @@ function handleMainKey(key: string): boolean {
         if (state.windowBarSelection === "minus") state.windowBarSelection = "name"
         else if (state.windowBarSelection === "name") state.windowBarSelection = "plus"
       } else {
+        state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
+        startAnimation("right")
+        return true // Don't call render(), animation handles it
       }
       break
     case " ":
