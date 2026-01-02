@@ -2,8 +2,9 @@ import { execSync, spawn } from "node:child_process"
 import { join } from "node:path"
 import { ALL_LAYOUTS, resolveLayout, type LayoutTemplate } from "./layouts"
 import { renderLayoutPreview } from "./layout-preview"
-import { getWindows, getWindowInfo, type TmuxWindow } from "./tmux"
+import { getWindows, getWindowInfo, getWindowContext, type TmuxWindow } from "./tmux"
 import { generateLayoutString } from "./tmux-layout"
+import { getSummariesForWindows } from "./summaries"
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf")
 const SELF_PATH = import.meta.path
@@ -26,6 +27,9 @@ interface State {
   animationDirection: AnimationDirection
   animationFrame: number
   previousLayoutIndex: number
+  // Summary state
+  summaries: Map<number, string>  // windowId -> summary
+  summariesLoading: boolean
 }
 
 function initState(): State {
@@ -68,6 +72,9 @@ function initState(): State {
     animationDirection: null,
     animationFrame: 0,
     previousLayoutIndex: layoutIndex,
+    // Summary state
+    summaries: new Map(),
+    summariesLoading: false,
   }
 }
 
@@ -319,23 +326,77 @@ function getRotatedWindows(): TmuxWindow[] {
 function renderWindowPopover(x: number, y: number, maxH: number): string {
   let out = ""
   const rotated = getRotatedWindows()
-  const h = Math.min(rotated.length, maxH)
-  const w = Math.max(...rotated.map(w => w.name.length)) + 6
+  const windowCount = Math.min(rotated.length, Math.floor(maxH / 2)) // 2 lines per window
+
+  // Calculate width based on window names and summaries
+  const summaryWidth = 30 // max summary display width
+  const maxNameLen = Math.max(...rotated.map(w => w.name.length))
+  const w = Math.max(maxNameLen + 6, summaryWidth + 6)
 
   // Draw popover box
   out += ansi.moveTo(x, y) + box.tl + box.h.repeat(w - 2) + box.tr
-  for (let row = 0; row < h; row++) {
-    const win = rotated[row]
-    const isCurrent = row === 0
-    const isSelected = row === state.windowPopoverSelection
-    out += ansi.moveTo(x, y + 1 + row) + box.v
+
+  let rowY = y + 1
+  for (let i = 0; i < windowCount; i++) {
+    const win = rotated[i]
+    const isCurrent = i === 0
+    const isSelected = i === state.windowPopoverSelection
+
+    // Window name line
+    out += ansi.moveTo(x, rowY) + box.v
     if (isSelected) out += ansi.inverse
     out += (isCurrent ? " ● " : "   ") + win.name.padEnd(w - 5)
     out += ansi.reset + box.v
+    rowY++
+
+    // Summary line (dimmed)
+    const summary = state.summaries.get(win.index)
+    const summaryText = summary || (state.summariesLoading ? "..." : "")
+    const displaySummary = summaryText.length > w - 7
+      ? summaryText.slice(0, w - 10) + "..."
+      : summaryText
+
+    out += ansi.moveTo(x, rowY) + box.v
+    out += ansi.dim + "   " + displaySummary.padEnd(w - 5) + ansi.reset + box.v
+    rowY++
   }
-  out += ansi.moveTo(x, y + h + 1) + box.bl + box.h.repeat(w - 2) + box.br
+
+  out += ansi.moveTo(x, rowY) + box.bl + box.h.repeat(w - 2) + box.br
 
   return out
+}
+
+// ── Summary fetching ────────────────────────────────────────────────────────
+async function fetchSummaries(): Promise<void> {
+  if (state.summariesLoading) return
+
+  state.summariesLoading = true
+  render()
+
+  try {
+    // Get contexts for all windows in parallel
+    const contexts = await Promise.all(
+      state.windows.map(w => getWindowContext(w.index))
+    )
+
+    // Get summaries for all contexts
+    const summaries = await getSummariesForWindows(contexts)
+
+    state.summaries = summaries
+  } catch {
+    // Silently fail - summaries will just show "..."
+  } finally {
+    state.summariesLoading = false
+    render()
+  }
+}
+
+function openPopover(initialSelection: number): void {
+  state.windowPopoverOpen = true
+  state.windowPopoverSelection = initialSelection
+
+  // Trigger async summary fetch (don't await - update when ready)
+  fetchSummaries()
 }
 
 // ── Input handling ─────────────────────────────────────────────────────────
@@ -362,8 +423,7 @@ function handleMainKey(key: string): boolean {
     case "j": // Down
       if (state.focus === "window") {
         if (state.windowBarSelection === "name" && state.windows.length > 1) {
-          state.windowPopoverOpen = true
-          state.windowPopoverSelection = 1 // start on next window
+          openPopover(1) // start on next window
         }
       } else {
         state.previousLayoutIndex = state.layoutIndex
@@ -375,8 +435,7 @@ function handleMainKey(key: string): boolean {
     case "k": // Up
       if (state.focus === "window") {
         if (state.windowBarSelection === "name" && state.windows.length > 1) {
-          state.windowPopoverOpen = true
-          state.windowPopoverSelection = state.windows.length - 1 // start on prev window
+          openPopover(state.windows.length - 1) // start on prev window
         }
       } else {
         state.previousLayoutIndex = state.layoutIndex
