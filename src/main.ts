@@ -30,6 +30,8 @@ interface State {
   // Summary state
   summaries: Map<number, string>  // windowId -> summary
   summariesLoading: boolean
+  // Delete confirmation state
+  confirmingDelete: boolean
 }
 
 function initState(): State {
@@ -75,6 +77,8 @@ function initState(): State {
     // Summary state
     summaries: new Map(),
     summariesLoading: false,
+    // Delete confirmation state
+    confirmingDelete: false,
   }
 }
 
@@ -260,10 +264,14 @@ function render(): void {
   const sel = state.windowBarSelection
   out += ansi.moveTo(1, 0)
 
-  // [−] button
-  if (windowFocused && sel === "minus") out += ansi.inverse
-  out += "[−]"
-  out += ansi.reset + " "
+  // [−] button (shows "Delete? ⏎" when confirming)
+  if (state.confirmingDelete) {
+    out += ansi.inverse + "[Delete? ⏎]" + ansi.reset + " "
+  } else {
+    if (windowFocused && sel === "minus") out += ansi.inverse
+    out += "[−]"
+    out += ansi.reset + " "
+  }
 
   // Window name
   if (windowFocused && sel === "name") out += ansi.inverse
@@ -419,6 +427,7 @@ function handleMainKey(key: string): boolean {
     case "\t": // Tab - switch focus
       state.focus = state.focus === "window" ? "layout" : "window"
       state.windowBarSelection = "name" // reset to name when switching
+      state.confirmingDelete = false // Cancel confirmation when switching focus
       break
     case "j": // Down
       if (state.focus === "window") {
@@ -449,6 +458,7 @@ function handleMainKey(key: string): boolean {
         // Move selection left: plus -> name -> minus
         if (state.windowBarSelection === "plus") state.windowBarSelection = "name"
         else if (state.windowBarSelection === "name") state.windowBarSelection = "minus"
+        state.confirmingDelete = false // Cancel confirmation when navigating
       } else {
         state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
@@ -461,6 +471,7 @@ function handleMainKey(key: string): boolean {
         // Move selection right: minus -> name -> plus
         if (state.windowBarSelection === "minus") state.windowBarSelection = "name"
         else if (state.windowBarSelection === "name") state.windowBarSelection = "plus"
+        state.confirmingDelete = false // Cancel confirmation when navigating
       } else {
         state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
@@ -472,8 +483,16 @@ function handleMainKey(key: string): boolean {
     case "\r": // Enter
       if (state.focus === "window") {
         if (state.windowBarSelection === "minus") {
-          removeCurrentWindow()
-          state.windowBarSelection = "name"
+          if (state.confirmingDelete) {
+            // Second Enter - actually delete and exit
+            removeCurrentWindow()
+            return false // Exit UI after deletion
+          } else {
+            // First Enter - show confirmation
+            if (state.windows.length > 1) {
+              state.confirmingDelete = true
+            }
+          }
         } else if (state.windowBarSelection === "plus") {
           createNewWindow()
           return false // Exit UI after creating window with layout
@@ -485,7 +504,9 @@ function handleMainKey(key: string): boolean {
       }
       break
     case "\x1b": // Escape
-      if (state.focus === "window" && state.windowBarSelection !== "name") {
+      if (state.confirmingDelete) {
+        state.confirmingDelete = false // cancel delete confirmation
+      } else if (state.focus === "window" && state.windowBarSelection !== "name") {
         state.windowBarSelection = "name" // cancel back to name
       } else {
         return false
@@ -558,11 +579,8 @@ function createNewWindow(): void {
 function removeCurrentWindow(): void {
   if (state.windows.length <= 1) return // Don't remove last window
   try {
-    execSync("tmux kill-window")
-    // Refresh window list
-    state.windows = getWindows()
-    state.currentWindowIndex = state.windows.findIndex(w => w.active)
-    if (state.currentWindowIndex < 0) state.currentWindowIndex = 0
+    const windowToDelete = state.windows[state.currentWindowIndex]
+    execSync(`tmux kill-window -t :${windowToDelete.index}`)
   } catch (e) {
     // Ignore errors
   }
