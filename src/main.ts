@@ -115,7 +115,7 @@ function drawLayoutPreview(
 }
 
 // ── Animation constants ────────────────────────────────────────────────────
-const ANIMATION_FRAMES = 6
+const ANIMATION_FRAMES = 12
 const ANIMATION_FRAME_MS = 16
 
 // ── Animation rendering ────────────────────────────────────────────────────
