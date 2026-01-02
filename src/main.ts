@@ -10,6 +10,7 @@ const SELF_PATH = import.meta.path
 
 // ── State ──────────────────────────────────────────────────────────────────
 type Focus = "window" | "layout"
+type WindowBarSelection = "minus" | "name" | "plus"
 
 interface State {
   windows: TmuxWindow[]
@@ -18,6 +19,7 @@ interface State {
   windowPopoverOpen: boolean
   windowPopoverSelection: number  // offset from current window
   focus: Focus
+  windowBarSelection: WindowBarSelection
 }
 
 function initState(): State {
@@ -54,6 +56,7 @@ function initState(): State {
     windowPopoverOpen: false,
     windowPopoverSelection: 0,
     focus: "window" as Focus,
+    windowBarSelection: "name" as WindowBarSelection,
   }
 }
 
@@ -110,12 +113,25 @@ function render(): void {
   // Window bar (top row): [−] name ▼ [+]
   const windowName = state.windows[state.currentWindowIndex]?.name || "?"
   const windowFocused = state.focus === "window"
+  const sel = state.windowBarSelection
   out += ansi.moveTo(1, 0)
-  out += ansi.dim + "[−]" + ansi.reset + " "
-  if (windowFocused) out += ansi.inverse
+
+  // [−] button
+  if (windowFocused && sel === "minus") out += ansi.inverse
+  out += "[−]"
+  out += ansi.reset + " "
+
+  // Window name
+  if (windowFocused && sel === "name") out += ansi.inverse
   out += " " + windowName + " ▼ "
-  out += ansi.reset
-  out += " " + ansi.dim + "[+]" + ansi.reset
+  out += ansi.reset + " "
+
+  // [+] button (shows "New window" when selected)
+  if (windowFocused && sel === "plus") {
+    out += ansi.inverse + "[New window]" + ansi.reset
+  } else {
+    out += ansi.dim + "[+]" + ansi.reset
+  }
 
   // Separator
   out += ansi.moveTo(0, 1) + box.h.repeat(width)
@@ -197,10 +213,11 @@ function handleMainKey(key: string): boolean {
   switch (key) {
     case "\t": // Tab - switch focus
       state.focus = state.focus === "window" ? "layout" : "window"
+      state.windowBarSelection = "name" // reset to name when switching
       break
     case "j": // Down
       if (state.focus === "window") {
-        if (state.windows.length > 1) {
+        if (state.windowBarSelection === "name" && state.windows.length > 1) {
           state.windowPopoverOpen = true
           state.windowPopoverSelection = 1 // start on next window
         }
@@ -210,7 +227,7 @@ function handleMainKey(key: string): boolean {
       break
     case "k": // Up
       if (state.focus === "window") {
-        if (state.windows.length > 1) {
+        if (state.windowBarSelection === "name" && state.windows.length > 1) {
           state.windowPopoverOpen = true
           state.windowPopoverSelection = state.windows.length - 1 // start on prev window
         }
@@ -220,28 +237,45 @@ function handleMainKey(key: string): boolean {
       break
     case "h":
       if (state.focus === "window") {
-        // Remove current window
-        removeCurrentWindow()
+        // Move selection left: plus -> name -> minus
+        if (state.windowBarSelection === "plus") state.windowBarSelection = "name"
+        else if (state.windowBarSelection === "name") state.windowBarSelection = "minus"
       } else {
         state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
       }
       break
     case "l":
       if (state.focus === "window") {
-        // Create new window
-        createNewWindow()
+        // Move selection right: minus -> name -> plus
+        if (state.windowBarSelection === "minus") state.windowBarSelection = "name"
+        else if (state.windowBarSelection === "name") state.windowBarSelection = "plus"
       } else {
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
       }
       break
     case " ":
     case "\r": // Enter
-      if (state.focus === "layout") {
+      if (state.focus === "window") {
+        if (state.windowBarSelection === "minus") {
+          removeCurrentWindow()
+          state.windowBarSelection = "name"
+        } else if (state.windowBarSelection === "plus") {
+          createNewWindow()
+          state.windowBarSelection = "name"
+        }
+        // on "name", enter does nothing (use j/k to open popover)
+      } else {
         applyAndExit()
         return false
       }
       break
     case "\x1b": // Escape
+      if (state.focus === "window" && state.windowBarSelection !== "name") {
+        state.windowBarSelection = "name" // cancel back to name
+      } else {
+        return false
+      }
+      break
     case "q":
       return false
   }
