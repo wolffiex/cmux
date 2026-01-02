@@ -508,10 +508,15 @@ function handlePopoverKey(key: string): boolean {
       break
     case "\r": // Enter - select window
       if (state.windowPopoverSelection > 0) {
-        // Switch to selected window
+        // Switch to selected window and exit
         const rotated = getRotatedWindows()
         const selected = rotated[state.windowPopoverSelection]
-        state.currentWindowIndex = state.windows.findIndex(w => w.index === selected.index)
+        try {
+          execSync(`tmux select-window -t :${selected.index}`)
+        } catch (e) {
+          // Ignore errors (e.g., not in tmux)
+        }
+        return false // Exit UI after switching window
       }
       state.windowPopoverOpen = false
       break
