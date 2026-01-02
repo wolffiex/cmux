@@ -53,7 +53,7 @@ function initState(): State {
     layoutIndex,
     windowPopoverOpen: false,
     windowPopoverSelection: 0,
-    focus: "layout" as Focus,
+    focus: "window" as Focus,
   }
 }
 
@@ -107,13 +107,15 @@ function render(): void {
 
   let out = ansi.clear
 
-  // Window name (top row)
+  // Window bar (top row): [−] name ▼ [+]
   const windowName = state.windows[state.currentWindowIndex]?.name || "?"
   const windowFocused = state.focus === "window"
   out += ansi.moveTo(1, 0)
+  out += ansi.dim + "[−]" + ansi.reset + " "
   if (windowFocused) out += ansi.inverse
   out += " " + windowName + " ▼ "
   out += ansi.reset
+  out += " " + ansi.dim + "[+]" + ansi.reset
 
   // Separator
   out += ansi.moveTo(0, 1) + box.h.repeat(width)
