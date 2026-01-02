@@ -417,7 +417,7 @@ function handleMainKey(key: string): boolean {
           state.windowBarSelection = "name"
         } else if (state.windowBarSelection === "plus") {
           createNewWindow()
-          state.windowBarSelection = "name"
+          return false // Exit UI after creating window with layout
         }
         // on "name", enter does nothing (use j/k to open popover)
       } else {
@@ -465,12 +465,34 @@ function handlePopoverKey(key: string): boolean {
 
 function createNewWindow(): void {
   try {
-    execSync("tmux new-window -d")  // -d = don't switch to it
-    // Refresh window list
-    state.windows = getWindows()
-    // Stay on current window (don't change currentWindowIndex)
+    // Create the new window and switch to it
+    execSync("tmux new-window")
+
+    const layout = ALL_LAYOUTS[state.layoutIndex]
+    const paneCount = layout.panes.length
+
+    // New window starts with 1 pane, add more if needed
+    for (let i = 1; i < paneCount; i++) {
+      execSync("tmux split-window")
+    }
+
+    // Get updated window info for layout application
+    const windowInfo = getWindowInfo()
+
+    // Resolve layout to absolute coords
+    const resolved = resolveLayout(layout, windowInfo.width, windowInfo.height)
+
+    // Generate tmux layout string
+    const panes = resolved.map((r, i) => ({
+      id: windowInfo.panes[i]?.id || `%${i}`,
+      ...r,
+    }))
+    const layoutString = generateLayoutString(panes, windowInfo.width, windowInfo.height)
+
+    // Apply the layout
+    execSync(`tmux select-layout '${layoutString}'`)
   } catch (e) {
-    // Ignore errors
+    // Ignore errors (e.g., not in tmux)
   }
 }
 
