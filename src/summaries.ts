@@ -5,8 +5,14 @@ import type { PaneContext, WindowContext } from "./tmux";
 let _client: Anthropic | null = null;
 
 function getClient(): Anthropic | null {
-  if (_client === null && process.env.ANTHROPIC_API_KEY) {
-    _client = new Anthropic();
+  if (_client === null) {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+      || process.env.TEST_ANTHROPIC_API_KEY
+      || process.env.DEMO_ANTHROPIC_API_KEY;
+
+    if (apiKey) {
+      _client = new Anthropic({ apiKey });
+    }
   }
   return _client;
 }
@@ -60,7 +66,11 @@ function formatContextForPrompt(context: WindowContext): string {
 export async function generateSummary(context: WindowContext): Promise<string> {
   console.error('[cmux] generateSummary called for window:', context.windowIndex);
   const client = getClient();
-  console.error('[cmux] Anthropic client:', client ? 'initialized' : 'null (no API key?)');
+  const keySource = process.env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY'
+    : process.env.TEST_ANTHROPIC_API_KEY ? 'TEST_ANTHROPIC_API_KEY'
+    : process.env.DEMO_ANTHROPIC_API_KEY ? 'DEMO_ANTHROPIC_API_KEY'
+    : 'none';
+  console.error('[cmux] Anthropic client:', client ? `initialized (using ${keySource})` : `null (no API key found)`);
   if (!client) {
     // No API key available, return window name as fallback
     return context.windowName;
