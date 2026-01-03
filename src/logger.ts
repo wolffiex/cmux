@@ -11,5 +11,9 @@ export function log(...args: unknown[]) {
   const msg = args.map(a =>
     typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)
   ).join(' ')
-  appendFileSync(LOG_FILE, `${msg}\n`)
+  try {
+    appendFileSync(LOG_FILE, `${msg}\n`)
+  } catch (e) {
+    // Silently ignore write errors
+  }
 }

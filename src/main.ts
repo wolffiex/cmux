@@ -745,6 +745,7 @@ function runUI(): void {
     process.exit(1)
   }
   initLog()
+  log('[cmux] runUI starting')
   process.stdout.write(ansi.altScreen + ansi.hideCursor)
   process.stdin.setRawMode(true)
   process.stdin.resume()
