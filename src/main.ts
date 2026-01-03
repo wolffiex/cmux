@@ -5,6 +5,7 @@ import { renderLayoutPreview } from "./layout-preview"
 import { getWindows, getWindowInfo, getWindowContext, type TmuxWindow } from "./tmux"
 import { generateLayoutString } from "./tmux-layout"
 import { getSummariesForWindows } from "./summaries"
+import { initLog, log } from "./logger"
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf")
 const SELF_PATH = import.meta.path
@@ -432,15 +433,15 @@ function sanitizeWindowName(summary: string): string {
 
 // Rename tmux windows with AI-generated summaries
 async function renameWindowsWithSummaries(summaries: Map<number, string>): Promise<void> {
-  console.error('[cmux] renameWindowsWithSummaries called, entries:', Array.from(summaries.entries()));
+  log('[cmux] renameWindowsWithSummaries called, entries:', Array.from(summaries.entries()));
   for (const [windowIndex, summary] of summaries) {
     const shortName = sanitizeWindowName(summary)
     if (shortName.length > 0) {
       try {
-        console.error(`[cmux] renaming window ${windowIndex} to "${shortName}"`);
+        log(`[cmux] renaming window ${windowIndex} to "${shortName}"`);
         execSync(`tmux rename-window -t :${windowIndex} "${shortName}"`)
       } catch (e) {
-        console.error(`[cmux] rename failed for window ${windowIndex}:`, e);
+        log(`[cmux] rename failed for window ${windowIndex}:`, e);
       }
     }
   }
@@ -449,7 +450,7 @@ async function renameWindowsWithSummaries(summaries: Map<number, string>): Promi
 async function fetchSummaries(): Promise<void> {
   if (state.summariesLoading) return
 
-  console.error('[cmux] fetchSummaries called, windows:', state.windows.map(w => w.index));
+  log('[cmux] fetchSummaries called, windows:', state.windows.map(w => w.index));
 
   state.summariesLoading = true
   render()
@@ -460,14 +461,14 @@ async function fetchSummaries(): Promise<void> {
       state.windows.map(w => getWindowContext(w.index))
     )
 
-    console.error('[cmux] contexts:', JSON.stringify(contexts, null, 2));
+    log('[cmux] contexts:', JSON.stringify(contexts, null, 2));
 
     // Get summaries for all contexts
     const summaries = await getSummariesForWindows(contexts)
 
     state.summaries = summaries
 
-    console.error('[cmux] summaries:', Array.from(state.summaries.entries()));
+    log('[cmux] summaries:', Array.from(state.summaries.entries()));
 
     // Rename tmux windows with the fetched summaries
     await renameWindowsWithSummaries(summaries)
@@ -743,6 +744,7 @@ function runUI(): void {
     console.error("Not a TTY")
     process.exit(1)
   }
+  initLog()
   process.stdout.write(ansi.altScreen + ansi.hideCursor)
   process.stdin.setRawMode(true)
   process.stdin.resume()

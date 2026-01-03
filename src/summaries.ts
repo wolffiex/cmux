@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { PaneContext, WindowContext } from "./tmux";
+import { log } from "./logger";
 
 // Lazy Anthropic client initialization
 let _client: Anthropic | null = null;
@@ -62,9 +63,9 @@ function formatContextForPrompt(context: WindowContext): string {
  * Generate a summary for a window context using the Anthropic API
  */
 export async function generateSummary(context: WindowContext): Promise<string> {
-  console.error('[cmux] generateSummary called for window:', context.windowIndex);
+  log('[cmux] generateSummary called for window:', context.windowIndex);
   const client = getClient();
-  console.error('[cmux] Anthropic client:', client ? 'initialized (using ANTHROPIC_API_KEY)' : 'null (ANTHROPIC_API_KEY not set)');
+  log('[cmux] Anthropic client:', client ? 'initialized (using ANTHROPIC_API_KEY)' : 'null (ANTHROPIC_API_KEY not set)');
   if (!client) {
     // No API key available, return window name as fallback
     return context.windowName;
@@ -88,10 +89,10 @@ export async function generateSummary(context: WindowContext): Promise<string> {
     // Extract text from the response
     const textBlock = message.content.find((block) => block.type === "text");
     const summary = textBlock ? textBlock.text.trim() : context.windowName;
-    console.error('[cmux] API response:', summary);
+    log('[cmux] API response:', summary);
     return summary;
   } catch (e) {
-    console.error('[cmux] API error:', e instanceof Error ? e.message : e);
+    log('[cmux] API error:', e instanceof Error ? e.message : e);
     return context.windowName;
   }
 }

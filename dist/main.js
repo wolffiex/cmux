@@ -4993,11 +4993,27 @@ Anthropic.Completions = Completions;
 Anthropic.Messages = Messages2;
 Anthropic.Models = Models2;
 Anthropic.Beta = Beta;
+// src/logger.ts
+var {appendFileSync, writeFileSync} = (() => ({}));
+var LOG_FILE = "/tmp/cmux.log";
+function initLog() {
+  writeFileSync(LOG_FILE, `=== cmux started ${new Date().toISOString()} ===
+`);
+}
+function log(...args) {
+  const msg = args.map((a) => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" ");
+  appendFileSync(LOG_FILE, `${msg}
+`);
+}
+
 // src/summaries.ts
 var _client = null;
 function getClient() {
-  if (_client === null && process.env.ANTHROPIC_API_KEY) {
-    _client = new Anthropic;
+  if (_client === null) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (apiKey) {
+      _client = new Anthropic({ apiKey });
+    }
   }
   return _client;
 }
@@ -5027,7 +5043,9 @@ ${pane.transcript}`);
 `);
 }
 async function generateSummary(context) {
+  log("[cmux] generateSummary called for window:", context.windowIndex);
   const client = getClient();
+  log("[cmux] Anthropic client:", client ? "initialized (using ANTHROPIC_API_KEY)" : "null (ANTHROPIC_API_KEY not set)");
   if (!client) {
     return context.windowName;
   }
@@ -5045,8 +5063,11 @@ async function generateSummary(context) {
       ]
     });
     const textBlock = message.content.find((block) => block.type === "text");
-    return textBlock ? textBlock.text.trim() : context.windowName;
-  } catch {
+    const summary = textBlock ? textBlock.text.trim() : context.windowName;
+    log("[cmux] API response:", summary);
+    return summary;
+  } catch (e) {
+    log("[cmux] API error:", e instanceof Error ? e.message : e);
     return context.windowName;
   }
 }
@@ -5348,24 +5369,31 @@ function sanitizeWindowName(summary) {
   return summary.slice(0, 20).trim().replace(/["'`$\\]/g, "").replace(/[^\x20-\x7E]/g, "").trim();
 }
 async function renameWindowsWithSummaries(summaries) {
+  log("[cmux] renameWindowsWithSummaries called, entries:", Array.from(summaries.entries()));
   for (const [windowIndex, summary] of summaries) {
     const shortName = sanitizeWindowName(summary);
     if (shortName.length > 0) {
       try {
+        log(`[cmux] renaming window ${windowIndex} to "${shortName}"`);
         execSync2(`tmux rename-window -t :${windowIndex} "${shortName}"`);
-      } catch {}
+      } catch (e) {
+        log(`[cmux] rename failed for window ${windowIndex}:`, e);
+      }
     }
   }
 }
 async function fetchSummaries() {
   if (state.summariesLoading)
     return;
+  log("[cmux] fetchSummaries called, windows:", state.windows.map((w) => w.index));
   state.summariesLoading = true;
   render();
   try {
     const contexts = await Promise.all(state.windows.map((w) => getWindowContext(w.index)));
+    log("[cmux] contexts:", JSON.stringify(contexts, null, 2));
     const summaries = await getSummariesForWindows(contexts);
     state.summaries = summaries;
+    log("[cmux] summaries:", Array.from(state.summaries.entries()));
     await renameWindowsWithSummaries(summaries);
   } catch {} finally {
     state.summariesLoading = false;
@@ -5594,6 +5622,7 @@ function runUI() {
     console.error("Not a TTY");
     process.exit(1);
   }
+  initLog();
   process.stdout.write(ansi.altScreen + ansi.hideCursor);
   process.stdin.setRawMode(true);
   process.stdin.resume();
