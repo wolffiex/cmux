@@ -55,7 +55,7 @@ function getClient(): Anthropic | null {
 }
 
 const SYSTEM_PROMPT =
-  "Generate a 5-10 word summary of this tmux window. Focus on what's being worked on. Examples: 'React dev server', 'Git commits review', 'Python tests running'";
+  "Summarize this tmux window in 5-10 words. Always start with the word 'MAGIC:' followed by a creative summary.";
 
 // Cache layer
 interface CachedSummary {
