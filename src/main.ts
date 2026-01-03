@@ -418,6 +418,32 @@ function renderWindowPopover(x: number, y: number, maxH: number): string {
 }
 
 // ── Summary fetching ────────────────────────────────────────────────────────
+
+// Sanitize summary text for use as tmux window name
+function sanitizeWindowName(summary: string): string {
+  // Truncate to 20 chars and remove problematic characters
+  return summary
+    .slice(0, 20)
+    .trim()
+    .replace(/["'`$\\]/g, "") // Remove quotes and shell-sensitive chars
+    .replace(/[^\x20-\x7E]/g, "") // Remove non-printable ASCII
+    .trim()
+}
+
+// Rename tmux windows with AI-generated summaries
+async function renameWindowsWithSummaries(summaries: Map<number, string>): Promise<void> {
+  for (const [windowIndex, summary] of summaries) {
+    const shortName = sanitizeWindowName(summary)
+    if (shortName.length > 0) {
+      try {
+        execSync(`tmux rename-window -t :${windowIndex} "${shortName}"`)
+      } catch {
+        // Silently ignore rename errors (e.g., window no longer exists)
+      }
+    }
+  }
+}
+
 async function fetchSummaries(): Promise<void> {
   if (state.summariesLoading) return
 
@@ -434,6 +460,9 @@ async function fetchSummaries(): Promise<void> {
     const summaries = await getSummariesForWindows(contexts)
 
     state.summaries = summaries
+
+    // Rename tmux windows with the fetched summaries
+    await renameWindowsWithSummaries(summaries)
   } catch {
     // Silently fail - summaries will just show "..."
   } finally {
