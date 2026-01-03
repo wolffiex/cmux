@@ -378,12 +378,11 @@ function getRotatedWindows(): TmuxWindow[] {
 function renderWindowPopover(x: number, y: number, maxH: number): string {
   let out = ""
   const rotated = getRotatedWindows()
-  const windowCount = Math.min(rotated.length, Math.floor(maxH / 2)) // 2 lines per window
+  const windowCount = Math.min(rotated.length, maxH - 2) // 1 line per window + borders
 
-  // Calculate width based on window names and summaries
-  const summaryWidth = 30 // max summary display width
+  // Calculate width based on window names
   const maxNameLen = Math.max(...rotated.map(w => w.name.length))
-  const w = Math.max(maxNameLen + 6, summaryWidth + 6)
+  const w = maxNameLen + 6
 
   // Draw popover box
   out += ansi.moveTo(x, y) + box.tl + box.h.repeat(w - 2) + box.tr
@@ -399,17 +398,6 @@ function renderWindowPopover(x: number, y: number, maxH: number): string {
     if (isSelected) out += ansi.inverse
     out += (isCurrent ? " ● " : "   ") + win.name.padEnd(w - 5)
     out += ansi.reset + box.v
-    rowY++
-
-    // Summary line (dimmed)
-    const summary = state.summaries.get(win.index)
-    const summaryText = summary || (state.summariesLoading ? "..." : "")
-    const displaySummary = summaryText.length > w - 7
-      ? summaryText.slice(0, w - 10) + "..."
-      : summaryText
-
-    out += ansi.moveTo(x, rowY) + box.v
-    out += ansi.dim + "   " + displaySummary.padEnd(w - 5) + ansi.reset + box.v
     rowY++
   }
 

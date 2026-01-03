@@ -55,7 +55,7 @@ function getClient(): Anthropic | null {
 }
 
 const SYSTEM_PROMPT =
-  "Summarize this tmux window in 5-10 words. Always start with the word 'MAGIC:' followed by a creative summary.";
+  "Generate a very short tmux window name (2-4 words max, under 20 characters). Be concise and descriptive. Return only the name, nothing else.";
 
 // Cache layer
 interface CachedSummary {
