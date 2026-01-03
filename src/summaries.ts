@@ -55,7 +55,7 @@ function getClient(): Anthropic | null {
 }
 
 const SYSTEM_PROMPT =
-  "Generate a very short tmux window name (2-4 words max, under 20 characters). Be concise and descriptive. Return only the name, nothing else.";
+  "Generate a very short tmux window name (2-4 words max, under 20 characters). The current window name is provided - only suggest a different name if the window's purpose has meaningfully changed. If the current name is still accurate, return it exactly. Be concise. Return only the name, nothing else.";
 
 // Cache layer
 interface CachedSummary {

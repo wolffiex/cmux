@@ -9,7 +9,7 @@ import { getWindows, getWindowContext, type TmuxWindow } from "./tmux";
 import { getSummariesForWindows } from "./summaries";
 import { initLog, log } from "./logger";
 
-const RENAME_INTERVAL_MS = 45_000; // 45 seconds
+const RENAME_INTERVAL_MS = 150_000; // 2.5 minutes
 
 /**
  * Sanitize summary text for use as tmux window name
