@@ -166,7 +166,7 @@ export interface PaneContext {
 }
 
 export interface WindowContext {
-  windowId: number;
+  windowIndex: number;
   windowName: string;
   panes: PaneContext[];
 }
@@ -213,8 +213,8 @@ async function getPaneContext(windowTarget: string, paneIndex: number): Promise<
 /**
  * Get rich context for all panes in a window.
  */
-export async function getWindowContext(windowId: number): Promise<WindowContext> {
-  const windowTarget = `@${windowId}`;
+export async function getWindowContext(windowIndex: number): Promise<WindowContext> {
+  const windowTarget = `:${windowIndex}`;
 
   // Get window name and pane list
   const [nameResult, panesResult] = await Promise.all([
@@ -231,7 +231,7 @@ export async function getWindowContext(windowId: number): Promise<WindowContext>
   );
 
   return {
-    windowId,
+    windowIndex,
     windowName,
     panes,
   };

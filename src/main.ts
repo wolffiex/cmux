@@ -28,7 +28,7 @@ interface State {
   animationFrame: number
   previousLayoutIndex: number
   // Summary state
-  summaries: Map<number, string>  // windowId -> summary
+  summaries: Map<number, string>  // windowIndex -> summary
   summariesLoading: boolean
   // Delete confirmation state
   confirmingDelete: boolean

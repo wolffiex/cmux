@@ -93,14 +93,14 @@ export async function generateSummary(context: WindowContext): Promise<string> {
  */
 export async function getSummary(context: WindowContext): Promise<string> {
   const currentHash = hashContext(context);
-  const cached = cache.get(context.windowId);
+  const cached = cache.get(context.windowIndex);
 
   if (cached && cached.contextHash === currentHash) {
     return cached.summary;
   }
 
   const summary = await generateSummary(context);
-  cache.set(context.windowId, {
+  cache.set(context.windowIndex, {
     summary,
     contextHash: currentHash,
   });
@@ -119,12 +119,12 @@ export async function getSummariesForWindows(
   const summaries = await Promise.all(
     contexts.map(async (context) => {
       const summary = await getSummary(context);
-      return { windowId: context.windowId, summary };
+      return { windowIndex: context.windowIndex, summary };
     })
   );
 
-  for (const { windowId, summary } of summaries) {
-    results.set(windowId, summary);
+  for (const { windowIndex, summary } of summaries) {
+    results.set(windowIndex, summary);
   }
 
   return results;

@@ -981,8 +981,8 @@ async function getPaneContext(windowTarget, paneIndex) {
     gitBranch
   };
 }
-async function getWindowContext(windowId) {
-  const windowTarget = `@${windowId}`;
+async function getWindowContext(windowIndex) {
+  const windowTarget = `:${windowIndex}`;
   const [nameResult, panesResult] = await Promise.all([
     execAsync(`tmux display-message -p -t '${windowTarget}' '#{window_name}'`),
     execAsync(`tmux list-panes -t '${windowTarget}' -F '#{pane_index}'`)
@@ -992,7 +992,7 @@ async function getWindowContext(windowId) {
 `).map(Number);
   const panes = await Promise.all(paneIndices.map((paneIndex) => getPaneContext(windowTarget, paneIndex)));
   return {
-    windowId,
+    windowIndex,
     windowName,
     panes
   };
@@ -5052,12 +5052,12 @@ async function generateSummary(context) {
 }
 async function getSummary(context) {
   const currentHash = hashContext(context);
-  const cached = cache.get(context.windowId);
+  const cached = cache.get(context.windowIndex);
   if (cached && cached.contextHash === currentHash) {
     return cached.summary;
   }
   const summary = await generateSummary(context);
-  cache.set(context.windowId, {
+  cache.set(context.windowIndex, {
     summary,
     contextHash: currentHash
   });
@@ -5067,10 +5067,10 @@ async function getSummariesForWindows(contexts) {
   const results = new Map;
   const summaries = await Promise.all(contexts.map(async (context) => {
     const summary = await getSummary(context);
-    return { windowId: context.windowId, summary };
+    return { windowIndex: context.windowIndex, summary };
   }));
-  for (const { windowId, summary } of summaries) {
-    results.set(windowId, summary);
+  for (const { windowIndex, summary } of summaries) {
+    results.set(windowIndex, summary);
   }
   return results;
 }
@@ -5344,6 +5344,19 @@ function renderWindowPopover(x, y, maxH) {
   out += ansi.moveTo(x, rowY) + box2.bl + box2.h.repeat(w - 2) + box2.br;
   return out;
 }
+function sanitizeWindowName(summary) {
+  return summary.slice(0, 20).trim().replace(/["'`$\\]/g, "").replace(/[^\x20-\x7E]/g, "").trim();
+}
+async function renameWindowsWithSummaries(summaries) {
+  for (const [windowIndex, summary] of summaries) {
+    const shortName = sanitizeWindowName(summary);
+    if (shortName.length > 0) {
+      try {
+        execSync2(`tmux rename-window -t :${windowIndex} "${shortName}"`);
+      } catch {}
+    }
+  }
+}
 async function fetchSummaries() {
   if (state.summariesLoading)
     return;
@@ -5353,6 +5366,7 @@ async function fetchSummaries() {
     const contexts = await Promise.all(state.windows.map((w) => getWindowContext(w.index)));
     const summaries = await getSummariesForWindows(contexts);
     state.summaries = summaries;
+    await renameWindowsWithSummaries(summaries);
   } catch {} finally {
     state.summariesLoading = false;
     render();
