@@ -725,12 +725,23 @@ function isInsideTmux(): boolean {
 }
 
 function startTmuxSession(): void {
-  const tmux = spawn("tmux", [
+  const apiKey = process.env.ANTHROPIC_API_KEY
+    || process.env.TEST_ANTHROPIC_API_KEY
+    || process.env.DEMO_ANTHROPIC_API_KEY;
+
+  const tmuxArgs = [
     "-f", CONFIG_PATH,
     "new-session",
     ";",
     "bind", "-n", "M-Space", "display-popup", "-w", "80%", "-h", "80%", "-E", `bun ${SELF_PATH}`
-  ], {
+  ];
+
+  // Save API key to tmux hidden environment for popup runs
+  if (apiKey) {
+    tmuxArgs.push(";", "set-environment", "-gh", "ANTHROPIC_API_KEY", apiKey);
+  }
+
+  const tmux = spawn("tmux", tmuxArgs, {
     stdio: "inherit",
   })
 
