@@ -6,9 +6,7 @@ let _client: Anthropic | null = null;
 
 function getClient(): Anthropic | null {
   if (_client === null) {
-    const apiKey = process.env.ANTHROPIC_API_KEY
-      || process.env.TEST_ANTHROPIC_API_KEY
-      || process.env.DEMO_ANTHROPIC_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (apiKey) {
       _client = new Anthropic({ apiKey });
@@ -66,11 +64,7 @@ function formatContextForPrompt(context: WindowContext): string {
 export async function generateSummary(context: WindowContext): Promise<string> {
   console.error('[cmux] generateSummary called for window:', context.windowIndex);
   const client = getClient();
-  const keySource = process.env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY'
-    : process.env.TEST_ANTHROPIC_API_KEY ? 'TEST_ANTHROPIC_API_KEY'
-    : process.env.DEMO_ANTHROPIC_API_KEY ? 'DEMO_ANTHROPIC_API_KEY'
-    : 'none';
-  console.error('[cmux] Anthropic client:', client ? `initialized (using ${keySource})` : `null (no API key found)`);
+  console.error('[cmux] Anthropic client:', client ? 'initialized (using ANTHROPIC_API_KEY)' : 'null (ANTHROPIC_API_KEY not set)');
   if (!client) {
     // No API key available, return window name as fallback
     return context.windowName;
@@ -96,8 +90,8 @@ export async function generateSummary(context: WindowContext): Promise<string> {
     const summary = textBlock ? textBlock.text.trim() : context.windowName;
     console.error('[cmux] API response:', summary);
     return summary;
-  } catch {
-    // API error, return window name as fallback
+  } catch (e) {
+    console.error('[cmux] API error:', e instanceof Error ? e.message : e);
     return context.windowName;
   }
 }

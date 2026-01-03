@@ -465,9 +465,9 @@ async function fetchSummaries(): Promise<void> {
     // Get summaries for all contexts
     const summaries = await getSummariesForWindows(contexts)
 
-    console.error('[cmux] summaries:', Array.from(state.summaries.entries()));
-
     state.summaries = summaries
+
+    console.error('[cmux] summaries:', Array.from(state.summaries.entries()));
 
     // Rename tmux windows with the fetched summaries
     await renameWindowsWithSummaries(summaries)
