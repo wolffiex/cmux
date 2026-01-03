@@ -84,6 +84,49 @@ function initState(): State {
 
 const state = initState()
 
+// ── Polling ────────────────────────────────────────────────────────────────
+let pollInterval: Timer | null = null
+const POLL_INTERVAL_MS = 1500
+
+function windowsChanged(oldWindows: TmuxWindow[], newWindows: TmuxWindow[]): boolean {
+  if (oldWindows.length !== newWindows.length) return true
+  return oldWindows.some((w, i) =>
+    w.name !== newWindows[i].name ||
+    w.index !== newWindows[i].index ||
+    w.active !== newWindows[i].active
+  )
+}
+
+function startPolling(): void {
+  pollInterval = setInterval(async () => {
+    try {
+      const newWindows = getWindows()
+      if (windowsChanged(state.windows, newWindows)) {
+        // Update current window index if active window changed
+        const newActiveIndex = newWindows.findIndex(w => w.active)
+        if (newActiveIndex >= 0 && state.currentWindowIndex !== newActiveIndex) {
+          state.currentWindowIndex = newActiveIndex
+        }
+        // Clamp current index if windows were removed
+        if (state.currentWindowIndex >= newWindows.length) {
+          state.currentWindowIndex = Math.max(0, newWindows.length - 1)
+        }
+        state.windows = newWindows
+        render()
+      }
+    } catch {
+      // Ignore polling errors (e.g., not in tmux)
+    }
+  }, POLL_INTERVAL_MS)
+}
+
+function stopPolling(): void {
+  if (pollInterval) {
+    clearInterval(pollInterval)
+    pollInterval = null
+  }
+}
+
 // ── ANSI helpers ───────────────────────────────────────────────────────────
 const ESC = "\x1b"
 const CSI = `${ESC}[`
@@ -668,6 +711,7 @@ function runUI(): void {
   process.stdin.resume()
 
   render()
+  startPolling()
 
   process.stdin.on("data", (data) => {
     const keys = data.toString()
@@ -690,6 +734,7 @@ function main(): void {
 }
 
 function cleanup() {
+  stopPolling()
   process.stdout.write(ansi.showCursor + ansi.exitAltScreen)
   process.stdin.setRawMode(false)
   process.exit(0)
