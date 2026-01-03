@@ -9,6 +9,7 @@ import { initLog, log } from "./logger"
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf")
 const SELF_PATH = import.meta.path
+const BACKGROUND_RENAMER_PATH = join(import.meta.dir, "background-renamer.ts")
 
 // ── State ──────────────────────────────────────────────────────────────────
 type Focus = "window" | "layout"
@@ -724,10 +725,16 @@ function startTmuxSession(): void {
     "bind", "-n", "M-Space", "display-popup", "-w", "80%", "-h", "80%", "-E", `bun ${SELF_PATH}`
   ];
 
-  // Save API key to tmux hidden environment for popup runs
+  // Save API key to tmux hidden environment for popup runs and background renamer
   if (apiKey) {
     tmuxArgs.push(";", "set-environment", "-gh", "ANTHROPIC_API_KEY", apiKey);
   }
+
+  // Start background window renamer (runs detached, outputs to /dev/null)
+  tmuxArgs.push(
+    ";",
+    "run-shell", "-b", `bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`
+  );
 
   const tmux = spawn("tmux", tmuxArgs, {
     stdio: "inherit",
