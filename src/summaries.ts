@@ -58,7 +58,9 @@ function formatContextForPrompt(context: WindowContext): string {
  * Generate a summary for a window context using the Anthropic API
  */
 export async function generateSummary(context: WindowContext): Promise<string> {
+  console.error('[cmux] generateSummary called for window:', context.windowIndex);
   const client = getClient();
+  console.error('[cmux] Anthropic client:', client ? 'initialized' : 'null (no API key?)');
   if (!client) {
     // No API key available, return window name as fallback
     return context.windowName;
@@ -81,7 +83,9 @@ export async function generateSummary(context: WindowContext): Promise<string> {
 
     // Extract text from the response
     const textBlock = message.content.find((block) => block.type === "text");
-    return textBlock ? textBlock.text.trim() : context.windowName;
+    const summary = textBlock ? textBlock.text.trim() : context.windowName;
+    console.error('[cmux] API response:', summary);
+    return summary;
   } catch {
     // API error, return window name as fallback
     return context.windowName;

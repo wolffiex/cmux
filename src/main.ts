@@ -432,13 +432,15 @@ function sanitizeWindowName(summary: string): string {
 
 // Rename tmux windows with AI-generated summaries
 async function renameWindowsWithSummaries(summaries: Map<number, string>): Promise<void> {
+  console.error('[cmux] renameWindowsWithSummaries called, entries:', Array.from(summaries.entries()));
   for (const [windowIndex, summary] of summaries) {
     const shortName = sanitizeWindowName(summary)
     if (shortName.length > 0) {
       try {
+        console.error(`[cmux] renaming window ${windowIndex} to "${shortName}"`);
         execSync(`tmux rename-window -t :${windowIndex} "${shortName}"`)
-      } catch {
-        // Silently ignore rename errors (e.g., window no longer exists)
+      } catch (e) {
+        console.error(`[cmux] rename failed for window ${windowIndex}:`, e);
       }
     }
   }
@@ -446,6 +448,8 @@ async function renameWindowsWithSummaries(summaries: Map<number, string>): Promi
 
 async function fetchSummaries(): Promise<void> {
   if (state.summariesLoading) return
+
+  console.error('[cmux] fetchSummaries called, windows:', state.windows.map(w => w.index));
 
   state.summariesLoading = true
   render()
@@ -456,8 +460,12 @@ async function fetchSummaries(): Promise<void> {
       state.windows.map(w => getWindowContext(w.index))
     )
 
+    console.error('[cmux] contexts:', JSON.stringify(contexts, null, 2));
+
     // Get summaries for all contexts
     const summaries = await getSummariesForWindows(contexts)
+
+    console.error('[cmux] summaries:', Array.from(state.summaries.entries()));
 
     state.summaries = summaries
 
