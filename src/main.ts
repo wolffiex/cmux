@@ -247,9 +247,9 @@ function startAnimation(direction: AnimationDirection): void {
   const width = process.stdout.columns || 80
   const height = process.stdout.rows || 24
   const previewW = Math.min(width - 4, 40)
-  const previewH = Math.min(height - 6, 12)
+  const previewH = Math.min(height - 10, 12)  // Adjusted for taller carousel
   const previewX = Math.floor((width - previewW) / 2)
-  const previewY = 3
+  const previewY = 7  // Start after carousel (5 rows) + separator (1 row) + gap (1 row)
 
   // Update the counter immediately (shows new layout info)
   const paneCount = nextLayout.panes.length
@@ -298,10 +298,9 @@ function render(): void {
 
   let out = ansi.clear
 
-  // Window bar (top row): horizontal carousel: − | win1 | win2 | ... | +
+  // Window carousel (5 rows tall with gray box outline)
   const windowFocused = state.focus === "window"
   const maxIndex = state.windows.length + 1  // 0=minus, 1..n=windows, n+1=plus
-  out += ansi.moveTo(1, 0)
 
   // Helper to truncate window names to 15 chars
   const truncateName = (name: string): string => {
@@ -309,13 +308,16 @@ function render(): void {
     return name.slice(0, 14) + "…"
   }
 
+  // Build the carousel content line
+  let carouselContent = "   "  // Left padding
+
   // [−] button (shows "Delete? ⏎" when confirming)
   if (state.confirmingDelete) {
-    out += ansi.inverse + " Delete? ⏎ " + ansi.reset
+    carouselContent += ansi.inverse + " Delete? ⏎ " + ansi.reset
   } else {
-    if (windowFocused && state.carouselIndex === 0) out += ansi.inverse
-    out += " − "
-    out += ansi.reset
+    if (windowFocused && state.carouselIndex === 0) carouselContent += ansi.inverse
+    carouselContent += " − "
+    carouselContent += ansi.reset
   }
 
   // Window items
@@ -324,29 +326,56 @@ function render(): void {
     const isSelected = windowFocused && state.carouselIndex === i + 1
     const isCurrent = i === state.currentWindowIndex
 
-    if (isSelected) out += ansi.inverse
-    out += " " + truncateName(win.name)
-    if (isCurrent) out += " ●"
-    out += " "
-    out += ansi.reset
+    if (isSelected) carouselContent += ansi.inverse
+    carouselContent += " " + truncateName(win.name)
+    if (isCurrent) carouselContent += " ●"
+    carouselContent += " "
+    carouselContent += ansi.reset
   }
 
   // [+] button
   if (windowFocused && state.carouselIndex === maxIndex) {
-    out += ansi.inverse + " + " + ansi.reset
+    carouselContent += ansi.inverse + " + " + ansi.reset
   } else {
-    out += ansi.dim + " + " + ansi.reset
+    carouselContent += ansi.dim + " + " + ansi.reset
   }
 
-  // Separator
-  out += ansi.moveTo(0, 1) + box.h.repeat(width)
+  // Draw the 5-row carousel box with gray outline
+  const carouselBoxWidth = width - 2
+  const carouselStartX = 1
 
-  // Layout preview (center area)
+  // Row 0: Top border
+  out += ansi.moveTo(carouselStartX, 0)
+  out += ansi.dim + box.tl + box.h.repeat(carouselBoxWidth) + box.tr + ansi.reset
+
+  // Row 1: Empty row with side borders
+  out += ansi.moveTo(carouselStartX, 1)
+  out += ansi.dim + box.v + ansi.reset + " ".repeat(carouselBoxWidth) + ansi.dim + box.v + ansi.reset
+
+  // Row 2: Content row with side borders
+  out += ansi.moveTo(carouselStartX, 2)
+  out += ansi.dim + box.v + ansi.reset + carouselContent
+  // Pad to fill the box width (need to account for ANSI codes in content)
+  out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 2)
+  out += ansi.dim + box.v + ansi.reset
+
+  // Row 3: Empty row with side borders
+  out += ansi.moveTo(carouselStartX, 3)
+  out += ansi.dim + box.v + ansi.reset + " ".repeat(carouselBoxWidth) + ansi.dim + box.v + ansi.reset
+
+  // Row 4: Bottom border
+  out += ansi.moveTo(carouselStartX, 4)
+  out += ansi.dim + box.bl + box.h.repeat(carouselBoxWidth) + box.br + ansi.reset
+
+  // Separator (moved down to row 5)
+  out += ansi.moveTo(0, 5) + box.h.repeat(width)
+
+  // Layout preview (center area, below carousel box)
   const layout = ALL_LAYOUTS[state.layoutIndex]
   const previewW = Math.min(width - 4, 40)
-  const previewH = Math.min(height - 6, 12)
+  const previewH = Math.min(height - 10, 12)  // Adjusted for taller carousel
   const previewX = Math.floor((width - previewW) / 2)
-  const previewY = 3
+  const previewY = 7  // Start after carousel (5 rows) + separator (1 row) + gap (1 row)
   out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH)
 
   // Layout name and counter
