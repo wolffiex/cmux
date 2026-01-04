@@ -1,325 +1,7 @@
+// @bun
 // src/main.ts
-var {execSync: execSync2, spawn} = (() => ({}));
-
-// node:path
-function assertPath(path) {
-  if (typeof path !== "string")
-    throw new TypeError("Path must be a string. Received " + JSON.stringify(path));
-}
-function normalizeStringPosix(path, allowAboveRoot) {
-  var res = "", lastSegmentLength = 0, lastSlash = -1, dots = 0, code;
-  for (var i = 0;i <= path.length; ++i) {
-    if (i < path.length)
-      code = path.charCodeAt(i);
-    else if (code === 47)
-      break;
-    else
-      code = 47;
-    if (code === 47) {
-      if (lastSlash === i - 1 || dots === 1)
-        ;
-      else if (lastSlash !== i - 1 && dots === 2) {
-        if (res.length < 2 || lastSegmentLength !== 2 || res.charCodeAt(res.length - 1) !== 46 || res.charCodeAt(res.length - 2) !== 46) {
-          if (res.length > 2) {
-            var lastSlashIndex = res.lastIndexOf("/");
-            if (lastSlashIndex !== res.length - 1) {
-              if (lastSlashIndex === -1)
-                res = "", lastSegmentLength = 0;
-              else
-                res = res.slice(0, lastSlashIndex), lastSegmentLength = res.length - 1 - res.lastIndexOf("/");
-              lastSlash = i, dots = 0;
-              continue;
-            }
-          } else if (res.length === 2 || res.length === 1) {
-            res = "", lastSegmentLength = 0, lastSlash = i, dots = 0;
-            continue;
-          }
-        }
-        if (allowAboveRoot) {
-          if (res.length > 0)
-            res += "/..";
-          else
-            res = "..";
-          lastSegmentLength = 2;
-        }
-      } else {
-        if (res.length > 0)
-          res += "/" + path.slice(lastSlash + 1, i);
-        else
-          res = path.slice(lastSlash + 1, i);
-        lastSegmentLength = i - lastSlash - 1;
-      }
-      lastSlash = i, dots = 0;
-    } else if (code === 46 && dots !== -1)
-      ++dots;
-    else
-      dots = -1;
-  }
-  return res;
-}
-function _format(sep, pathObject) {
-  var dir = pathObject.dir || pathObject.root, base = pathObject.base || (pathObject.name || "") + (pathObject.ext || "");
-  if (!dir)
-    return base;
-  if (dir === pathObject.root)
-    return dir + base;
-  return dir + sep + base;
-}
-function resolve() {
-  var resolvedPath = "", resolvedAbsolute = false, cwd;
-  for (var i = arguments.length - 1;i >= -1 && !resolvedAbsolute; i--) {
-    var path;
-    if (i >= 0)
-      path = arguments[i];
-    else {
-      if (cwd === undefined)
-        cwd = process.cwd();
-      path = cwd;
-    }
-    if (assertPath(path), path.length === 0)
-      continue;
-    resolvedPath = path + "/" + resolvedPath, resolvedAbsolute = path.charCodeAt(0) === 47;
-  }
-  if (resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute), resolvedAbsolute)
-    if (resolvedPath.length > 0)
-      return "/" + resolvedPath;
-    else
-      return "/";
-  else if (resolvedPath.length > 0)
-    return resolvedPath;
-  else
-    return ".";
-}
-function normalize(path) {
-  if (assertPath(path), path.length === 0)
-    return ".";
-  var isAbsolute = path.charCodeAt(0) === 47, trailingSeparator = path.charCodeAt(path.length - 1) === 47;
-  if (path = normalizeStringPosix(path, !isAbsolute), path.length === 0 && !isAbsolute)
-    path = ".";
-  if (path.length > 0 && trailingSeparator)
-    path += "/";
-  if (isAbsolute)
-    return "/" + path;
-  return path;
-}
-function isAbsolute(path) {
-  return assertPath(path), path.length > 0 && path.charCodeAt(0) === 47;
-}
-function join() {
-  if (arguments.length === 0)
-    return ".";
-  var joined;
-  for (var i = 0;i < arguments.length; ++i) {
-    var arg = arguments[i];
-    if (assertPath(arg), arg.length > 0)
-      if (joined === undefined)
-        joined = arg;
-      else
-        joined += "/" + arg;
-  }
-  if (joined === undefined)
-    return ".";
-  return normalize(joined);
-}
-function relative(from, to) {
-  if (assertPath(from), assertPath(to), from === to)
-    return "";
-  if (from = resolve(from), to = resolve(to), from === to)
-    return "";
-  var fromStart = 1;
-  for (;fromStart < from.length; ++fromStart)
-    if (from.charCodeAt(fromStart) !== 47)
-      break;
-  var fromEnd = from.length, fromLen = fromEnd - fromStart, toStart = 1;
-  for (;toStart < to.length; ++toStart)
-    if (to.charCodeAt(toStart) !== 47)
-      break;
-  var toEnd = to.length, toLen = toEnd - toStart, length = fromLen < toLen ? fromLen : toLen, lastCommonSep = -1, i = 0;
-  for (;i <= length; ++i) {
-    if (i === length) {
-      if (toLen > length) {
-        if (to.charCodeAt(toStart + i) === 47)
-          return to.slice(toStart + i + 1);
-        else if (i === 0)
-          return to.slice(toStart + i);
-      } else if (fromLen > length) {
-        if (from.charCodeAt(fromStart + i) === 47)
-          lastCommonSep = i;
-        else if (i === 0)
-          lastCommonSep = 0;
-      }
-      break;
-    }
-    var fromCode = from.charCodeAt(fromStart + i), toCode = to.charCodeAt(toStart + i);
-    if (fromCode !== toCode)
-      break;
-    else if (fromCode === 47)
-      lastCommonSep = i;
-  }
-  var out = "";
-  for (i = fromStart + lastCommonSep + 1;i <= fromEnd; ++i)
-    if (i === fromEnd || from.charCodeAt(i) === 47)
-      if (out.length === 0)
-        out += "..";
-      else
-        out += "/..";
-  if (out.length > 0)
-    return out + to.slice(toStart + lastCommonSep);
-  else {
-    if (toStart += lastCommonSep, to.charCodeAt(toStart) === 47)
-      ++toStart;
-    return to.slice(toStart);
-  }
-}
-function _makeLong(path) {
-  return path;
-}
-function dirname(path) {
-  if (assertPath(path), path.length === 0)
-    return ".";
-  var code = path.charCodeAt(0), hasRoot = code === 47, end = -1, matchedSlash = true;
-  for (var i = path.length - 1;i >= 1; --i)
-    if (code = path.charCodeAt(i), code === 47) {
-      if (!matchedSlash) {
-        end = i;
-        break;
-      }
-    } else
-      matchedSlash = false;
-  if (end === -1)
-    return hasRoot ? "/" : ".";
-  if (hasRoot && end === 1)
-    return "//";
-  return path.slice(0, end);
-}
-function basename(path, ext) {
-  if (ext !== undefined && typeof ext !== "string")
-    throw new TypeError('"ext" argument must be a string');
-  assertPath(path);
-  var start = 0, end = -1, matchedSlash = true, i;
-  if (ext !== undefined && ext.length > 0 && ext.length <= path.length) {
-    if (ext.length === path.length && ext === path)
-      return "";
-    var extIdx = ext.length - 1, firstNonSlashEnd = -1;
-    for (i = path.length - 1;i >= 0; --i) {
-      var code = path.charCodeAt(i);
-      if (code === 47) {
-        if (!matchedSlash) {
-          start = i + 1;
-          break;
-        }
-      } else {
-        if (firstNonSlashEnd === -1)
-          matchedSlash = false, firstNonSlashEnd = i + 1;
-        if (extIdx >= 0)
-          if (code === ext.charCodeAt(extIdx)) {
-            if (--extIdx === -1)
-              end = i;
-          } else
-            extIdx = -1, end = firstNonSlashEnd;
-      }
-    }
-    if (start === end)
-      end = firstNonSlashEnd;
-    else if (end === -1)
-      end = path.length;
-    return path.slice(start, end);
-  } else {
-    for (i = path.length - 1;i >= 0; --i)
-      if (path.charCodeAt(i) === 47) {
-        if (!matchedSlash) {
-          start = i + 1;
-          break;
-        }
-      } else if (end === -1)
-        matchedSlash = false, end = i + 1;
-    if (end === -1)
-      return "";
-    return path.slice(start, end);
-  }
-}
-function extname(path) {
-  assertPath(path);
-  var startDot = -1, startPart = 0, end = -1, matchedSlash = true, preDotState = 0;
-  for (var i = path.length - 1;i >= 0; --i) {
-    var code = path.charCodeAt(i);
-    if (code === 47) {
-      if (!matchedSlash) {
-        startPart = i + 1;
-        break;
-      }
-      continue;
-    }
-    if (end === -1)
-      matchedSlash = false, end = i + 1;
-    if (code === 46) {
-      if (startDot === -1)
-        startDot = i;
-      else if (preDotState !== 1)
-        preDotState = 1;
-    } else if (startDot !== -1)
-      preDotState = -1;
-  }
-  if (startDot === -1 || end === -1 || preDotState === 0 || preDotState === 1 && startDot === end - 1 && startDot === startPart + 1)
-    return "";
-  return path.slice(startDot, end);
-}
-function format(pathObject) {
-  if (pathObject === null || typeof pathObject !== "object")
-    throw new TypeError('The "pathObject" argument must be of type Object. Received type ' + typeof pathObject);
-  return _format("/", pathObject);
-}
-function parse(path) {
-  assertPath(path);
-  var ret = { root: "", dir: "", base: "", ext: "", name: "" };
-  if (path.length === 0)
-    return ret;
-  var code = path.charCodeAt(0), isAbsolute2 = code === 47, start;
-  if (isAbsolute2)
-    ret.root = "/", start = 1;
-  else
-    start = 0;
-  var startDot = -1, startPart = 0, end = -1, matchedSlash = true, i = path.length - 1, preDotState = 0;
-  for (;i >= start; --i) {
-    if (code = path.charCodeAt(i), code === 47) {
-      if (!matchedSlash) {
-        startPart = i + 1;
-        break;
-      }
-      continue;
-    }
-    if (end === -1)
-      matchedSlash = false, end = i + 1;
-    if (code === 46) {
-      if (startDot === -1)
-        startDot = i;
-      else if (preDotState !== 1)
-        preDotState = 1;
-    } else if (startDot !== -1)
-      preDotState = -1;
-  }
-  if (startDot === -1 || end === -1 || preDotState === 0 || preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
-    if (end !== -1)
-      if (startPart === 0 && isAbsolute2)
-        ret.base = ret.name = path.slice(1, end);
-      else
-        ret.base = ret.name = path.slice(startPart, end);
-  } else {
-    if (startPart === 0 && isAbsolute2)
-      ret.name = path.slice(1, startDot), ret.base = path.slice(1, end);
-    else
-      ret.name = path.slice(startPart, startDot), ret.base = path.slice(startPart, end);
-    ret.ext = path.slice(startDot, end);
-  }
-  if (startPart > 0)
-    ret.dir = path.slice(0, startPart - 1);
-  else if (isAbsolute2)
-    ret.dir = "/";
-  return ret;
-}
-var sep = "/";
-var delimiter = ":";
-var posix = ((p) => (p.posix = p, p))({ resolve, normalize, isAbsolute, join, relative, _makeLong, dirname, basename, extname, format, parse, sep, delimiter, win32: null, posix: null });
+import { execSync as execSync2, spawn } from "child_process";
+import { join } from "path";
 
 // src/layouts.ts
 var MIN_ROWS = 6;
@@ -471,17 +153,17 @@ function resolveLayout(template, windowWidth, windowHeight) {
 
 // src/layout-preview.ts
 var box = {
-  tl: "┌",
-  tr: "┐",
-  bl: "└",
-  br: "┘",
-  h: "─",
-  v: "│",
-  ltee: "├",
-  rtee: "┤",
-  ttee: "┬",
-  btee: "┴",
-  cross: "┼"
+  tl: "\u250C",
+  tr: "\u2510",
+  bl: "\u2514",
+  br: "\u2518",
+  h: "\u2500",
+  v: "\u2502",
+  ltee: "\u251C",
+  rtee: "\u2524",
+  ttee: "\u252C",
+  btee: "\u2534",
+  cross: "\u253C"
 };
 function toRects(template, width, height) {
   return template.panes.map((pane) => {
@@ -612,316 +294,12 @@ function isHorizontal(c) {
 if (false) {}
 
 // src/tmux.ts
-var {execSync, exec} = (() => ({}));
-
-// node:util
-var formatRegExp = /%[sdj%]/g;
-function format2(f, ...args) {
-  if (!isString(f)) {
-    var objects = [f];
-    for (var i = 0;i < args.length; i++)
-      objects.push(inspect(args[i]));
-    return objects.join(" ");
-  }
-  var i = 0, len = args.length, str = String(f).replace(formatRegExp, function(x2) {
-    if (x2 === "%%")
-      return "%";
-    if (i >= len)
-      return x2;
-    switch (x2) {
-      case "%s":
-        return String(args[i++]);
-      case "%d":
-        return Number(args[i++]);
-      case "%j":
-        try {
-          return JSON.stringify(args[i++]);
-        } catch (_) {
-          return "[Circular]";
-        }
-      default:
-        return x2;
-    }
-  });
-  for (var x = args[i];i < len; x = args[++i])
-    if (isNull(x) || !isObject(x))
-      str += " " + x;
-    else
-      str += " " + inspect(x);
-  return str;
-}
-var debuglog = ((debugs = {}, debugEnvRegex = {}, debugEnv) => ((debugEnv = typeof process !== "undefined" && false) && (debugEnv = debugEnv.replace(/[|\\{}()[\]^$+?.]/g, "\\$&").replace(/\*/g, ".*").replace(/,/g, "$|^").toUpperCase()), debugEnvRegex = new RegExp("^" + debugEnv + "$", "i"), (set) => {
-  if (set = set.toUpperCase(), !debugs[set])
-    if (debugEnvRegex.test(set))
-      debugs[set] = function(...args) {
-        console.error("%s: %s", set, pid, format2.apply(null, ...args));
-      };
-    else
-      debugs[set] = function() {};
-  return debugs[set];
-}))();
-var inspect = ((i) => (i.colors = { bold: [1, 22], italic: [3, 23], underline: [4, 24], inverse: [7, 27], white: [37, 39], grey: [90, 39], black: [30, 39], blue: [34, 39], cyan: [36, 39], green: [32, 39], magenta: [35, 39], red: [31, 39], yellow: [33, 39] }, i.styles = { special: "cyan", number: "yellow", boolean: "yellow", undefined: "grey", null: "bold", string: "green", date: "magenta", regexp: "red" }, i.custom = Symbol.for("nodejs.util.inspect.custom"), i))(function inspect2(obj, opts, ...rest) {
-  var ctx = { seen: [], stylize: stylizeNoColor };
-  if (rest.length >= 1)
-    ctx.depth = rest[0];
-  if (rest.length >= 2)
-    ctx.colors = rest[1];
-  if (isBoolean(opts))
-    ctx.showHidden = opts;
-  else if (opts)
-    _extend(ctx, opts);
-  if (isUndefined(ctx.showHidden))
-    ctx.showHidden = false;
-  if (isUndefined(ctx.depth))
-    ctx.depth = 2;
-  if (isUndefined(ctx.colors))
-    ctx.colors = false;
-  if (ctx.colors)
-    ctx.stylize = stylizeWithColor;
-  return formatValue(ctx, obj, ctx.depth);
-});
-function stylizeWithColor(str, styleType) {
-  var style = inspect.styles[styleType];
-  if (style)
-    return "\x1B[" + inspect.colors[style][0] + "m" + str + "\x1B[" + inspect.colors[style][1] + "m";
-  else
-    return str;
-}
-function stylizeNoColor(str, styleType) {
-  return str;
-}
-function arrayToHash(array) {
-  var hash = {};
-  return array.forEach(function(val, idx) {
-    hash[val] = true;
-  }), hash;
-}
-function formatValue(ctx, value, recurseTimes) {
-  if (ctx.customInspect && value && isFunction(value.inspect) && value.inspect !== inspect && !(value.constructor && value.constructor.prototype === value)) {
-    var ret = value.inspect(recurseTimes, ctx);
-    if (!isString(ret))
-      ret = formatValue(ctx, ret, recurseTimes);
-    return ret;
-  }
-  var primitive = formatPrimitive(ctx, value);
-  if (primitive)
-    return primitive;
-  var keys = Object.keys(value), visibleKeys = arrayToHash(keys);
-  if (ctx.showHidden)
-    keys = Object.getOwnPropertyNames(value);
-  if (isError(value) && (keys.indexOf("message") >= 0 || keys.indexOf("description") >= 0))
-    return formatError(value);
-  if (keys.length === 0) {
-    if (isFunction(value)) {
-      var name = value.name ? ": " + value.name : "";
-      return ctx.stylize("[Function" + name + "]", "special");
-    }
-    if (isRegExp(value))
-      return ctx.stylize(RegExp.prototype.toString.call(value), "regexp");
-    if (isDate(value))
-      return ctx.stylize(Date.prototype.toString.call(value), "date");
-    if (isError(value))
-      return formatError(value);
-  }
-  var base = "", array = false, braces = ["{", "}"];
-  if (isArray(value))
-    array = true, braces = ["[", "]"];
-  if (isFunction(value)) {
-    var n = value.name ? ": " + value.name : "";
-    base = " [Function" + n + "]";
-  }
-  if (isRegExp(value))
-    base = " " + RegExp.prototype.toString.call(value);
-  if (isDate(value))
-    base = " " + Date.prototype.toUTCString.call(value);
-  if (isError(value))
-    base = " " + formatError(value);
-  if (keys.length === 0 && (!array || value.length == 0))
-    return braces[0] + base + braces[1];
-  if (recurseTimes < 0)
-    if (isRegExp(value))
-      return ctx.stylize(RegExp.prototype.toString.call(value), "regexp");
-    else
-      return ctx.stylize("[Object]", "special");
-  ctx.seen.push(value);
-  var output;
-  if (array)
-    output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
-  else
-    output = keys.map(function(key) {
-      return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
-    });
-  return ctx.seen.pop(), reduceToSingleString(output, base, braces);
-}
-function formatPrimitive(ctx, value) {
-  if (isUndefined(value))
-    return ctx.stylize("undefined", "undefined");
-  if (isString(value)) {
-    var simple = "'" + JSON.stringify(value).replace(/^"|"$/g, "").replace(/'/g, "\\'").replace(/\\"/g, '"') + "'";
-    return ctx.stylize(simple, "string");
-  }
-  if (isNumber(value))
-    return ctx.stylize("" + value, "number");
-  if (isBoolean(value))
-    return ctx.stylize("" + value, "boolean");
-  if (isNull(value))
-    return ctx.stylize("null", "null");
-}
-function formatError(value) {
-  return "[" + Error.prototype.toString.call(value) + "]";
-}
-function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
-  var output = [];
-  for (var i = 0, l = value.length;i < l; ++i)
-    if (hasOwnProperty(value, String(i)))
-      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys, String(i), true));
-    else
-      output.push("");
-  return keys.forEach(function(key) {
-    if (!key.match(/^\d+$/))
-      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys, key, true));
-  }), output;
-}
-function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
-  var name, str, desc;
-  if (desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] }, desc.get)
-    if (desc.set)
-      str = ctx.stylize("[Getter/Setter]", "special");
-    else
-      str = ctx.stylize("[Getter]", "special");
-  else if (desc.set)
-    str = ctx.stylize("[Setter]", "special");
-  if (!hasOwnProperty(visibleKeys, key))
-    name = "[" + key + "]";
-  if (!str)
-    if (ctx.seen.indexOf(desc.value) < 0) {
-      if (isNull(recurseTimes))
-        str = formatValue(ctx, desc.value, null);
-      else
-        str = formatValue(ctx, desc.value, recurseTimes - 1);
-      if (str.indexOf(`
-`) > -1)
-        if (array)
-          str = str.split(`
-`).map(function(line) {
-            return "  " + line;
-          }).join(`
-`).slice(2);
-        else
-          str = `
-` + str.split(`
-`).map(function(line) {
-            return "   " + line;
-          }).join(`
-`);
-    } else
-      str = ctx.stylize("[Circular]", "special");
-  if (isUndefined(name)) {
-    if (array && key.match(/^\d+$/))
-      return str;
-    if (name = JSON.stringify("" + key), name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/))
-      name = name.slice(1, -1), name = ctx.stylize(name, "name");
-    else
-      name = name.replace(/'/g, "\\'").replace(/\\"/g, '"').replace(/(^"|"$)/g, "'"), name = ctx.stylize(name, "string");
-  }
-  return name + ": " + str;
-}
-function reduceToSingleString(output, base, braces) {
-  var numLinesEst = 0, length = output.reduce(function(prev, cur) {
-    if (numLinesEst++, cur.indexOf(`
-`) >= 0)
-      numLinesEst++;
-    return prev + cur.replace(/\u001b\[\d\d?m/g, "").length + 1;
-  }, 0);
-  if (length > 60)
-    return braces[0] + (base === "" ? "" : base + `
- `) + " " + output.join(`,
-  `) + " " + braces[1];
-  return braces[0] + base + " " + output.join(", ") + " " + braces[1];
-}
-function isArray(ar) {
-  return Array.isArray(ar);
-}
-function isBoolean(arg) {
-  return typeof arg === "boolean";
-}
-function isNull(arg) {
-  return arg === null;
-}
-function isNumber(arg) {
-  return typeof arg === "number";
-}
-function isString(arg) {
-  return typeof arg === "string";
-}
-function isUndefined(arg) {
-  return arg === undefined;
-}
-function isRegExp(re) {
-  return isObject(re) && objectToString(re) === "[object RegExp]";
-}
-function isObject(arg) {
-  return typeof arg === "object" && arg !== null;
-}
-function isDate(d) {
-  return isObject(d) && objectToString(d) === "[object Date]";
-}
-function isError(e) {
-  return isObject(e) && (objectToString(e) === "[object Error]" || e instanceof Error);
-}
-function isFunction(arg) {
-  return typeof arg === "function";
-}
-function objectToString(o) {
-  return Object.prototype.toString.call(o);
-}
-function _extend(origin, add) {
-  if (!add || !isObject(add))
-    return origin;
-  var keys = Object.keys(add), i = keys.length;
-  while (i--)
-    origin[keys[i]] = add[keys[i]];
-  return origin;
-}
-function hasOwnProperty(obj, prop) {
-  return Object.prototype.hasOwnProperty.call(obj, prop);
-}
-var promisify = ((x) => (x.custom = Symbol.for("nodejs.util.promisify.custom"), x))(function promisify2(original) {
-  if (typeof original !== "function")
-    throw new TypeError('The "original" argument must be of type Function');
-  if (kCustomPromisifiedSymbol && original[kCustomPromisifiedSymbol]) {
-    var fn = original[kCustomPromisifiedSymbol];
-    if (typeof fn !== "function")
-      throw new TypeError('The "nodejs.util.promisify.custom" argument must be of type Function');
-    return Object.defineProperty(fn, kCustomPromisifiedSymbol, { value: fn, enumerable: false, writable: false, configurable: true }), fn;
-  }
-  function fn(...args) {
-    var promiseResolve, promiseReject, promise = new Promise(function(resolve2, reject) {
-      promiseResolve = resolve2, promiseReject = reject;
-    });
-    args.push(function(err, value) {
-      if (err)
-        promiseReject(err);
-      else
-        promiseResolve(value);
-    });
-    try {
-      original.apply(this, args);
-    } catch (err) {
-      promiseReject(err);
-    }
-    return promise;
-  }
-  if (Object.setPrototypeOf(fn, Object.getPrototypeOf(original)), kCustomPromisifiedSymbol)
-    Object.defineProperty(fn, kCustomPromisifiedSymbol, { value: fn, enumerable: false, writable: false, configurable: true });
-  return Object.defineProperties(fn, Object.getOwnPropertyDescriptors(original));
-});
-
-// src/tmux.ts
+import { execSync, exec } from "child_process";
+import { promisify } from "util";
 var execAsync = promisify(exec);
 function getWindowInfo() {
-  const format3 = "#{window_width}:#{window_height}:#{pane_id}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_title}";
-  const output = execSync(`tmux list-panes -F '${format3}'`).toString().trim();
+  const format = "#{window_width}:#{window_height}:#{pane_id}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_title}";
+  const output = execSync(`tmux list-panes -F '${format}'`).toString().trim();
   const lines = output.split(`
 `);
   const [width, height] = lines[0].split(":").slice(0, 2).map(Number);
@@ -939,8 +317,8 @@ function getWindowInfo() {
   return { width, height, panes };
 }
 function getWindows() {
-  const format3 = "#{window_index}:#{window_name}:#{window_active}:#{window_bell_flag}:#{window_activity_flag}:#{pane_current_command}";
-  const output = execSync(`tmux list-windows -F '${format3}'`).toString().trim();
+  const format = "#{window_index}:#{window_name}:#{window_active}:#{window_bell_flag}:#{window_activity_flag}:#{pane_current_command}";
+  const output = execSync(`tmux list-windows -F '${format}'`).toString().trim();
   return output.split(`
 `).map((line) => {
     const [index, name, active, bell, activity, paneCommand] = line.split(":");
@@ -1279,8 +657,8 @@ var startsWithSchemeRegexp = /^[a-z][a-z0-9+.-]*:/i;
 var isAbsoluteURL = (url) => {
   return startsWithSchemeRegexp.test(url);
 };
-var isArray2 = (val) => (isArray2 = Array.isArray, isArray2(val));
-var isReadonlyArray = isArray2;
+var isArray = (val) => (isArray = Array.isArray, isArray(val));
+var isReadonlyArray = isArray;
 function maybeObj(x) {
   if (typeof x !== "object") {
     return {};
@@ -1315,7 +693,7 @@ var safeJSON = (text) => {
 };
 
 // node_modules/@anthropic-ai/sdk/internal/utils/sleep.mjs
-var sleep = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
+var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // node_modules/@anthropic-ai/sdk/version.mjs
 var VERSION = "0.71.2";
@@ -1939,10 +1317,10 @@ class SSEDecoder {
     return null;
   }
 }
-function partition(str, delimiter2) {
-  const index = str.indexOf(delimiter2);
+function partition(str, delimiter) {
+  const index = str.indexOf(delimiter);
   if (index !== -1) {
-    return [str.substring(0, index), delimiter2, str.substring(index + delimiter2.length)];
+    return [str.substring(0, index), delimiter, str.substring(index + delimiter.length)];
   }
   return [str, "", ""];
 }
@@ -1998,8 +1376,8 @@ var _APIPromise_client;
 
 class APIPromise extends Promise {
   constructor(client, responsePromise, parseResponse = defaultParseResponse) {
-    super((resolve2) => {
-      resolve2(null);
+    super((resolve) => {
+      resolve(null);
     });
     this.responsePromise = responsePromise;
     this.parseResponse = parseResponse;
@@ -2873,12 +2251,12 @@ class BetaMessageStream {
       }
       return this._emit("error", new AnthropicError(String(error2)));
     });
-    __classPrivateFieldSet(this, _BetaMessageStream_connectedPromise, new Promise((resolve2, reject) => {
-      __classPrivateFieldSet(this, _BetaMessageStream_resolveConnectedPromise, resolve2, "f");
+    __classPrivateFieldSet(this, _BetaMessageStream_connectedPromise, new Promise((resolve, reject) => {
+      __classPrivateFieldSet(this, _BetaMessageStream_resolveConnectedPromise, resolve, "f");
       __classPrivateFieldSet(this, _BetaMessageStream_rejectConnectedPromise, reject, "f");
     }), "f");
-    __classPrivateFieldSet(this, _BetaMessageStream_endPromise, new Promise((resolve2, reject) => {
-      __classPrivateFieldSet(this, _BetaMessageStream_resolveEndPromise, resolve2, "f");
+    __classPrivateFieldSet(this, _BetaMessageStream_endPromise, new Promise((resolve, reject) => {
+      __classPrivateFieldSet(this, _BetaMessageStream_resolveEndPromise, resolve, "f");
       __classPrivateFieldSet(this, _BetaMessageStream_rejectEndPromise, reject, "f");
     }), "f");
     __classPrivateFieldGet(this, _BetaMessageStream_connectedPromise, "f").catch(() => {});
@@ -2999,11 +2377,11 @@ class BetaMessageStream {
     return this;
   }
   emitted(event) {
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve, reject) => {
       __classPrivateFieldSet(this, _BetaMessageStream_catchingPromiseCreated, true, "f");
       if (event !== "error")
         this.once("error", reject);
-      this.once(event, resolve2);
+      this.once(event, resolve);
     });
   }
   async done() {
@@ -3318,7 +2696,7 @@ class BetaMessageStream {
           if (done) {
             return { value: undefined, done: true };
           }
-          return new Promise((resolve2, reject) => readQueue.push({ resolve: resolve2, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: undefined, done: true });
+          return new Promise((resolve, reject) => readQueue.push({ resolve, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: undefined, done: true });
         }
         const chunk = pushQueue.shift();
         return { value: chunk, done: false };
@@ -3359,7 +2737,7 @@ Priority order if multiple steps remain
 User preferences or style requirements
 Domain-specific details that aren't obvious
 Any promises made to the user
-Be concise but complete—err on the side of including information that would prevent duplicate work or repeated mistakes. Write in a way that enables immediate resumption of the task.
+Be concise but complete\u2014err on the side of including information that would prevent duplicate work or repeated mistakes. Write in a way that enables immediate resumption of the task.
 Wrap your summary in <summary></summary> tags.`;
 
 // node_modules/@anthropic-ai/sdk/lib/tools/BetaToolRunner.mjs
@@ -3375,13 +2753,13 @@ var _BetaToolRunner_iterationCount;
 var _BetaToolRunner_checkAndCompact;
 var _BetaToolRunner_generateToolResponse;
 function promiseWithResolvers() {
-  let resolve2;
+  let resolve;
   let reject;
   const promise = new Promise((res, rej) => {
-    resolve2 = res;
+    resolve = res;
     reject = rej;
   });
-  return { promise, resolve: resolve2, reject };
+  return { promise, resolve, reject };
 }
 
 class BetaToolRunner {
@@ -3992,12 +3370,12 @@ class MessageStream {
       }
       return this._emit("error", new AnthropicError(String(error2)));
     });
-    __classPrivateFieldSet(this, _MessageStream_connectedPromise, new Promise((resolve2, reject) => {
-      __classPrivateFieldSet(this, _MessageStream_resolveConnectedPromise, resolve2, "f");
+    __classPrivateFieldSet(this, _MessageStream_connectedPromise, new Promise((resolve, reject) => {
+      __classPrivateFieldSet(this, _MessageStream_resolveConnectedPromise, resolve, "f");
       __classPrivateFieldSet(this, _MessageStream_rejectConnectedPromise, reject, "f");
     }), "f");
-    __classPrivateFieldSet(this, _MessageStream_endPromise, new Promise((resolve2, reject) => {
-      __classPrivateFieldSet(this, _MessageStream_resolveEndPromise, resolve2, "f");
+    __classPrivateFieldSet(this, _MessageStream_endPromise, new Promise((resolve, reject) => {
+      __classPrivateFieldSet(this, _MessageStream_resolveEndPromise, resolve, "f");
       __classPrivateFieldSet(this, _MessageStream_rejectEndPromise, reject, "f");
     }), "f");
     __classPrivateFieldGet(this, _MessageStream_connectedPromise, "f").catch(() => {});
@@ -4115,11 +3493,11 @@ class MessageStream {
     return this;
   }
   emitted(event) {
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve, reject) => {
       __classPrivateFieldSet(this, _MessageStream_catchingPromiseCreated, true, "f");
       if (event !== "error")
         this.once("error", reject);
-      this.once(event, resolve2);
+      this.once(event, resolve);
     });
   }
   async done() {
@@ -4427,7 +3805,7 @@ class MessageStream {
           if (done) {
             return { value: undefined, done: true };
           }
-          return new Promise((resolve2, reject) => readQueue.push({ resolve: resolve2, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: undefined, done: true });
+          return new Promise((resolve, reject) => readQueue.push({ resolve, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: undefined, done: true });
         }
         const chunk = pushQueue.shift();
         return { value: chunk, done: false };
@@ -4994,7 +4372,7 @@ Anthropic.Messages = Messages2;
 Anthropic.Models = Models2;
 Anthropic.Beta = Beta;
 // src/logger.ts
-var {appendFileSync, writeFileSync} = (() => ({}));
+import { appendFileSync, writeFileSync } from "fs";
 var LOG_FILE = "/tmp/cmux.log";
 function initLog() {
   writeFileSync(LOG_FILE, `=== cmux started ${new Date().toISOString()} ===
@@ -5002,8 +4380,10 @@ function initLog() {
 }
 function log(...args) {
   const msg = args.map((a) => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" ");
-  appendFileSync(LOG_FILE, `${msg}
+  try {
+    appendFileSync(LOG_FILE, `${msg}
 `);
+  } catch (e) {}
 }
 
 // src/summaries.ts
@@ -5017,7 +4397,7 @@ function getClient() {
   }
   return _client;
 }
-var SYSTEM_PROMPT = "Generate a 5-10 word summary of this tmux window. Focus on what's being worked on. Examples: 'React dev server', 'Git commits review', 'Python tests running'";
+var SYSTEM_PROMPT = "Generate a very short tmux window name (2-4 words max, under 20 characters). The current window name is provided - only suggest a different name if the window's purpose has meaningfully changed. If the current name is still accurate, return it exactly. Be concise. Return only the name, nothing else.";
 var cache = new Map;
 function hashContext(context) {
   const parts = context.panes.map((p) => `${p.workdir}|${p.program}|${p.gitBranch ?? ""}`);
@@ -5045,7 +4425,7 @@ ${pane.transcript}`);
 async function generateSummary(context) {
   log("[cmux] generateSummary called for window:", context.windowIndex);
   const client = getClient();
-  log("[cmux] Anthropic client:", client ? "initialized (using ANTHROPIC_API_KEY)" : "null (ANTHROPIC_API_KEY not set)");
+  log("[cmux] Anthropic client:", client ? "initialized" : "null (ANTHROPIC_API_KEY not set)");
   if (!client) {
     return context.windowName;
   }
@@ -5099,6 +4479,7 @@ async function getSummariesForWindows(contexts) {
 // src/main.ts
 var CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
 var SELF_PATH = import.meta.path;
+var BACKGROUND_RENAMER_PATH = join(import.meta.dir, "background-renamer.ts");
 function initState() {
   let windows = [];
   let currentWindowIndex = 0;
@@ -5185,17 +4566,17 @@ var ansi = {
   inverse: `${CSI}7m`
 };
 var box2 = {
-  tl: "┌",
-  tr: "┐",
-  bl: "└",
-  br: "┘",
-  h: "─",
-  v: "│",
-  ltee: "├",
-  rtee: "┤",
-  ttee: "┬",
-  btee: "┴",
-  cross: "┼"
+  tl: "\u250C",
+  tr: "\u2510",
+  bl: "\u2514",
+  br: "\u2518",
+  h: "\u2500",
+  v: "\u2502",
+  ltee: "\u251C",
+  rtee: "\u2524",
+  ttee: "\u252C",
+  btee: "\u2534",
+  cross: "\u253C"
 };
 function drawLayoutPreview(template, x, y, w, h) {
   const lines = renderLayoutPreview(template, w, h);
@@ -5257,7 +4638,7 @@ function startAnimation(direction) {
   const previewY = 3;
   const paneCount = nextLayout.panes.length;
   const layoutFocused = state.focus === "layout";
-  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} \xB7 ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
   let counterOut = ansi.moveTo(Math.floor((width - counter.length - 2) / 2), previewY + previewH);
   if (layoutFocused)
     counterOut += ansi.inverse;
@@ -5287,16 +4668,16 @@ function render() {
   const sel = state.windowBarSelection;
   out += ansi.moveTo(1, 0);
   if (state.confirmingDelete) {
-    out += ansi.inverse + "[Delete? ⏎]" + ansi.reset + " ";
+    out += ansi.inverse + "[Delete? \u23CE]" + ansi.reset + " ";
   } else {
     if (windowFocused && sel === "minus")
       out += ansi.inverse;
-    out += "[−]";
+    out += "[\u2212]";
     out += ansi.reset + " ";
   }
   if (windowFocused && sel === "name")
     out += ansi.inverse;
-  out += " " + windowName + " ▼ ";
+  out += " " + windowName + " \u25BC ";
   out += ansi.reset + " ";
   if (windowFocused && sel === "plus") {
     out += ansi.inverse + "[New window]" + ansi.reset;
@@ -5312,14 +4693,14 @@ function render() {
   out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
   const paneCount = layout.panes.length;
   const layoutFocused = state.focus === "layout";
-  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} \xB7 ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
   out += ansi.moveTo(Math.floor((width - counter.length - 2) / 2), previewY + previewH);
   if (layoutFocused)
     out += ansi.inverse;
   out += ` ${counter} `;
   out += ansi.reset;
   out += ansi.moveTo(0, height - 2) + box2.h.repeat(width);
-  const hints = "tab focus  hjkl nav  ⏎ apply";
+  const hints = "tab focus  hjkl nav  \u23CE apply";
   out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset;
   if (state.windowPopoverOpen) {
     out += renderWindowPopover(1, 1, height - 4);
@@ -5339,10 +4720,9 @@ function getRotatedWindows() {
 function renderWindowPopover(x, y, maxH) {
   let out = "";
   const rotated = getRotatedWindows();
-  const windowCount = Math.min(rotated.length, Math.floor(maxH / 2));
-  const summaryWidth = 30;
+  const windowCount = Math.min(rotated.length, maxH - 2);
   const maxNameLen = Math.max(...rotated.map((w2) => w2.name.length));
-  const w = Math.max(maxNameLen + 6, summaryWidth + 6);
+  const w = maxNameLen + 6;
   out += ansi.moveTo(x, y) + box2.tl + box2.h.repeat(w - 2) + box2.tr;
   let rowY = y + 1;
   for (let i = 0;i < windowCount; i++) {
@@ -5352,14 +4732,8 @@ function renderWindowPopover(x, y, maxH) {
     out += ansi.moveTo(x, rowY) + box2.v;
     if (isSelected)
       out += ansi.inverse;
-    out += (isCurrent ? " ● " : "   ") + win.name.padEnd(w - 5);
+    out += (isCurrent ? " \u25CF " : "   ") + win.name.padEnd(w - 5);
     out += ansi.reset + box2.v;
-    rowY++;
-    const summary = state.summaries.get(win.index);
-    const summaryText = summary || (state.summariesLoading ? "..." : "");
-    const displaySummary = summaryText.length > w - 7 ? summaryText.slice(0, w - 10) + "..." : summaryText;
-    out += ansi.moveTo(x, rowY) + box2.v;
-    out += ansi.dim + "   " + displaySummary.padEnd(w - 5) + ansi.reset + box2.v;
     rowY++;
   }
   out += ansi.moveTo(x, rowY) + box2.bl + box2.h.repeat(w - 2) + box2.br;
@@ -5595,7 +4969,7 @@ function isInsideTmux() {
   return !!process.env.TMUX;
 }
 function startTmuxSession() {
-  const tmux = spawn("tmux", [
+  const tmuxArgs = [
     "-f",
     CONFIG_PATH,
     "new-session",
@@ -5609,8 +4983,13 @@ function startTmuxSession() {
     "-h",
     "80%",
     "-E",
-    `bun ${SELF_PATH}`
-  ], {
+    `bun ${SELF_PATH}`,
+    ";",
+    "run-shell",
+    "-b",
+    `bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`
+  ];
+  const tmux = spawn("tmux", tmuxArgs, {
     stdio: "inherit"
   });
   tmux.on("close", (code) => {
@@ -5623,6 +5002,7 @@ function runUI() {
     process.exit(1);
   }
   initLog();
+  log("[cmux] runUI starting");
   process.stdout.write(ansi.altScreen + ansi.hideCursor);
   process.stdin.setRawMode(true);
   process.stdin.resume();

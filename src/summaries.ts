@@ -1,52 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { execSync } from "node:child_process";
 import type { PaneContext, WindowContext } from "./tmux";
 import { log } from "./logger";
 
 // Lazy Anthropic client initialization
 let _client: Anthropic | null = null;
-let _keySource: string | null = null;
-
-function getApiKey(): string | undefined {
-  // First check process.env
-  let key = process.env.ANTHROPIC_API_KEY;
-
-  if (key) {
-    // Save to tmux hidden environment for future popup runs
-    try {
-      // Use -gh for global hidden (not inherited to shells)
-      execSync(`tmux set-environment -gh ANTHROPIC_API_KEY "${key}"`, { stdio: 'ignore' });
-      _keySource = 'process.env (saved to tmux hidden env)';
-      log('[cmux] Saved API key to tmux hidden environment');
-    } catch {
-      // Not in tmux, ignore
-      _keySource = 'process.env (not in tmux)';
-    }
-    return key;
-  }
-
-  // Try to read from tmux hidden environment
-  try {
-    const result = execSync('tmux show-environment -gh ANTHROPIC_API_KEY 2>/dev/null', { encoding: 'utf-8' });
-    // Output is "ANTHROPIC_API_KEY=sk-ant-..."
-    if (result && result.includes('=')) {
-      key = result.split('=').slice(1).join('=').trim();  // Handle = in key value
-      if (key) {
-        _keySource = 'tmux hidden environment';
-        log('[cmux] Read API key from tmux hidden environment');
-        return key;
-      }
-    }
-  } catch {
-    // Not in tmux or variable not set
-  }
-
-  return undefined;
-}
 
 function getClient(): Anthropic | null {
   if (_client === null) {
-    const apiKey = getApiKey();
+    const apiKey = process.env.ANTHROPIC_API_KEY;
     if (apiKey) {
       _client = new Anthropic({ apiKey });
     }
@@ -103,7 +64,7 @@ function formatContextForPrompt(context: WindowContext): string {
 export async function generateSummary(context: WindowContext): Promise<string> {
   log('[cmux] generateSummary called for window:', context.windowIndex);
   const client = getClient();
-  log('[cmux] Anthropic client:', client ? `initialized (key from ${_keySource})` : 'null (ANTHROPIC_API_KEY not set)');
+  log('[cmux] Anthropic client:', client ? 'initialized' : 'null (ANTHROPIC_API_KEY not set)');
   if (!client) {
     // No API key available, return window name as fallback
     return context.windowName;
