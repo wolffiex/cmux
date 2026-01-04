@@ -14,9 +14,9 @@ const RENAME_INTERVAL_MS = 150_000; // 2.5 minutes
 /**
  * Sanitize summary text for use as tmux window name
  * @param summary - AI-generated window name
- * @param maxLength - Maximum length (default 12 for windows, 15 for sessions)
+ * @param maxLength - Maximum length (default 15)
  */
-function sanitizeWindowName(summary: string, maxLength: number = 12): string {
+function sanitizeWindowName(summary: string, maxLength: number = 15): string {
   let name = summary
     .replace(/["'`$\\]/g, "")
     .replace(/[^\x20-\x7E]/g, "")

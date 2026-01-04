@@ -303,10 +303,10 @@ function render(): void {
   const maxIndex = state.windows.length + 1  // 0=minus, 1..n=windows, n+1=plus
   out += ansi.moveTo(1, 0)
 
-  // Helper to truncate window names to 12 chars
+  // Helper to truncate window names to 15 chars
   const truncateName = (name: string): string => {
-    if (name.length <= 12) return name
-    return name.slice(0, 11) + "…"
+    if (name.length <= 15) return name
+    return name.slice(0, 14) + "…"
   }
 
   // [−] button (shows "Delete? ⏎" when confirming)
