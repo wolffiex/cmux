@@ -6,6 +6,7 @@ import { getWindows, getWindowInfo, getWindowContext, type TmuxWindow } from "./
 import { generateLayoutString } from "./tmux-layout"
 import { getSummariesForWindows } from "./summaries"
 import { initLog, log } from "./logger"
+import { sanitizeWindowName } from "./utils"
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf")
 const SELF_PATH = import.meta.path
@@ -399,17 +400,6 @@ function render(): void {
 
 
 // ── Summary fetching ────────────────────────────────────────────────────────
-
-// Sanitize summary text for use as tmux window name
-function sanitizeWindowName(summary: string): string {
-  // Truncate to 20 chars and remove problematic characters
-  return summary
-    .slice(0, 20)
-    .trim()
-    .replace(/["'`$\\]/g, "") // Remove quotes and shell-sensitive chars
-    .replace(/[^\x20-\x7E]/g, "") // Remove non-printable ASCII
-    .trim()
-}
 
 // Rename tmux windows with AI-generated summaries
 async function renameWindowsWithSummaries(summaries: Map<number, string>): Promise<void> {
