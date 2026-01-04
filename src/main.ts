@@ -714,15 +714,30 @@ function isInsideTmux(): boolean {
 }
 
 function startTmuxSession(): void {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+    || process.env.TEST_ANTHROPIC_API_KEY
+    || process.env.DEMO_ANTHROPIC_API_KEY;
+
   const tmuxArgs = [
     "-f", CONFIG_PATH,
     "new-session",
     ";",
-    "bind", "-n", "M-Space", "display-popup", "-w", "80%", "-h", "80%", "-E", `bun ${SELF_PATH}`,
-    ";",
-    // Start background window renamer (runs detached, outputs to /dev/null)
-    "run-shell", "-b", `bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`
+    "bind", "-n", "M-Space", "display-popup", "-w", "80%", "-h", "80%", "-E", `bun ${SELF_PATH}`
   ];
+
+  // Save API key to tmux hidden environment for popup runs
+  if (apiKey) {
+    tmuxArgs.push(";", "set-environment", "-gh", "ANTHROPIC_API_KEY", apiKey);
+  }
+
+  // Start background window renamer (runs detached, outputs to /dev/null)
+  // Pass API key inline to avoid persisting it in tmux environment
+  if (apiKey) {
+    tmuxArgs.push(
+      ";",
+      "run-shell", "-b", `ANTHROPIC_API_KEY='${apiKey}' bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`
+    );
+  }
 
   const tmux = spawn("tmux", tmuxArgs, {
     stdio: "inherit",
