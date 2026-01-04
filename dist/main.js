@@ -1,7 +1,6 @@
-// @bun
 // src/main.ts
-import { execSync as execSync2, spawn } from "child_process";
-import { join } from "path";
+import { execSync as execSync2, spawn } from "node:child_process";
+import { join } from "node:path";
 
 // src/layouts.ts
 var MIN_ROWS = 6;
@@ -153,17 +152,17 @@ function resolveLayout(template, windowWidth, windowHeight) {
 
 // src/layout-preview.ts
 var box = {
-  tl: "\u250C",
-  tr: "\u2510",
-  bl: "\u2514",
-  br: "\u2518",
-  h: "\u2500",
-  v: "\u2502",
-  ltee: "\u251C",
-  rtee: "\u2524",
-  ttee: "\u252C",
-  btee: "\u2534",
-  cross: "\u253C"
+  tl: "┌",
+  tr: "┐",
+  bl: "└",
+  br: "┘",
+  h: "─",
+  v: "│",
+  ltee: "├",
+  rtee: "┤",
+  ttee: "┬",
+  btee: "┴",
+  cross: "┼"
 };
 function toRects(template, width, height) {
   return template.panes.map((pane) => {
@@ -294,8 +293,8 @@ function isHorizontal(c) {
 if (false) {}
 
 // src/tmux.ts
-import { execSync, exec } from "child_process";
-import { promisify } from "util";
+import { execSync, exec } from "node:child_process";
+import { promisify } from "node:util";
 var execAsync = promisify(exec);
 function getWindowInfo() {
   const format = "#{window_width}:#{window_height}:#{pane_id}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_title}";
@@ -331,49 +330,6 @@ function getWindows() {
       paneCommand: paneCommand || ""
     };
   });
-}
-async function getPaneContext(windowTarget, paneIndex) {
-  const target = `${windowTarget}.${paneIndex}`;
-  const [workdirResult, programResult, transcriptResult] = await Promise.all([
-    execAsync(`tmux display-message -p -t '${target}' '#{pane_current_path}'`).catch(() => ({ stdout: "" })),
-    execAsync(`tmux display-message -p -t '${target}' '#{pane_current_command}'`).catch(() => ({ stdout: "" })),
-    execAsync(`tmux capture-pane -p -t '${target}' -S -50`).catch(() => ({ stdout: "" }))
-  ]);
-  const workdir = workdirResult.stdout.trim();
-  const program = programResult.stdout.trim();
-  const transcript = transcriptResult.stdout.trimEnd();
-  let gitBranch = null;
-  if (workdir) {
-    try {
-      const gitResult = await execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`);
-      const branch = gitResult.stdout.trim();
-      if (branch) {
-        gitBranch = branch;
-      }
-    } catch {}
-  }
-  return {
-    workdir,
-    program,
-    transcript,
-    gitBranch
-  };
-}
-async function getWindowContext(windowIndex) {
-  const windowTarget = `:${windowIndex}`;
-  const [nameResult, panesResult] = await Promise.all([
-    execAsync(`tmux display-message -p -t '${windowTarget}' '#{window_name}'`),
-    execAsync(`tmux list-panes -t '${windowTarget}' -F '#{pane_index}'`)
-  ]);
-  const windowName = nameResult.stdout.trim();
-  const paneIndices = panesResult.stdout.trim().split(`
-`).map(Number);
-  const panes = await Promise.all(paneIndices.map((paneIndex) => getPaneContext(windowTarget, paneIndex)));
-  return {
-    windowIndex,
-    windowName,
-    panes
-  };
 }
 
 // src/tmux-layout.ts
@@ -2737,7 +2693,7 @@ Priority order if multiple steps remain
 User preferences or style requirements
 Domain-specific details that aren't obvious
 Any promises made to the user
-Be concise but complete\u2014err on the side of including information that would prevent duplicate work or repeated mistakes. Write in a way that enables immediate resumption of the task.
+Be concise but complete—err on the side of including information that would prevent duplicate work or repeated mistakes. Write in a way that enables immediate resumption of the task.
 Wrap your summary in <summary></summary> tags.`;
 
 // node_modules/@anthropic-ai/sdk/lib/tools/BetaToolRunner.mjs
@@ -4372,7 +4328,7 @@ Anthropic.Messages = Messages2;
 Anthropic.Models = Models2;
 Anthropic.Beta = Beta;
 // src/logger.ts
-import { appendFileSync, writeFileSync } from "fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 var LOG_FILE = "/tmp/cmux.log";
 function initLog() {
   writeFileSync(LOG_FILE, `=== cmux started ${new Date().toISOString()} ===
@@ -4387,94 +4343,7 @@ function log(...args) {
 }
 
 // src/summaries.ts
-var _client = null;
-function getClient() {
-  if (_client === null) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (apiKey) {
-      _client = new Anthropic({ apiKey });
-    }
-  }
-  return _client;
-}
-var SYSTEM_PROMPT = "Generate a very short tmux window name (2-4 words max, under 20 characters). The current window name is provided - only suggest a different name if the window's purpose has meaningfully changed. If the current name is still accurate, return it exactly. Be concise. Return only the name, nothing else.";
 var cache = new Map;
-function hashContext(context) {
-  const parts = context.panes.map((p) => `${p.workdir}|${p.program}|${p.gitBranch ?? ""}`);
-  return parts.join(":::");
-}
-function formatContextForPrompt(context) {
-  const lines = [`Window: ${context.windowName}`];
-  for (let i = 0;i < context.panes.length; i++) {
-    const pane = context.panes[i];
-    lines.push(`
-Pane ${i + 1}:`);
-    lines.push(`  Directory: ${pane.workdir}`);
-    lines.push(`  Program: ${pane.program}`);
-    if (pane.gitBranch) {
-      lines.push(`  Git branch: ${pane.gitBranch}`);
-    }
-    if (pane.transcript.trim()) {
-      lines.push(`  Recent output:
-${pane.transcript}`);
-    }
-  }
-  return lines.join(`
-`);
-}
-async function generateSummary(context) {
-  log("[cmux] generateSummary called for window:", context.windowIndex);
-  const client = getClient();
-  log("[cmux] Anthropic client:", client ? "initialized" : "null (ANTHROPIC_API_KEY not set)");
-  if (!client) {
-    return context.windowName;
-  }
-  try {
-    const prompt = formatContextForPrompt(context);
-    const message = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 50,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
-    });
-    const textBlock = message.content.find((block) => block.type === "text");
-    const summary = textBlock ? textBlock.text.trim() : context.windowName;
-    log("[cmux] API response:", summary);
-    return summary;
-  } catch (e) {
-    log("[cmux] API error:", e instanceof Error ? e.message : e);
-    return context.windowName;
-  }
-}
-async function getSummary(context) {
-  const currentHash = hashContext(context);
-  const cached = cache.get(context.windowIndex);
-  if (cached && cached.contextHash === currentHash) {
-    return cached.summary;
-  }
-  const summary = await generateSummary(context);
-  cache.set(context.windowIndex, {
-    summary,
-    contextHash: currentHash
-  });
-  return summary;
-}
-async function getSummariesForWindows(contexts) {
-  const results = new Map;
-  const summaries = await Promise.all(contexts.map(async (context) => {
-    const summary = await getSummary(context);
-    return { windowIndex: context.windowIndex, summary };
-  }));
-  for (const { windowIndex, summary } of summaries) {
-    results.set(windowIndex, summary);
-  }
-  return results;
-}
 
 // src/main.ts
 var CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
@@ -4506,10 +4375,8 @@ function initState() {
     windows,
     currentWindowIndex,
     layoutIndex,
-    windowPopoverOpen: false,
-    windowPopoverSelection: 0,
+    carouselIndex: currentWindowIndex + 1,
     focus: "window",
-    windowBarSelection: "name",
     animating: false,
     animationDirection: null,
     animationFrame: 0,
@@ -4566,17 +4433,17 @@ var ansi = {
   inverse: `${CSI}7m`
 };
 var box2 = {
-  tl: "\u250C",
-  tr: "\u2510",
-  bl: "\u2514",
-  br: "\u2518",
-  h: "\u2500",
-  v: "\u2502",
-  ltee: "\u251C",
-  rtee: "\u2524",
-  ttee: "\u252C",
-  btee: "\u2534",
-  cross: "\u253C"
+  tl: "┌",
+  tr: "┐",
+  bl: "└",
+  br: "┘",
+  h: "─",
+  v: "│",
+  ltee: "├",
+  rtee: "┤",
+  ttee: "┬",
+  btee: "┴",
+  cross: "┼"
 };
 function drawLayoutPreview(template, x, y, w, h) {
   const lines = renderLayoutPreview(template, w, h);
@@ -4638,7 +4505,7 @@ function startAnimation(direction) {
   const previewY = 3;
   const paneCount = nextLayout.panes.length;
   const layoutFocused = state.focus === "layout";
-  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} \xB7 ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
   let counterOut = ansi.moveTo(Math.floor((width - counter.length - 2) / 2), previewY + previewH);
   if (layoutFocused)
     counterOut += ansi.inverse;
@@ -4663,26 +4530,38 @@ function render() {
   const width = process.stdout.columns || 80;
   const height = process.stdout.rows || 24;
   let out = ansi.clear;
-  const windowName = state.windows[state.currentWindowIndex]?.name || "?";
   const windowFocused = state.focus === "window";
-  const sel = state.windowBarSelection;
+  const maxIndex = state.windows.length + 1;
   out += ansi.moveTo(1, 0);
+  const truncateName = (name) => {
+    if (name.length <= 12)
+      return name;
+    return name.slice(0, 11) + "…";
+  };
   if (state.confirmingDelete) {
-    out += ansi.inverse + "[Delete? \u23CE]" + ansi.reset + " ";
+    out += ansi.inverse + " Delete? ⏎ " + ansi.reset;
   } else {
-    if (windowFocused && sel === "minus")
+    if (windowFocused && state.carouselIndex === 0)
       out += ansi.inverse;
-    out += "[\u2212]";
-    out += ansi.reset + " ";
+    out += " − ";
+    out += ansi.reset;
   }
-  if (windowFocused && sel === "name")
-    out += ansi.inverse;
-  out += " " + windowName + " \u25BC ";
-  out += ansi.reset + " ";
-  if (windowFocused && sel === "plus") {
-    out += ansi.inverse + "[New window]" + ansi.reset;
+  for (let i = 0;i < state.windows.length; i++) {
+    const win = state.windows[i];
+    const isSelected = windowFocused && state.carouselIndex === i + 1;
+    const isCurrent = i === state.currentWindowIndex;
+    if (isSelected)
+      out += ansi.inverse;
+    out += " " + truncateName(win.name);
+    if (isCurrent)
+      out += " ●";
+    out += " ";
+    out += ansi.reset;
+  }
+  if (windowFocused && state.carouselIndex === maxIndex) {
+    out += ansi.inverse + " + " + ansi.reset;
   } else {
-    out += ansi.dim + "[+]" + ansi.reset;
+    out += ansi.dim + " + " + ansi.reset;
   }
   out += ansi.moveTo(0, 1) + box2.h.repeat(width);
   const layout = ALL_LAYOUTS[state.layoutIndex];
@@ -4693,96 +4572,18 @@ function render() {
   out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
   const paneCount = layout.panes.length;
   const layoutFocused = state.focus === "layout";
-  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} \xB7 ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
   out += ansi.moveTo(Math.floor((width - counter.length - 2) / 2), previewY + previewH);
   if (layoutFocused)
     out += ansi.inverse;
   out += ` ${counter} `;
   out += ansi.reset;
   out += ansi.moveTo(0, height - 2) + box2.h.repeat(width);
-  const hints = "tab focus  hjkl nav  \u23CE apply";
+  const hints = "tab focus  hjkl nav  ⏎ apply";
   out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset;
-  if (state.windowPopoverOpen) {
-    out += renderWindowPopover(1, 1, height - 4);
-  }
   process.stdout.write(out);
 }
-function getRotatedWindows() {
-  const n = state.windows.length;
-  if (n === 0)
-    return [];
-  const idx = state.currentWindowIndex;
-  return [
-    ...state.windows.slice(idx),
-    ...state.windows.slice(0, idx)
-  ];
-}
-function renderWindowPopover(x, y, maxH) {
-  let out = "";
-  const rotated = getRotatedWindows();
-  const windowCount = Math.min(rotated.length, maxH - 2);
-  const maxNameLen = Math.max(...rotated.map((w2) => w2.name.length));
-  const w = maxNameLen + 6;
-  out += ansi.moveTo(x, y) + box2.tl + box2.h.repeat(w - 2) + box2.tr;
-  let rowY = y + 1;
-  for (let i = 0;i < windowCount; i++) {
-    const win = rotated[i];
-    const isCurrent = i === 0;
-    const isSelected = i === state.windowPopoverSelection;
-    out += ansi.moveTo(x, rowY) + box2.v;
-    if (isSelected)
-      out += ansi.inverse;
-    out += (isCurrent ? " \u25CF " : "   ") + win.name.padEnd(w - 5);
-    out += ansi.reset + box2.v;
-    rowY++;
-  }
-  out += ansi.moveTo(x, rowY) + box2.bl + box2.h.repeat(w - 2) + box2.br;
-  return out;
-}
-function sanitizeWindowName(summary) {
-  return summary.slice(0, 20).trim().replace(/["'`$\\]/g, "").replace(/[^\x20-\x7E]/g, "").trim();
-}
-async function renameWindowsWithSummaries(summaries) {
-  log("[cmux] renameWindowsWithSummaries called, entries:", Array.from(summaries.entries()));
-  for (const [windowIndex, summary] of summaries) {
-    const shortName = sanitizeWindowName(summary);
-    if (shortName.length > 0) {
-      try {
-        log(`[cmux] renaming window ${windowIndex} to "${shortName}"`);
-        execSync2(`tmux rename-window -t :${windowIndex} "${shortName}"`);
-      } catch (e) {
-        log(`[cmux] rename failed for window ${windowIndex}:`, e);
-      }
-    }
-  }
-}
-async function fetchSummaries() {
-  if (state.summariesLoading)
-    return;
-  log("[cmux] fetchSummaries called, windows:", state.windows.map((w) => w.index));
-  state.summariesLoading = true;
-  render();
-  try {
-    const contexts = await Promise.all(state.windows.map((w) => getWindowContext(w.index)));
-    log("[cmux] contexts:", JSON.stringify(contexts, null, 2));
-    const summaries = await getSummariesForWindows(contexts);
-    state.summaries = summaries;
-    log("[cmux] summaries:", Array.from(state.summaries.entries()));
-    await renameWindowsWithSummaries(summaries);
-  } catch {} finally {
-    state.summariesLoading = false;
-    render();
-  }
-}
-function openPopover(initialSelection) {
-  state.windowPopoverOpen = true;
-  state.windowPopoverSelection = initialSelection;
-  fetchSummaries();
-}
 function handleKey(key) {
-  if (state.windowPopoverOpen) {
-    return handlePopoverKey(key);
-  }
   return handleMainKey(key);
 }
 function handleMainKey(key) {
@@ -4791,17 +4592,16 @@ function handleMainKey(key) {
       return true;
     }
   }
+  const maxCarouselIndex = state.windows.length + 1;
   switch (key) {
     case "\t":
       state.focus = state.focus === "window" ? "layout" : "window";
-      state.windowBarSelection = "name";
       state.confirmingDelete = false;
       break;
     case "j":
       if (state.focus === "window") {
-        if (state.windowBarSelection === "name" && state.windows.length > 1) {
-          openPopover(1);
-        }
+        state.focus = "layout";
+        state.confirmingDelete = false;
       } else {
         state.previousLayoutIndex = state.layoutIndex;
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length;
@@ -4810,11 +4610,7 @@ function handleMainKey(key) {
       }
       break;
     case "k":
-      if (state.focus === "window") {
-        if (state.windowBarSelection === "name" && state.windows.length > 1) {
-          openPopover(state.windows.length - 1);
-        }
-      } else {
+      if (state.focus === "layout") {
         state.previousLayoutIndex = state.layoutIndex;
         state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length;
         startAnimation("left");
@@ -4823,11 +4619,10 @@ function handleMainKey(key) {
       break;
     case "h":
       if (state.focus === "window") {
-        if (state.windowBarSelection === "plus")
-          state.windowBarSelection = "name";
-        else if (state.windowBarSelection === "name")
-          state.windowBarSelection = "minus";
-        state.confirmingDelete = false;
+        if (state.carouselIndex > 0) {
+          state.carouselIndex--;
+          state.confirmingDelete = false;
+        }
       } else {
         state.previousLayoutIndex = state.layoutIndex;
         state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length;
@@ -4837,11 +4632,10 @@ function handleMainKey(key) {
       break;
     case "l":
       if (state.focus === "window") {
-        if (state.windowBarSelection === "minus")
-          state.windowBarSelection = "name";
-        else if (state.windowBarSelection === "name")
-          state.windowBarSelection = "plus";
-        state.confirmingDelete = false;
+        if (state.carouselIndex < maxCarouselIndex) {
+          state.carouselIndex++;
+          state.confirmingDelete = false;
+        }
       } else {
         state.previousLayoutIndex = state.layoutIndex;
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length;
@@ -4852,7 +4646,7 @@ function handleMainKey(key) {
     case " ":
     case "\r":
       if (state.focus === "window") {
-        if (state.windowBarSelection === "minus") {
+        if (state.carouselIndex === 0) {
           if (state.confirmingDelete) {
             removeCurrentWindow();
             return false;
@@ -4861,9 +4655,18 @@ function handleMainKey(key) {
               state.confirmingDelete = true;
             }
           }
-        } else if (state.windowBarSelection === "plus") {
+        } else if (state.carouselIndex === maxCarouselIndex) {
           createNewWindow();
           return false;
+        } else {
+          const windowIndex = state.carouselIndex - 1;
+          const selectedWindow = state.windows[windowIndex];
+          if (selectedWindow && windowIndex !== state.currentWindowIndex) {
+            try {
+              execSync2(`tmux select-window -t :${selectedWindow.index}`);
+            } catch {}
+            return false;
+          }
         }
       } else {
         applyAndExit();
@@ -4873,40 +4676,12 @@ function handleMainKey(key) {
     case "\x1B":
       if (state.confirmingDelete) {
         state.confirmingDelete = false;
-      } else if (state.focus === "window" && state.windowBarSelection !== "name") {
-        state.windowBarSelection = "name";
       } else {
         return false;
       }
       break;
     case "q":
       return false;
-  }
-  return true;
-}
-function handlePopoverKey(key) {
-  const n = state.windows.length;
-  switch (key) {
-    case "j":
-      state.windowPopoverSelection = (state.windowPopoverSelection + 1) % n;
-      break;
-    case "k":
-      state.windowPopoverSelection = (state.windowPopoverSelection - 1 + n) % n;
-      break;
-    case "\r":
-      if (state.windowPopoverSelection > 0) {
-        const rotated = getRotatedWindows();
-        const selected = rotated[state.windowPopoverSelection];
-        try {
-          execSync2(`tmux select-window -t :${selected.index}`);
-        } catch (e) {}
-        return false;
-      }
-      state.windowPopoverOpen = false;
-      break;
-    case "\x1B":
-      state.windowPopoverOpen = false;
-      break;
   }
   return true;
 }
@@ -4969,6 +4744,7 @@ function isInsideTmux() {
   return !!process.env.TMUX;
 }
 function startTmuxSession() {
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.TEST_ANTHROPIC_API_KEY || process.env.DEMO_ANTHROPIC_API_KEY;
   const tmuxArgs = [
     "-f",
     CONFIG_PATH,
@@ -4983,12 +4759,14 @@ function startTmuxSession() {
     "-h",
     "80%",
     "-E",
-    `bun ${SELF_PATH}`,
-    ";",
-    "run-shell",
-    "-b",
-    `bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`
+    `bun ${SELF_PATH}`
   ];
+  if (apiKey) {
+    tmuxArgs.push(";", "set-environment", "-gh", "ANTHROPIC_API_KEY", apiKey);
+  }
+  if (apiKey) {
+    tmuxArgs.push(";", "run-shell", "-b", `ANTHROPIC_API_KEY='${apiKey}' bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`);
+  }
   const tmux = spawn("tmux", tmuxArgs, {
     stdio: "inherit"
   });
