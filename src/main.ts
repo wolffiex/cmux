@@ -13,17 +13,14 @@ const BACKGROUND_RENAMER_PATH = join(import.meta.dir, "background-renamer.ts")
 
 // ── State ──────────────────────────────────────────────────────────────────
 type Focus = "window" | "layout"
-type WindowBarSelection = "minus" | "name" | "plus"
 type AnimationDirection = "left" | "right" | null
 
 interface State {
   windows: TmuxWindow[]
   currentWindowIndex: number
   layoutIndex: number
-  windowPopoverOpen: boolean
-  windowPopoverSelection: number  // offset from current window
+  carouselIndex: number  // 0 = minus, 1..n = windows, n+1 = plus
   focus: Focus
-  windowBarSelection: WindowBarSelection
   // Animation state
   animating: boolean
   animationDirection: AnimationDirection
@@ -67,10 +64,8 @@ function initState(): State {
     windows,
     currentWindowIndex,
     layoutIndex,
-    windowPopoverOpen: false,
-    windowPopoverSelection: 0,
+    carouselIndex: currentWindowIndex + 1,  // Start on current window (index 0 = minus)
     focus: "window" as Focus,
-    windowBarSelection: "name" as WindowBarSelection,
     // Animation state
     animating: false,
     animationDirection: null,
@@ -303,31 +298,44 @@ function render(): void {
 
   let out = ansi.clear
 
-  // Window bar (top row): [−] name ▼ [+]
-  const windowName = state.windows[state.currentWindowIndex]?.name || "?"
+  // Window bar (top row): horizontal carousel: − | win1 | win2 | ... | +
   const windowFocused = state.focus === "window"
-  const sel = state.windowBarSelection
+  const maxIndex = state.windows.length + 1  // 0=minus, 1..n=windows, n+1=plus
   out += ansi.moveTo(1, 0)
+
+  // Helper to truncate window names to 12 chars
+  const truncateName = (name: string): string => {
+    if (name.length <= 12) return name
+    return name.slice(0, 11) + "…"
+  }
 
   // [−] button (shows "Delete? ⏎" when confirming)
   if (state.confirmingDelete) {
-    out += ansi.inverse + "[Delete? ⏎]" + ansi.reset + " "
+    out += ansi.inverse + " Delete? ⏎ " + ansi.reset
   } else {
-    if (windowFocused && sel === "minus") out += ansi.inverse
-    out += "[−]"
-    out += ansi.reset + " "
+    if (windowFocused && state.carouselIndex === 0) out += ansi.inverse
+    out += " − "
+    out += ansi.reset
   }
 
-  // Window name
-  if (windowFocused && sel === "name") out += ansi.inverse
-  out += " " + windowName + " ▼ "
-  out += ansi.reset + " "
+  // Window items
+  for (let i = 0; i < state.windows.length; i++) {
+    const win = state.windows[i]
+    const isSelected = windowFocused && state.carouselIndex === i + 1
+    const isCurrent = i === state.currentWindowIndex
 
-  // [+] button (shows "New window" when selected)
-  if (windowFocused && sel === "plus") {
-    out += ansi.inverse + "[New window]" + ansi.reset
+    if (isSelected) out += ansi.inverse
+    out += " " + truncateName(win.name)
+    if (isCurrent) out += " ●"
+    out += " "
+    out += ansi.reset
+  }
+
+  // [+] button
+  if (windowFocused && state.carouselIndex === maxIndex) {
+    out += ansi.inverse + " + " + ansi.reset
   } else {
-    out += ansi.dim + "[+]" + ansi.reset
+    out += ansi.dim + " + " + ansi.reset
   }
 
   // Separator
@@ -357,55 +365,9 @@ function render(): void {
   const hints = "tab focus  hjkl nav  ⏎ apply"
   out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset
 
-  // Window popover (if open)
-  if (state.windowPopoverOpen) {
-    out += renderWindowPopover(1, 1, height - 4)
-  }
-
   process.stdout.write(out)
 }
 
-function getRotatedWindows(): TmuxWindow[] {
-  // Rotate window list so current window is first
-  const n = state.windows.length
-  if (n === 0) return []
-  const idx = state.currentWindowIndex
-  return [
-    ...state.windows.slice(idx),
-    ...state.windows.slice(0, idx)
-  ]
-}
-
-function renderWindowPopover(x: number, y: number, maxH: number): string {
-  let out = ""
-  const rotated = getRotatedWindows()
-  const windowCount = Math.min(rotated.length, maxH - 2) // 1 line per window + borders
-
-  // Calculate width based on window names
-  const maxNameLen = Math.max(...rotated.map(w => w.name.length))
-  const w = maxNameLen + 6
-
-  // Draw popover box
-  out += ansi.moveTo(x, y) + box.tl + box.h.repeat(w - 2) + box.tr
-
-  let rowY = y + 1
-  for (let i = 0; i < windowCount; i++) {
-    const win = rotated[i]
-    const isCurrent = i === 0
-    const isSelected = i === state.windowPopoverSelection
-
-    // Window name line
-    out += ansi.moveTo(x, rowY) + box.v
-    if (isSelected) out += ansi.inverse
-    out += (isCurrent ? " ● " : "   ") + win.name.padEnd(w - 5)
-    out += ansi.reset + box.v
-    rowY++
-  }
-
-  out += ansi.moveTo(x, rowY) + box.bl + box.h.repeat(w - 2) + box.br
-
-  return out
-}
 
 // ── Summary fetching ────────────────────────────────────────────────────────
 
@@ -469,19 +431,8 @@ async function fetchSummaries(): Promise<void> {
   }
 }
 
-function openPopover(initialSelection: number): void {
-  state.windowPopoverOpen = true
-  state.windowPopoverSelection = initialSelection
-
-  // Trigger async summary fetch (don't await - update when ready)
-  fetchSummaries()
-}
-
 // ── Input handling ─────────────────────────────────────────────────────────
 function handleKey(key: string): boolean {
-  if (state.windowPopoverOpen) {
-    return handlePopoverKey(key)
-  }
   return handleMainKey(key)
 }
 
@@ -493,17 +444,17 @@ function handleMainKey(key: string): boolean {
     }
   }
 
+  const maxCarouselIndex = state.windows.length + 1  // 0=minus, 1..n=windows, n+1=plus
+
   switch (key) {
     case "\t": // Tab - switch focus
       state.focus = state.focus === "window" ? "layout" : "window"
-      state.windowBarSelection = "name" // reset to name when switching
       state.confirmingDelete = false // Cancel confirmation when switching focus
       break
-    case "j": // Down
+    case "j": // Down - move focus to layout
       if (state.focus === "window") {
-        if (state.windowBarSelection === "name" && state.windows.length > 1) {
-          openPopover(1) // start on next window
-        }
+        state.focus = "layout"
+        state.confirmingDelete = false
       } else {
         state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
@@ -511,12 +462,8 @@ function handleMainKey(key: string): boolean {
         return true // Don't call render(), animation handles it
       }
       break
-    case "k": // Up
-      if (state.focus === "window") {
-        if (state.windowBarSelection === "name" && state.windows.length > 1) {
-          openPopover(state.windows.length - 1) // start on prev window
-        }
-      } else {
+    case "k": // Up - move focus to window bar
+      if (state.focus === "layout") {
         state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
         startAnimation("left")
@@ -525,10 +472,11 @@ function handleMainKey(key: string): boolean {
       break
     case "h":
       if (state.focus === "window") {
-        // Move selection left: plus -> name -> minus
-        if (state.windowBarSelection === "plus") state.windowBarSelection = "name"
-        else if (state.windowBarSelection === "name") state.windowBarSelection = "minus"
-        state.confirmingDelete = false // Cancel confirmation when navigating
+        // Move carousel left (clamp at 0)
+        if (state.carouselIndex > 0) {
+          state.carouselIndex--
+          state.confirmingDelete = false // Cancel confirmation when navigating
+        }
       } else {
         state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
@@ -538,10 +486,11 @@ function handleMainKey(key: string): boolean {
       break
     case "l":
       if (state.focus === "window") {
-        // Move selection right: minus -> name -> plus
-        if (state.windowBarSelection === "minus") state.windowBarSelection = "name"
-        else if (state.windowBarSelection === "name") state.windowBarSelection = "plus"
-        state.confirmingDelete = false // Cancel confirmation when navigating
+        // Move carousel right (clamp at max)
+        if (state.carouselIndex < maxCarouselIndex) {
+          state.carouselIndex++
+          state.confirmingDelete = false // Cancel confirmation when navigating
+        }
       } else {
         state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
@@ -552,7 +501,8 @@ function handleMainKey(key: string): boolean {
     case " ":
     case "\r": // Enter
       if (state.focus === "window") {
-        if (state.windowBarSelection === "minus") {
+        if (state.carouselIndex === 0) {
+          // Minus button - delete window
           if (state.confirmingDelete) {
             // Second Enter - actually delete and exit
             removeCurrentWindow()
@@ -563,11 +513,23 @@ function handleMainKey(key: string): boolean {
               state.confirmingDelete = true
             }
           }
-        } else if (state.windowBarSelection === "plus") {
+        } else if (state.carouselIndex === maxCarouselIndex) {
+          // Plus button - create new window
           createNewWindow()
           return false // Exit UI after creating window with layout
+        } else {
+          // Window selected - switch to that window and exit
+          const windowIndex = state.carouselIndex - 1
+          const selectedWindow = state.windows[windowIndex]
+          if (selectedWindow && windowIndex !== state.currentWindowIndex) {
+            try {
+              execSync(`tmux select-window -t :${selectedWindow.index}`)
+            } catch {
+              // Ignore errors
+            }
+            return false // Exit UI after switching window
+          }
         }
-        // on "name", enter does nothing (use j/k to open popover)
       } else {
         applyAndExit()
         return false
@@ -576,44 +538,12 @@ function handleMainKey(key: string): boolean {
     case "\x1b": // Escape
       if (state.confirmingDelete) {
         state.confirmingDelete = false // cancel delete confirmation
-      } else if (state.focus === "window" && state.windowBarSelection !== "name") {
-        state.windowBarSelection = "name" // cancel back to name
       } else {
         return false
       }
       break
     case "q":
       return false
-  }
-  return true
-}
-
-function handlePopoverKey(key: string): boolean {
-  const n = state.windows.length
-  switch (key) {
-    case "j": // Down
-      state.windowPopoverSelection = (state.windowPopoverSelection + 1) % n
-      break
-    case "k": // Up
-      state.windowPopoverSelection = (state.windowPopoverSelection - 1 + n) % n
-      break
-    case "\r": // Enter - select window
-      if (state.windowPopoverSelection > 0) {
-        // Switch to selected window and exit
-        const rotated = getRotatedWindows()
-        const selected = rotated[state.windowPopoverSelection]
-        try {
-          execSync(`tmux select-window -t :${selected.index}`)
-        } catch (e) {
-          // Ignore errors (e.g., not in tmux)
-        }
-        return false // Exit UI after switching window
-      }
-      state.windowPopoverOpen = false
-      break
-    case "\x1b": // Escape
-      state.windowPopoverOpen = false
-      break
   }
   return true
 }
