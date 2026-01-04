@@ -550,15 +550,19 @@ function handleMainKey(key: string): boolean {
 
 function createNewWindow(): void {
   try {
-    // Create the new window and switch to it
-    execSync("tmux new-window")
+    // Get current pane's working directory before creating new window
+    const currentPath = execSync("tmux display-message -p '#{pane_current_path}'").toString().trim()
+    const pathArg = currentPath ? `-c "${currentPath}"` : ""
+
+    // Create the new window and switch to it (preserving working directory)
+    execSync(`tmux new-window ${pathArg}`)
 
     const layout = ALL_LAYOUTS[state.layoutIndex]
     const paneCount = layout.panes.length
 
-    // New window starts with 1 pane, add more if needed
+    // New window starts with 1 pane, add more if needed (preserving working directory)
     for (let i = 1; i < paneCount; i++) {
-      execSync("tmux split-window")
+      execSync(`tmux split-window ${pathArg}`)
     }
 
     // Get updated window info for layout application
@@ -596,6 +600,10 @@ function applyAndExit(): void {
   const targetWindow = state.windows[state.currentWindowIndex]
 
   try {
+    // Get current pane's working directory for new splits
+    const currentPath = execSync("tmux display-message -p '#{pane_current_path}'").toString().trim()
+    const pathArg = currentPath ? `-c "${currentPath}"` : ""
+
     const windowInfo = getWindowInfo()
     const paneCount = layout.panes.length
     const currentPaneCount = windowInfo.panes.length
@@ -607,9 +615,9 @@ function applyAndExit(): void {
 
     // Adjust pane count
     if (currentPaneCount < paneCount) {
-      // Need more panes - split
+      // Need more panes - split (preserving working directory)
       for (let i = currentPaneCount; i < paneCount; i++) {
-        execSync(`tmux split-window`)
+        execSync(`tmux split-window ${pathArg}`)
       }
     } else if (currentPaneCount > paneCount) {
       // Too many panes - kill extras
