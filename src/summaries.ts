@@ -87,7 +87,7 @@ export async function generateSummary(context: WindowContext): Promise<string> {
 
     // Extract text from the response
     const textBlock = message.content.find((block) => block.type === "text");
-    const summary = textBlock ? textBlock.text.trim() : context.windowName;
+    const summary = textBlock && textBlock.type === "text" ? textBlock.text.trim() : context.windowName;
     log('[cmux] API response:', summary);
     return summary;
   } catch (e) {
