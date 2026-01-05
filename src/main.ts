@@ -354,8 +354,8 @@ function render(): void {
 
     let topBorder: string
     if (windowNumber !== undefined && windowNumber >= 0 && windowNumber <= 9) {
-      // Add superscript after the horizontal border; extra char compensates for narrow superscript
-      topBorder = tl + h.repeat(innerWidth) + superscript[windowNumber] + tr
+      // Superscript replaces one horizontal char (no width compensation needed)
+      topBorder = tl + h.repeat(innerWidth - 1) + superscript[windowNumber] + tr
     } else {
       topBorder = tl + h.repeat(innerWidth) + tr
     }
