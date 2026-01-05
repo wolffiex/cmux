@@ -138,6 +138,26 @@ describe("handleDirPickerKey", () => {
     }
   })
 
+  test("Down arrow moves selection down", () => {
+    const state = makeState({ selectedIndex: 0 })
+    const result = handleDirPickerKey(state, "\x1b[B")
+
+    expect(result.action).toBe("continue")
+    if (result.action === "continue") {
+      expect(result.state.selectedIndex).toBe(1)
+    }
+  })
+
+  test("Up arrow moves selection up", () => {
+    const state = makeState({ selectedIndex: 1 })
+    const result = handleDirPickerKey(state, "\x1b[A")
+
+    expect(result.action).toBe("continue")
+    if (result.action === "continue") {
+      expect(result.state.selectedIndex).toBe(0)
+    }
+  })
+
   test("j is typed as literal character", () => {
     const state = makeState()
     const result = handleDirPickerKey(state, "j")

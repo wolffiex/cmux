@@ -589,8 +589,16 @@ function handleDirPickerMode(key: string): boolean {
 }
 
 function handleMainKey(key: string): boolean {
+  // Convert arrow keys to hjkl in main mode
+  // This is done here (not in runUI) so dirPicker mode gets raw escape sequences
+  let normalizedKey = key
+  if (key === "\x1b[A") normalizedKey = "k"      // Up arrow
+  else if (key === "\x1b[B") normalizedKey = "j" // Down arrow
+  else if (key === "\x1b[C") normalizedKey = "l" // Right arrow
+  else if (key === "\x1b[D") normalizedKey = "h" // Left arrow
+
   // During animation, ignore layout navigation keys but allow other actions
-  if (state.animating && (key === "h" || key === "j" || key === "k" || key === "l")) {
+  if (state.animating && (normalizedKey === "h" || normalizedKey === "j" || normalizedKey === "k" || normalizedKey === "l")) {
     if (state.focus === "layout") {
       return true // Ignore layout nav during animation, but don't quit
     }
@@ -598,7 +606,7 @@ function handleMainKey(key: string): boolean {
 
   const maxCarouselIndex = state.windows.length + 1  // 0=minus, 1..n=windows, n+1=plus
 
-  switch (key) {
+  switch (normalizedKey) {
     case "\t": // Tab - switch focus
       state.focus = state.focus === "window" ? "layout" : "window"
       state.confirmingDelete = false // Cancel confirmation when switching focus
@@ -725,7 +733,7 @@ function handleMainKey(key: string): boolean {
     case "8":
     case "9":
       // Number keys select windows (1-indexed to match superscript display)
-      const windowIndex = parseInt(key) - 1
+      const windowIndex = parseInt(normalizedKey) - 1
       if (windowIndex < state.windows.length) {
         const selectedWindow = state.windows[windowIndex]
         try {
@@ -946,7 +954,7 @@ function runUI(): void {
   process.stdin.on("data", (data) => {
     const input = data.toString()
 
-    // Handle arrow key escape sequences
+    // Parse input into key sequences
     // Arrow keys send: \x1b[A (up), \x1b[B (down), \x1b[C (right), \x1b[D (left)
     let i = 0
     while (i < input.length) {
@@ -955,17 +963,11 @@ function runUI(): void {
       // Check for escape sequences (arrow keys)
       if (input[i] === "\x1b" && input[i + 1] === "[") {
         const arrowChar = input[i + 2]
-        if (arrowChar === "A") {
-          key = "k" // Up arrow = k
-          i += 3
-        } else if (arrowChar === "B") {
-          key = "j" // Down arrow = j
-          i += 3
-        } else if (arrowChar === "C") {
-          key = "l" // Right arrow = l
-          i += 3
-        } else if (arrowChar === "D") {
-          key = "h" // Left arrow = h
+        if (arrowChar === "A" || arrowChar === "B" || arrowChar === "C" || arrowChar === "D") {
+          // Pass arrow key escape sequence through as-is
+          // handleMainKey() will convert to hjkl for main mode
+          // handleDirPickerKey() expects raw sequences for dirPicker mode
+          key = input.slice(i, i + 3)
           i += 3
         } else {
           // Unknown escape sequence, treat as regular escape
