@@ -98,8 +98,8 @@ export function handleDirPickerKey(
     return { action: "cancel" }
   }
 
-  // Up arrow (or k) - move selection up
-  if (key === "k" || key === "\x1b[A") {
+  // Up arrow or Ctrl+P - move selection up
+  if (key === "\x10" || key === "\x1b[A") {
     const newIndex = state.selectedIndex > 0 ? state.selectedIndex - 1 : state.filtered.length - 1
     return {
       action: "continue",
@@ -107,8 +107,8 @@ export function handleDirPickerKey(
     }
   }
 
-  // Down arrow (or j) - move selection down
-  if (key === "j" || key === "\x1b[B") {
+  // Down arrow or Ctrl+N - move selection down
+  if (key === "\x0e" || key === "\x1b[B") {
     const newIndex = state.selectedIndex < state.filtered.length - 1 ? state.selectedIndex + 1 : 0
     return {
       action: "continue",
