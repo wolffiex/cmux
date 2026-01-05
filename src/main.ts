@@ -323,10 +323,16 @@ function render(): void {
     const topBorder = box.tl + box.h.repeat(innerWidth) + box.tr
     const bottomBorder = box.bl + box.h.repeat(innerWidth) + box.br
 
-    // Pad/center content within innerWidth
-    const paddedContent = content.length < innerWidth
-      ? content + " ".repeat(innerWidth - content.length)
-      : content.slice(0, innerWidth)
+    // Center content within innerWidth
+    let paddedContent: string
+    if (content.length < innerWidth) {
+      const totalPadding = innerWidth - content.length
+      const leftPad = Math.floor(totalPadding / 2)
+      const rightPad = totalPadding - leftPad
+      paddedContent = " ".repeat(leftPad) + content + " ".repeat(rightPad)
+    } else {
+      paddedContent = content.slice(0, innerWidth)
+    }
     const middleRow = box.v + paddedContent + box.v
 
     if (isSelected) {
@@ -366,12 +372,8 @@ function render(): void {
     const isSelected = windowFocused && state.carouselIndex === i + 1
     const isCurrent = i === state.currentWindowIndex
 
-    let content = " " + truncateName(win.name)
+    let content = truncateName(win.name)
     if (isCurrent) content += " ●"
-    // Pad to WINDOW_BOX_WIDTH
-    if (content.length < WINDOW_BOX_WIDTH) {
-      content = content + " ".repeat(WINDOW_BOX_WIDTH - content.length)
-    }
 
     const [t, m, b] = buildBox(content, WINDOW_BOX_WIDTH, isSelected)
     row0Parts.push(t)
