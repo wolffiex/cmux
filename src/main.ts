@@ -607,19 +607,12 @@ function handleMainKey(key: string): boolean {
       if (state.focus === "window") {
         state.focus = "layout"
         state.confirmingDelete = false
-      } else {
-        state.previousLayoutIndex = state.layoutIndex
-        state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
-        startAnimation("right")
-        return true // Don't call render(), animation handles it
       }
+      // j only moves focus down, does not cycle layouts
       break
     case "k": // Up - move focus to window bar
       if (state.focus === "layout") {
-        state.previousLayoutIndex = state.layoutIndex
-        state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
-        startAnimation("left")
-        return true // Don't call render(), animation handles it
+        state.focus = "window"  // Move focus up, don't cycle layouts
       }
       break
     case "h":
