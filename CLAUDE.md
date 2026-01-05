@@ -49,7 +49,7 @@ Single binary (`src/main.ts`) using raw ANSI for fast startup (~23ms).
 - `Escape` - Cancel back to name
 
 **Layout area focused:**
-- `h/l/j/k` - Cycle through layouts
+- `h/l` - Cycle through layouts
 
 **General:**
 - `Tab` - Switch focus between window/layout
