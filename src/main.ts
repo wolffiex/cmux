@@ -154,6 +154,9 @@ const box = {
   dh: "═", dv: "║",
 }
 
+// Superscript digits for window numbering
+const superscript = ['⁰','¹','²','³','⁴','⁵','⁶','⁷','⁸','⁹']
+
 // ── Layout rendering ───────────────────────────────────────────────────────
 function drawLayoutPreview(
   template: LayoutTemplate,
@@ -324,7 +327,8 @@ function render(): void {
 
   // Helper to build a box element (returns 3 rows)
   // Selected items use double-line borders (bright/white), non-selected use single-line (dim/gray)
-  const buildBox = (content: string, innerWidth: number, isSelected: boolean, isDim: boolean = false): [string, string, string] => {
+  // windowNumber is optional 1-indexed number to show as superscript in top-right corner
+  const buildBox = (content: string, innerWidth: number, isSelected: boolean, isDim: boolean = false, windowNumber?: number): [string, string, string] => {
     // Choose border characters based on selection state
     const tl = isSelected ? box.dtl : box.tl
     const tr = isSelected ? box.dtr : box.tr
@@ -333,7 +337,13 @@ function render(): void {
     const h = isSelected ? box.dh : box.h
     const v = isSelected ? box.dv : box.v
 
-    const topBorder = tl + h.repeat(innerWidth) + tr
+    let topBorder: string
+    if (windowNumber !== undefined && windowNumber >= 0 && windowNumber <= 9) {
+      // Add superscript number at end of top border, with one extra horizontal char to compensate for narrow superscript
+      topBorder = tl + h.repeat(innerWidth + 1) + superscript[windowNumber] + tr
+    } else {
+      topBorder = tl + h.repeat(innerWidth) + tr
+    }
     const bottomBorder = bl + h.repeat(innerWidth) + br
 
     // Center content within innerWidth
@@ -391,7 +401,9 @@ function render(): void {
     let content = truncateName(win.name)
     if (isCurrent) content += " ●"
 
-    const [t, m, b] = buildBox(content, WINDOW_BOX_WIDTH, isSelected)
+    // Pass window index for superscript number (0-9 only)
+    const windowNum = win.index <= 9 ? win.index : undefined
+    const [t, m, b] = buildBox(content, WINDOW_BOX_WIDTH, isSelected, false, windowNum)
     row0Parts.push(t)
     row1Parts.push(m)
     row2Parts.push(b)
