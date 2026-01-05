@@ -695,6 +695,26 @@ function handleMainKey(key: string): boolean {
       break
     case "q":
       return false
+    case "-":
+      // Minus key - trigger delete action (same as pressing Enter on minus button)
+      if (state.confirmingDelete) {
+        // Second press - actually delete and exit
+        removeCurrentWindow()
+        return false
+      } else {
+        // First press - show confirmation (if more than one window)
+        if (state.windows.length > 1) {
+          state.carouselIndex = 0  // Move to minus button to show confirmation UI
+          state.focus = "window"
+          state.confirmingDelete = true
+        }
+      }
+      break
+    case "+":
+    case "=":  // Support both + and = (unshifted +) for convenience
+      // Plus key - open directory picker (same as pressing Enter on plus button)
+      openDirPicker()
+      break
     case "1":
     case "2":
     case "3":
