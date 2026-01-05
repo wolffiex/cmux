@@ -15,8 +15,22 @@ function getClient(): Anthropic | null {
   return _client;
 }
 
-const SYSTEM_PROMPT =
-  "Generate a very short tmux window name (1-2 words, max 15 characters). Use complete words only - never end with a hyphen or partial word. Prefer short common words. The current window name is provided - only suggest a different name if the window's purpose has meaningfully changed. If the current name is still accurate, return it exactly. Return only the name, nothing else.";
+const SYSTEM_PROMPT = `Generate a descriptive tmux window name (1-2 words, max 15 chars).
+
+RULES:
+- Describe the ACTUAL WORK being done, not the tool being used
+- NEVER use generic names like "cli", "shell", "terminal", "zsh", "bash", or numbered variants like "cli2"
+- Focus on: project name, feature being built, task type (debug, test, refactor), or git branch purpose
+- Use the git branch name, working directory, and recent output as context clues
+- Prefer action words when possible: "fix-auth", "add-tests", "api-refactor"
+
+EXAMPLES of good names:
+- "cmux-ui" (working on cmux project UI)
+- "auth-fix" (fixing authentication)
+- "api-tests" (running API tests)
+- "docker-setup" (setting up Docker)
+
+Return ONLY the name, nothing else.`;
 
 // Cache layer
 interface CachedSummary {
