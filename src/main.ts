@@ -40,8 +40,6 @@ interface State {
   // Summary state
   summaries: Map<number, string>  // windowIndex -> summary
   summariesLoading: boolean
-  // Delete confirmation state
-  confirmingDelete: boolean
   // Directory picker state
   dirPicker: DirPickerState | null
 }
@@ -88,8 +86,6 @@ function initState(): State {
     // Summary state
     summaries: new Map(),
     summariesLoading: false,
-    // Delete confirmation state
-    confirmingDelete: false,
     // Directory picker state
     dirPicker: null,
   }
@@ -392,20 +388,12 @@ function render(): void {
     return [topBorder, middleRow, bottomBorder]
   }
 
-  // [−] button (shows "Delete? ⏎" when confirming)
-  if (state.confirmingDelete) {
-    const confirmWidth = 10  // "Delete? ⏎"
-    const [t, m, b] = buildBox("Delete? ⏎", confirmWidth, true)
-    row0Parts.push(t)
-    row1Parts.push(m)
-    row2Parts.push(b)
-  } else {
-    const isMinusSelected = windowFocused && state.carouselIndex === 0
-    const [t, m, b] = buildBox(" − ", BUTTON_BOX_WIDTH, isMinusSelected)
-    row0Parts.push(t)
-    row1Parts.push(m)
-    row2Parts.push(b)
-  }
+  // [−] button
+  const isMinusSelected = windowFocused && state.carouselIndex === 0
+  const [minusT, minusM, minusB] = buildBox(" − ", BUTTON_BOX_WIDTH, isMinusSelected)
+  row0Parts.push(minusT)
+  row1Parts.push(minusM)
+  row2Parts.push(minusB)
 
   // Window items
   for (let i = 0; i < state.windows.length; i++) {
@@ -601,12 +589,10 @@ function handleMainKey(key: string): boolean {
   switch (key) {
     case "\t": // Tab - switch focus
       state.focus = state.focus === "window" ? "layout" : "window"
-      state.confirmingDelete = false // Cancel confirmation when switching focus
       break
     case "j": // Down - move focus to layout
       if (state.focus === "window") {
         state.focus = "layout"
-        state.confirmingDelete = false
       } else {
         state.previousLayoutIndex = state.layoutIndex
         state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length
@@ -627,7 +613,6 @@ function handleMainKey(key: string): boolean {
         // Move carousel left (clamp at 0)
         if (state.carouselIndex > 0) {
           state.carouselIndex--
-          state.confirmingDelete = false // Cancel confirmation when navigating
         }
       } else {
         state.previousLayoutIndex = state.layoutIndex
@@ -641,7 +626,6 @@ function handleMainKey(key: string): boolean {
         // Move carousel right (clamp at max)
         if (state.carouselIndex < maxCarouselIndex) {
           state.carouselIndex++
-          state.confirmingDelete = false // Cancel confirmation when navigating
         }
       } else {
         state.previousLayoutIndex = state.layoutIndex
@@ -654,16 +638,10 @@ function handleMainKey(key: string): boolean {
     case "\r": // Enter
       if (state.focus === "window") {
         if (state.carouselIndex === 0) {
-          // Minus button - delete window
-          if (state.confirmingDelete) {
-            // Second Enter - actually delete and exit
-            removeCurrentWindow()
-            return false // Exit UI after deletion
-          } else {
-            // First Enter - show confirmation
-            if (state.windows.length > 1) {
-              state.confirmingDelete = true
-            }
+          // Minus button - spawn tmux delete confirmation menu and exit
+          if (state.windows.length > 1) {
+            showDeleteMenu()
+            return false // Exit UI
           }
         } else if (state.carouselIndex === maxCarouselIndex) {
           // Plus button - open directory picker
@@ -687,27 +665,14 @@ function handleMainKey(key: string): boolean {
       }
       break
     case "\x1b": // Escape
-      if (state.confirmingDelete) {
-        state.confirmingDelete = false // cancel delete confirmation
-      } else {
-        return false
-      }
-      break
+      return false
     case "q":
       return false
     case "-":
       // Minus key - trigger delete action (same as pressing Enter on minus button)
-      if (state.confirmingDelete) {
-        // Second press - actually delete and exit
-        removeCurrentWindow()
-        return false
-      } else {
-        // First press - show confirmation (if more than one window)
-        if (state.windows.length > 1) {
-          state.carouselIndex = 0  // Move to minus button to show confirmation UI
-          state.focus = "window"
-          state.confirmingDelete = true
-        }
+      if (state.windows.length > 1) {
+        showDeleteMenu()
+        return false // Exit UI
       }
       break
     case "+":
@@ -828,11 +793,20 @@ function createNewWindow(): void {
   }
 }
 
-function removeCurrentWindow(): void {
+function showDeleteMenu(): void {
   if (state.windows.length <= 1) return // Don't remove last window
+  const windowToDelete = state.windows[state.currentWindowIndex]
+  const windowName = windowToDelete.name
+  const windowTarget = `:${windowToDelete.index}`
+
+  // Escape single quotes in window name for shell safety
+  const escapedName = windowName.replace(/'/g, "'\\''")
+  const escapedTarget = windowTarget.replace(/'/g, "'\\''")
+
+  // Use run-shell -b to background the menu so it survives popup exit
+  // The sleep 0.3 allows the popup to close before menu appears
   try {
-    const windowToDelete = state.windows[state.currentWindowIndex]
-    execSync(`tmux kill-window -t :${windowToDelete.index}`)
+    execSync(`tmux run-shell -b "sleep 0.3; tmux display-menu -T 'Delete \\'${escapedName}\\'?' 'Yes' y 'kill-window -t ${escapedTarget}' 'No' n ''"`)
   } catch (e) {
     // Ignore errors
   }
