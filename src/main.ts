@@ -791,8 +791,39 @@ function runUI(): void {
   startPolling()
 
   process.stdin.on("data", (data) => {
-    const keys = data.toString()
-    for (const key of keys) {
+    const input = data.toString()
+
+    // Handle arrow key escape sequences
+    // Arrow keys send: \x1b[A (up), \x1b[B (down), \x1b[C (right), \x1b[D (left)
+    let i = 0
+    while (i < input.length) {
+      let key: string
+
+      // Check for escape sequences (arrow keys)
+      if (input[i] === "\x1b" && input[i + 1] === "[") {
+        const arrowChar = input[i + 2]
+        if (arrowChar === "A") {
+          key = "k" // Up arrow = k
+          i += 3
+        } else if (arrowChar === "B") {
+          key = "j" // Down arrow = j
+          i += 3
+        } else if (arrowChar === "C") {
+          key = "l" // Right arrow = l
+          i += 3
+        } else if (arrowChar === "D") {
+          key = "h" // Left arrow = h
+          i += 3
+        } else {
+          // Unknown escape sequence, treat as regular escape
+          key = input[i]
+          i++
+        }
+      } else {
+        key = input[i]
+        i++
+      }
+
       if (!handleKey(key)) {
         cleanup()
         return
