@@ -401,8 +401,8 @@ function render(): void {
     let content = truncateName(win.name)
     if (isCurrent) content += " ●"
 
-    // Pass window index for superscript number (0-9 only)
-    const windowNum = win.index <= 9 ? win.index : undefined
+    // Pass window number for superscript (1-indexed, 1-9 only)
+    const windowNum = i < 9 ? i + 1 : undefined
     const [t, m, b] = buildBox(content, WINDOW_BOX_WIDTH, isSelected, false, windowNum)
     row0Parts.push(t)
     row1Parts.push(m)
@@ -646,6 +646,27 @@ function handleMainKey(key: string): boolean {
       break
     case "q":
       return false
+    case "1":
+    case "2":
+    case "3":
+    case "4":
+    case "5":
+    case "6":
+    case "7":
+    case "8":
+    case "9":
+      // Number keys select windows (1-indexed to match superscript display)
+      const windowIndex = parseInt(key) - 1
+      if (windowIndex < state.windows.length) {
+        const selectedWindow = state.windows[windowIndex]
+        try {
+          execSync(`tmux select-window -t :${selectedWindow.index}`)
+        } catch {
+          // Ignore errors
+        }
+        return false // Exit UI after switching window
+      }
+      break
   }
   return true
 }
