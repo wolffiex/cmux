@@ -98,9 +98,9 @@ describe("handleDirPickerKey", () => {
     }
   })
 
-  test("j moves selection down", () => {
+  test("Ctrl+N moves selection down", () => {
     const state = makeState({ selectedIndex: 0 })
-    const result = handleDirPickerKey(state, "j")
+    const result = handleDirPickerKey(state, "\x0e")
 
     expect(result.action).toBe("continue")
     if (result.action === "continue") {
@@ -108,9 +108,9 @@ describe("handleDirPickerKey", () => {
     }
   })
 
-  test("k moves selection up", () => {
+  test("Ctrl+P moves selection up", () => {
     const state = makeState({ selectedIndex: 1 })
-    const result = handleDirPickerKey(state, "k")
+    const result = handleDirPickerKey(state, "\x10")
 
     expect(result.action).toBe("continue")
     if (result.action === "continue") {
@@ -118,9 +118,9 @@ describe("handleDirPickerKey", () => {
     }
   })
 
-  test("j wraps around at bottom", () => {
+  test("Ctrl+N wraps around at bottom", () => {
     const state = makeState({ selectedIndex: 2 })
-    const result = handleDirPickerKey(state, "j")
+    const result = handleDirPickerKey(state, "\x0e")
 
     expect(result.action).toBe("continue")
     if (result.action === "continue") {
@@ -128,13 +128,33 @@ describe("handleDirPickerKey", () => {
     }
   })
 
-  test("k wraps around at top", () => {
+  test("Ctrl+P wraps around at top", () => {
     const state = makeState({ selectedIndex: 0 })
-    const result = handleDirPickerKey(state, "k")
+    const result = handleDirPickerKey(state, "\x10")
 
     expect(result.action).toBe("continue")
     if (result.action === "continue") {
       expect(result.state.selectedIndex).toBe(2)
+    }
+  })
+
+  test("j is typed as literal character", () => {
+    const state = makeState()
+    const result = handleDirPickerKey(state, "j")
+
+    expect(result.action).toBe("continue")
+    if (result.action === "continue") {
+      expect(result.state.input).toBe("j")
+    }
+  })
+
+  test("k is typed as literal character", () => {
+    const state = makeState()
+    const result = handleDirPickerKey(state, "k")
+
+    expect(result.action).toBe("continue")
+    if (result.action === "continue") {
+      expect(result.state.input).toBe("k")
     }
   })
 
