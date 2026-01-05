@@ -309,16 +309,55 @@ function render(): void {
     return name.slice(0, 14) + "…"
   }
 
-  // Build the carousel content line
-  let carouselContent = "   "  // Left padding
+  // Build the 3-row carousel content (each window/button is a bordered box)
+  const WINDOW_BOX_WIDTH = 17  // Inner width for window names (15 chars + 2 for padding/indicator)
+  const BUTTON_BOX_WIDTH = 3   // Inner width for +/- buttons
+
+  // Build arrays for each row of the carousel content
+  let row0Parts: string[] = []  // Top borders
+  let row1Parts: string[] = []  // Content (middle)
+  let row2Parts: string[] = []  // Bottom borders
+
+  // Helper to build a box element (returns 3 rows)
+  const buildBox = (content: string, innerWidth: number, isSelected: boolean, isDim: boolean = false): [string, string, string] => {
+    const topBorder = box.tl + box.h.repeat(innerWidth) + box.tr
+    const bottomBorder = box.bl + box.h.repeat(innerWidth) + box.br
+
+    // Pad/center content within innerWidth
+    const paddedContent = content.length < innerWidth
+      ? content + " ".repeat(innerWidth - content.length)
+      : content.slice(0, innerWidth)
+    const middleRow = box.v + paddedContent + box.v
+
+    if (isSelected) {
+      return [
+        ansi.inverse + topBorder + ansi.reset,
+        ansi.inverse + middleRow + ansi.reset,
+        ansi.inverse + bottomBorder + ansi.reset
+      ]
+    } else if (isDim) {
+      return [
+        ansi.dim + topBorder + ansi.reset,
+        ansi.dim + middleRow + ansi.reset,
+        ansi.dim + bottomBorder + ansi.reset
+      ]
+    }
+    return [topBorder, middleRow, bottomBorder]
+  }
 
   // [−] button (shows "Delete? ⏎" when confirming)
   if (state.confirmingDelete) {
-    carouselContent += ansi.inverse + " Delete? ⏎ " + ansi.reset
+    const confirmWidth = 10  // "Delete? ⏎"
+    const [t, m, b] = buildBox("Delete? ⏎", confirmWidth, true)
+    row0Parts.push(t)
+    row1Parts.push(m)
+    row2Parts.push(b)
   } else {
-    if (windowFocused && state.carouselIndex === 0) carouselContent += ansi.inverse
-    carouselContent += " − "
-    carouselContent += ansi.reset
+    const isMinusSelected = windowFocused && state.carouselIndex === 0
+    const [t, m, b] = buildBox(" − ", BUTTON_BOX_WIDTH, isMinusSelected)
+    row0Parts.push(t)
+    row1Parts.push(m)
+    row2Parts.push(b)
   }
 
   // Window items
@@ -327,44 +366,58 @@ function render(): void {
     const isSelected = windowFocused && state.carouselIndex === i + 1
     const isCurrent = i === state.currentWindowIndex
 
-    if (isSelected) carouselContent += ansi.inverse
-    carouselContent += " " + truncateName(win.name)
-    if (isCurrent) carouselContent += " ●"
-    carouselContent += " "
-    carouselContent += ansi.reset
+    let content = " " + truncateName(win.name)
+    if (isCurrent) content += " ●"
+    // Pad to WINDOW_BOX_WIDTH
+    if (content.length < WINDOW_BOX_WIDTH) {
+      content = content + " ".repeat(WINDOW_BOX_WIDTH - content.length)
+    }
+
+    const [t, m, b] = buildBox(content, WINDOW_BOX_WIDTH, isSelected)
+    row0Parts.push(t)
+    row1Parts.push(m)
+    row2Parts.push(b)
   }
 
   // [+] button
-  if (windowFocused && state.carouselIndex === maxIndex) {
-    carouselContent += ansi.inverse + " + " + ansi.reset
-  } else {
-    carouselContent += ansi.dim + " + " + ansi.reset
-  }
+  const isPlusSelected = windowFocused && state.carouselIndex === maxIndex
+  const [plusT, plusM, plusB] = buildBox(" + ", BUTTON_BOX_WIDTH, isPlusSelected, !isPlusSelected)
+  row0Parts.push(plusT)
+  row1Parts.push(plusM)
+  row2Parts.push(plusB)
+
+  // Join with spaces between boxes
+  const carouselRow0 = row0Parts.join(" ")
+  const carouselRow1 = row1Parts.join(" ")
+  const carouselRow2 = row2Parts.join(" ")
 
   // Draw the 5-row carousel box with gray outline
   const carouselBoxWidth = width - 2
   const carouselStartX = 1
 
-  // Row 0: Top border
+  // Row 0: Top border of outer box
   out += ansi.moveTo(carouselStartX, 0)
   out += ansi.dim + box.tl + box.h.repeat(carouselBoxWidth) + box.tr + ansi.reset
 
-  // Row 1: Empty row with side borders
+  // Row 1: Top borders of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 1)
-  out += ansi.dim + box.v + ansi.reset + " ".repeat(carouselBoxWidth) + ansi.dim + box.v + ansi.reset
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow0
+  out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 1)
+  out += ansi.dim + box.v + ansi.reset
 
-  // Row 2: Content row with side borders
+  // Row 2: Content row of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 2)
-  out += ansi.dim + box.v + ansi.reset + carouselContent
-  // Pad to fill the box width (need to account for ANSI codes in content)
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow1
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 2)
   out += ansi.dim + box.v + ansi.reset
 
-  // Row 3: Empty row with side borders
+  // Row 3: Bottom borders of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 3)
-  out += ansi.dim + box.v + ansi.reset + " ".repeat(carouselBoxWidth) + ansi.dim + box.v + ansi.reset
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow2
+  out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 3)
+  out += ansi.dim + box.v + ansi.reset
 
-  // Row 4: Bottom border
+  // Row 4: Bottom border of outer box
   out += ansi.moveTo(carouselStartX, 4)
   out += ansi.dim + box.bl + box.h.repeat(carouselBoxWidth) + box.br + ansi.reset
 
