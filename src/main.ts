@@ -733,7 +733,7 @@ function handleMainKey(key: string): boolean {
     case "8":
     case "9":
       // Number keys select windows (1-indexed to match superscript display)
-      const windowIndex = parseInt(key) - 1
+      const windowIndex = parseInt(normalizedKey) - 1
       if (windowIndex < state.windows.length) {
         const selectedWindow = state.windows[windowIndex]
         try {
