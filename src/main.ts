@@ -140,6 +140,7 @@ const ansi = {
   dim: `${CSI}2m`,
   reset: `${CSI}0m`,
   inverse: `${CSI}7m`,
+  white: `${CSI}97m`,  // Bright white foreground
 }
 
 // Box drawing
@@ -148,6 +149,9 @@ const box = {
   h: "─", v: "│",
   ltee: "├", rtee: "┤", ttee: "┬", btee: "┴",
   cross: "┼",
+  // Double-line variants for selection
+  dtl: "╔", dtr: "╗", dbl: "╚", dbr: "╝",
+  dh: "═", dv: "║",
 }
 
 // ── Layout rendering ───────────────────────────────────────────────────────
@@ -319,9 +323,18 @@ function render(): void {
   let row2Parts: string[] = []  // Bottom borders
 
   // Helper to build a box element (returns 3 rows)
+  // Selected items use double-line borders (bright/white), non-selected use single-line (dim/gray)
   const buildBox = (content: string, innerWidth: number, isSelected: boolean, isDim: boolean = false): [string, string, string] => {
-    const topBorder = box.tl + box.h.repeat(innerWidth) + box.tr
-    const bottomBorder = box.bl + box.h.repeat(innerWidth) + box.br
+    // Choose border characters based on selection state
+    const tl = isSelected ? box.dtl : box.tl
+    const tr = isSelected ? box.dtr : box.tr
+    const bl = isSelected ? box.dbl : box.bl
+    const br = isSelected ? box.dbr : box.br
+    const h = isSelected ? box.dh : box.h
+    const v = isSelected ? box.dv : box.v
+
+    const topBorder = tl + h.repeat(innerWidth) + tr
+    const bottomBorder = bl + h.repeat(innerWidth) + br
 
     // Center content within innerWidth
     let paddedContent: string
@@ -333,21 +346,24 @@ function render(): void {
     } else {
       paddedContent = content.slice(0, innerWidth)
     }
-    const middleRow = box.v + paddedContent + box.v
+    const middleRow = v + paddedContent + v
 
     if (isSelected) {
+      // Selected: bright white double-line borders
       return [
-        ansi.inverse + topBorder + ansi.reset,
-        ansi.inverse + middleRow + ansi.reset,
-        ansi.inverse + bottomBorder + ansi.reset
+        ansi.white + topBorder + ansi.reset,
+        ansi.white + middleRow + ansi.reset,
+        ansi.white + bottomBorder + ansi.reset
       ]
     } else if (isDim) {
+      // Dim: gray single-line borders
       return [
         ansi.dim + topBorder + ansi.reset,
         ansi.dim + middleRow + ansi.reset,
         ansi.dim + bottomBorder + ansi.reset
       ]
     }
+    // Default: normal single-line borders
     return [topBorder, middleRow, bottomBorder]
   }
 
