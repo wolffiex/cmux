@@ -1,5 +1,6 @@
 import { execSync, spawn } from "node:child_process"
-import { join } from "node:path"
+import { dirname, join, resolve } from "node:path"
+import { readdirSync, existsSync, statSync } from "node:fs"
 import { ALL_LAYOUTS, resolveLayout, type LayoutTemplate } from "./layouts"
 import { renderLayoutPreview } from "./layout-preview"
 import { getWindows, getWindowInfo, getWindowContext, type TmuxWindow } from "./tmux"
@@ -7,6 +8,13 @@ import { generateLayoutString } from "./tmux-layout"
 import { getSummariesForWindows } from "./summaries"
 import { initLog, log } from "./logger"
 import { sanitizeWindowName } from "./utils"
+import {
+  type DirPickerState,
+  type DirPickerResult,
+  initDirPickerState,
+  handleDirPickerKey,
+  renderDirPicker,
+} from "./dir-picker"
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf")
 const SELF_PATH = import.meta.path
@@ -15,6 +23,7 @@ const BACKGROUND_RENAMER_PATH = join(import.meta.dir, "background-renamer.ts")
 // ── State ──────────────────────────────────────────────────────────────────
 type Focus = "window" | "layout"
 type AnimationDirection = "left" | "right" | null
+type Mode = "main" | "dirPicker"
 
 interface State {
   windows: TmuxWindow[]
@@ -22,6 +31,7 @@ interface State {
   layoutIndex: number
   carouselIndex: number  // 0 = minus, 1..n = windows, n+1 = plus
   focus: Focus
+  mode: Mode
   // Animation state
   animating: boolean
   animationDirection: AnimationDirection
@@ -32,6 +42,8 @@ interface State {
   summariesLoading: boolean
   // Delete confirmation state
   confirmingDelete: boolean
+  // Directory picker state
+  dirPicker: DirPickerState | null
 }
 
 function initState(): State {
@@ -67,6 +79,7 @@ function initState(): State {
     layoutIndex,
     carouselIndex: currentWindowIndex + 1,  // Start on current window (index 0 = minus)
     focus: "window" as Focus,
+    mode: "main" as Mode,
     // Animation state
     animating: false,
     animationDirection: null,
@@ -77,6 +90,8 @@ function initState(): State {
     summariesLoading: false,
     // Delete confirmation state
     confirmingDelete: false,
+    // Directory picker state
+    dirPicker: null,
   }
 }
 
@@ -475,8 +490,15 @@ function render(): void {
   out += ansi.moveTo(0, height - 2) + box.h.repeat(width)
 
   // Key hints (bottom row)
-  const hints = "tab focus  hjkl nav  ⏎ apply"
+  const hints = state.mode === "dirPicker"
+    ? "type to filter  jk nav  ⏎ select  esc cancel"
+    : "tab focus  hjkl nav  ⏎ apply"
   out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset
+
+  // Directory picker overlay (if active)
+  if (state.mode === "dirPicker" && state.dirPicker) {
+    out += renderDirPicker(state.dirPicker, width, height)
+  }
 
   process.stdout.write(out)
 }
@@ -535,7 +557,34 @@ async function fetchSummaries(): Promise<void> {
 
 // ── Input handling ─────────────────────────────────────────────────────────
 function handleKey(key: string): boolean {
+  if (state.mode === "dirPicker") {
+    return handleDirPickerMode(key)
+  }
   return handleMainKey(key)
+}
+
+function handleDirPickerMode(key: string): boolean {
+  if (!state.dirPicker) {
+    state.mode = "main"
+    return true
+  }
+
+  const result = handleDirPickerKey(state.dirPicker, key)
+
+  switch (result.action) {
+    case "continue":
+      state.dirPicker = result.state
+      break
+    case "cancel":
+      state.mode = "main"
+      state.dirPicker = null
+      break
+    case "select":
+      createNewWindowAtPath(result.path)
+      return false // Exit UI after creating window
+  }
+
+  return true
 }
 
 function handleMainKey(key: string): boolean {
@@ -616,9 +665,8 @@ function handleMainKey(key: string): boolean {
             }
           }
         } else if (state.carouselIndex === maxCarouselIndex) {
-          // Plus button - create new window
-          createNewWindow()
-          return false // Exit UI after creating window with layout
+          // Plus button - open directory picker
+          openDirPicker()
         } else {
           // Window selected - switch to that window and exit
           const windowIndex = state.carouselIndex - 1
@@ -669,6 +717,57 @@ function handleMainKey(key: string): boolean {
       break
   }
   return true
+}
+
+function openDirPicker(): void {
+  try {
+    const currentPath = execSync("tmux display-message -p '#{pane_current_path}'").toString().trim()
+    if (currentPath) {
+      state.dirPicker = initDirPickerState(currentPath)
+      state.mode = "dirPicker"
+    } else {
+      // Fallback: create window in current dir if we can't get path
+      createNewWindow()
+    }
+  } catch {
+    // Fallback if tmux command fails
+    createNewWindow()
+  }
+}
+
+function createNewWindowAtPath(targetPath: string): void {
+  try {
+    const pathArg = `-c "${targetPath}"`
+
+    // Create the new window at the target path
+    execSync(`tmux new-window ${pathArg}`)
+
+    const layout = ALL_LAYOUTS[state.layoutIndex]
+    const paneCount = layout.panes.length
+
+    // New window starts with 1 pane, add more if needed
+    for (let i = 1; i < paneCount; i++) {
+      execSync(`tmux split-window ${pathArg}`)
+    }
+
+    // Get updated window info for layout application
+    const windowInfo = getWindowInfo()
+
+    // Resolve layout to absolute coords
+    const resolved = resolveLayout(layout, windowInfo.width, windowInfo.height)
+
+    // Generate tmux layout string
+    const panes = resolved.map((r, i) => ({
+      id: windowInfo.panes[i]?.id || `%${i}`,
+      ...r,
+    }))
+    const layoutString = generateLayoutString(panes, windowInfo.width, windowInfo.height)
+
+    // Apply the layout
+    execSync(`tmux select-layout '${layoutString}'`)
+  } catch (e) {
+    // Ignore errors (e.g., not in tmux)
+  }
 }
 
 function createNewWindow(): void {
