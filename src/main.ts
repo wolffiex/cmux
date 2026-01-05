@@ -437,7 +437,8 @@ function render(): void {
   const carouselRow2 = row2Parts.join(" ")
 
   // Draw the 5-row carousel box with gray outline
-  const carouselBoxWidth = width - 2
+  // Use width - 4 so the total rendered width (inner + 2 corners) fits with margin
+  const carouselBoxWidth = width - 4
   const carouselStartX = 1
 
   // Row 0: Top border of outer box
