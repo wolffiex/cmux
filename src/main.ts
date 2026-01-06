@@ -948,6 +948,7 @@ function runUI(): void {
 
     // Handle arrow key escape sequences
     // Arrow keys send: \x1b[A (up), \x1b[B (down), \x1b[C (right), \x1b[D (left)
+    // Skip translation in dirPicker mode - it expects raw escape sequences
     let i = 0
     while (i < input.length) {
       let key: string
@@ -955,7 +956,11 @@ function runUI(): void {
       // Check for escape sequences (arrow keys)
       if (input[i] === "\x1b" && input[i + 1] === "[") {
         const arrowChar = input[i + 2]
-        if (arrowChar === "A") {
+        // In dirPicker mode, pass raw escape sequences through
+        if (state.mode === "dirPicker") {
+          key = input.slice(i, i + 3)
+          i += 3
+        } else if (arrowChar === "A") {
           key = "k" // Up arrow = k
           i += 3
         } else if (arrowChar === "B") {
