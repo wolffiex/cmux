@@ -616,10 +616,7 @@ function handleMainKey(key: string): boolean {
       break
     case "k": // Up - move focus to window bar
       if (state.focus === "layout") {
-        state.previousLayoutIndex = state.layoutIndex
-        state.layoutIndex = (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length
-        startAnimation("left")
-        return true // Don't call render(), animation handles it
+        state.focus = "window"
       }
       break
     case "h":
