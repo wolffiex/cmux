@@ -43,6 +43,7 @@ export function initDirPickerState(currentPath: string): DirPickerState {
 
 /**
  * Get sibling directories (cousins) of the current directory.
+ * The current directory is always returned first, followed by siblings sorted alphabetically.
  */
 export function getCousinDirectories(currentPath: string): string[] {
   const parentPath = dirname(currentPath)
@@ -50,12 +51,14 @@ export function getCousinDirectories(currentPath: string): string[] {
 
   try {
     const entries = readdirSync(parentPath, { withFileTypes: true })
-    return entries
+    const siblings = entries
       .filter(e => e.isDirectory() && !e.name.startsWith(".") && e.name !== currentName)
       .map(e => e.name)
       .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    // Current directory first, then sorted siblings
+    return [currentName, ...siblings]
   } catch {
-    return []
+    return [currentName]
   }
 }
 
