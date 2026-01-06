@@ -66,6 +66,22 @@ Panes are numbered largest-to-smallest by area.
 bun test
 ```
 
+## Verification
+
+For UI changes, always verify interactively in a real tmux session:
+
+```bash
+# Start a test session
+tmux new-session -d -s test-cmux
+tmux send-keys -t test-cmux 'bun src/main.ts' Enter
+tmux attach -t test-cmux
+```
+
+Unit tests don't catch all UI bugs. Before declaring a fix complete:
+1. Actually run the app
+2. Test the specific behavior that was changed
+3. Verify related functionality still works
+
 ## Branch
 
 Currently on `v2-rewrite` branch - complete rewrite from the original 3-binary architecture.
