@@ -37,9 +37,6 @@ interface State {
   animationDirection: AnimationDirection
   animationFrame: number
   previousLayoutIndex: number
-  // Summary state
-  summaries: Map<number, string>  // windowIndex -> summary
-  summariesLoading: boolean
   // Directory picker state
   dirPicker: DirPickerState | null
 }
@@ -83,9 +80,6 @@ function initState(): State {
     animationDirection: null,
     animationFrame: 0,
     previousLayoutIndex: layoutIndex,
-    // Summary state
-    summaries: new Map(),
-    summariesLoading: false,
     // Directory picker state
     dirPicker: null,
   }
@@ -493,54 +487,45 @@ function render(): void {
 }
 
 
-// ── Summary fetching ────────────────────────────────────────────────────────
+// ── Startup window rename ───────────────────────────────────────────────────
 
-// Rename tmux windows with AI-generated summaries
-async function renameWindowsWithSummaries(summaries: Map<number, string>): Promise<void> {
-  log('[cmux] renameWindowsWithSummaries called, entries:', Array.from(summaries.entries()));
-  for (const [windowIndex, summary] of summaries) {
-    const shortName = sanitizeWindowName(summary)
-    if (shortName.length > 0) {
-      try {
-        log(`[cmux] renaming window ${windowIndex} to "${shortName}"`);
-        execSync(`tmux rename-window -t :${windowIndex} "${shortName}"`)
-      } catch (e) {
-        log(`[cmux] rename failed for window ${windowIndex}:`, e);
-      }
-    }
-  }
-}
-
-async function fetchSummaries(): Promise<void> {
-  if (state.summariesLoading) return
-
-  log('[cmux] fetchSummaries called, windows:', state.windows.map(w => w.index));
-
-  state.summariesLoading = true
-  render()
-
+/**
+ * Rename all windows immediately on startup using heuristic-based names.
+ * Runs async so it doesn't block the initial UI render.
+ */
+async function renameWindowsOnStartup(): Promise<void> {
   try {
-    // Get contexts for all windows in parallel
+    const windows = getWindows()
+    if (windows.length === 0) return
+
+    log(`[cmux] Startup rename for ${windows.length} window(s)`)
+
+    // Get contexts for all windows
     const contexts = await Promise.all(
-      state.windows.map(w => getWindowContext(w.index))
+      windows.map(w => getWindowContext(w.index))
     )
 
-    log('[cmux] contexts:', JSON.stringify(contexts, null, 2));
+    // Get heuristic-based names
+    const summaries = getSummariesForWindows(contexts)
 
-    // Get summaries for all contexts
-    const summaries = await getSummariesForWindows(contexts)
+    // Rename windows
+    for (const [windowIndex, summary] of summaries) {
+      const shortName = sanitizeWindowName(summary)
+      if (shortName.length > 0) {
+        try {
+          execSync(`tmux rename-window -t :${windowIndex} "${shortName}"`)
+          log(`[cmux] Renamed window ${windowIndex} to "${shortName}"`)
+        } catch (e) {
+          log(`[cmux] Rename failed for window ${windowIndex}:`, e)
+        }
+      }
+    }
 
-    state.summaries = summaries
-
-    log('[cmux] summaries:', Array.from(state.summaries.entries()));
-
-    // Rename tmux windows with the fetched summaries
-    await renameWindowsWithSummaries(summaries)
-  } catch {
-    // Silently fail - summaries will just show "..."
-  } finally {
-    state.summariesLoading = false
+    // Refresh window list to show updated names
+    state.windows = getWindows()
     render()
+  } catch (e) {
+    log('[cmux] Startup rename failed:', e)
   }
 }
 
@@ -918,6 +903,9 @@ function runUI(): void {
 
   render()
   startPolling()
+
+  // Rename windows immediately on startup (async, doesn't block UI)
+  renameWindowsOnStartup()
 
   process.stdin.on("data", (data) => {
     const input = data.toString()
