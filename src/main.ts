@@ -602,12 +602,13 @@ function handleMainKey(key: string): boolean {
       if (state.focus === "window") {
         state.focus = "layout"
       }
-      // j only moves focus down, does not cycle layouts
+      // When already on layout, j does nothing (no UI element below)
       break
     case "k": // Up - move focus to window bar
       if (state.focus === "layout") {
-        state.focus = "window"  // Move focus up, don't cycle layouts
+        state.focus = "window"
       }
+      // When already on window bar, k does nothing (no UI element above)
       break
     case "h":
       if (state.focus === "window") {
