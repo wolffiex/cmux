@@ -169,6 +169,7 @@ export interface WindowContext {
   windowIndex: number;
   windowName: string;
   panes: PaneContext[];
+  activePaneIndex: number;  // Index of the currently focused pane
 }
 
 /**
@@ -216,14 +217,29 @@ async function getPaneContext(windowTarget: string, paneIndex: number): Promise<
 export async function getWindowContext(windowIndex: number): Promise<WindowContext> {
   const windowTarget = `:${windowIndex}`;
 
-  // Get window name and pane list
+  // Get window name, pane list, and active pane info
+  // #{pane_active} is 1 for the active pane, 0 otherwise
   const [nameResult, panesResult] = await Promise.all([
     execAsync(`tmux display-message -p -t '${windowTarget}' '#{window_name}'`),
-    execAsync(`tmux list-panes -t '${windowTarget}' -F '#{pane_index}'`),
+    execAsync(`tmux list-panes -t '${windowTarget}' -F '#{pane_index}:#{pane_active}'`),
   ]);
 
   const windowName = nameResult.stdout.trim();
-  const paneIndices = panesResult.stdout.trim().split("\n").map(Number);
+  const paneLines = panesResult.stdout.trim().split("\n");
+
+  // Parse pane indices and find active pane
+  let activePaneIndex = 0;
+  const paneIndices: number[] = [];
+
+  for (const line of paneLines) {
+    const [indexStr, activeStr] = line.split(":");
+    const paneIndex = Number(indexStr);
+    paneIndices.push(paneIndex);
+    if (activeStr === "1") {
+      // Store position in our panes array (0-based index into the array)
+      activePaneIndex = paneIndices.length - 1;
+    }
+  }
 
   // Get context for all panes in parallel
   const panes = await Promise.all(
@@ -234,5 +250,6 @@ export async function getWindowContext(windowIndex: number): Promise<WindowConte
     windowIndex,
     windowName,
     panes,
+    activePaneIndex,
   };
 }

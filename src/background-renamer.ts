@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
 /**
- * Background process that periodically renames tmux windows with AI-generated summaries.
+ * Background process that periodically renames tmux windows based on context.
+ * Uses a heuristic approach: repo-name/branch-suffix for feature branches.
  * Spawned by cmux when starting a tmux session.
  */
 
 import { execSync } from "node:child_process";
-import { getWindows, getWindowContext, type TmuxWindow } from "./tmux";
+import { getWindows, getWindowContext } from "./tmux";
 import { getSummariesForWindows } from "./summaries";
 import { initLog, log } from "./logger";
 import { sanitizeWindowName } from "./utils";
@@ -13,9 +14,9 @@ import { sanitizeWindowName } from "./utils";
 const RENAME_INTERVAL_MS = 150_000; // 2.5 minutes
 
 /**
- * Rename windows with their AI-generated summaries
+ * Rename windows with their generated names
  */
-async function renameWindows(summaries: Map<number, string>): Promise<void> {
+function renameWindows(summaries: Map<number, string>): void {
   for (const [windowIndex, summary] of summaries) {
     const shortName = sanitizeWindowName(summary);
     if (shortName.length > 0) {
@@ -30,7 +31,7 @@ async function renameWindows(summaries: Map<number, string>): Promise<void> {
 }
 
 /**
- * Perform one cycle of fetching summaries and renaming windows
+ * Perform one cycle of fetching context and renaming windows
  */
 async function updateWindowNames(): Promise<void> {
   try {
@@ -47,11 +48,11 @@ async function updateWindowNames(): Promise<void> {
       windows.map((w) => getWindowContext(w.index))
     );
 
-    // Get AI summaries
-    const summaries = await getSummariesForWindows(contexts);
+    // Get heuristic-based names (synchronous, no API calls)
+    const summaries = getSummariesForWindows(contexts);
 
     // Rename windows
-    await renameWindows(summaries);
+    renameWindows(summaries);
 
     log("[bg-renamer] Update cycle complete");
   } catch (e) {
