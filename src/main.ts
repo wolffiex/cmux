@@ -260,9 +260,9 @@ function startAnimation(direction: AnimationDirection): void {
   const width = process.stdout.columns || 80
   const height = process.stdout.rows || 24
   const previewW = Math.min(width - 4, 40)
-  const previewH = Math.min(height - 10, 12)  // Adjusted for taller carousel
+  const previewH = Math.min(height - 11, 12)  // Adjusted for taller 6-row carousel
   const previewX = Math.floor((width - previewW) / 2)
-  const previewY = 7  // Start after carousel (5 rows) + separator (1 row) + gap (1 row)
+  const previewY = 8  // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
 
   // Update the counter immediately (shows new layout info)
   const paneCount = nextLayout.panes.length
@@ -311,7 +311,7 @@ function render(): void {
 
   let out = ansi.clear
 
-  // Window carousel (5 rows tall with gray box outline)
+  // Window carousel (6 rows tall with gray box outline, 2 content lines per box)
   const windowFocused = state.focus === "window"
   const maxIndex = state.windows.length + 1  // 0=minus, 1..n=windows, n+1=plus
 
@@ -321,19 +321,39 @@ function render(): void {
     return name.slice(0, 14) + "…"
   }
 
-  // Build the 3-row carousel content (each window/button is a bordered box)
+  // Split window name into two lines: [repo/prefix, branch/suffix]
+  // If name has "/" - split at first "/" (repo on line 1, rest on line 2)
+  // Otherwise - put name on line 1, empty line 2
+  const splitWindowName = (name: string): [string, string] => {
+    const slashIndex = name.indexOf("/")
+    if (slashIndex > 0 && slashIndex < name.length - 1) {
+      const line1 = name.slice(0, slashIndex)
+      const line2 = name.slice(slashIndex + 1)
+      return [truncateName(line1), truncateName(line2)]
+    }
+    return [truncateName(name), ""]
+  }
+
+  // Build the 4-row carousel content (each window/button is a bordered box with 2 content lines)
   const WINDOW_BOX_WIDTH = 17  // Inner width for window names (15 chars + 2 for padding/indicator)
   const BUTTON_BOX_WIDTH = 3   // Inner width for +/- buttons
 
   // Build arrays for each row of the carousel content
   let row0Parts: string[] = []  // Top borders
-  let row1Parts: string[] = []  // Content (middle)
-  let row2Parts: string[] = []  // Bottom borders
+  let row1Parts: string[] = []  // Content line 1
+  let row2Parts: string[] = []  // Content line 2
+  let row3Parts: string[] = []  // Bottom borders
 
-  // Helper to build a box element (returns 3 rows)
+  // Helper to build a box element (returns 4 rows for 2-line content)
   // Selected items use double-line borders (bright/white), non-selected use single-line (dim/gray)
   // windowNumber is optional 1-indexed number to show as superscript in top-right corner
-  const buildBox = (content: string, innerWidth: number, isSelected: boolean, isDim: boolean = false, windowNumber?: number): [string, string, string] => {
+  const buildBox = (
+    lines: [string, string],  // Two content lines
+    innerWidth: number,
+    isSelected: boolean,
+    isDim: boolean = false,
+    windowNumber?: number
+  ): [string, string, string, string] => {
     // Choose border characters based on selection state
     const tl = isSelected ? box.dtl : box.tl
     const tr = isSelected ? box.dtr : box.tr
@@ -351,74 +371,91 @@ function render(): void {
     }
     const bottomBorder = bl + h.repeat(innerWidth) + br
 
-    // Center content within innerWidth
-    let paddedContent: string
-    if (content.length < innerWidth) {
-      const totalPadding = innerWidth - content.length
-      const leftPad = Math.floor(totalPadding / 2)
-      const rightPad = totalPadding - leftPad
-      paddedContent = " ".repeat(leftPad) + content + " ".repeat(rightPad)
-    } else {
-      paddedContent = content.slice(0, innerWidth)
+    // Center each content line within innerWidth
+    const centerContent = (content: string): string => {
+      if (content.length < innerWidth) {
+        const totalPadding = innerWidth - content.length
+        const leftPad = Math.floor(totalPadding / 2)
+        const rightPad = totalPadding - leftPad
+        return " ".repeat(leftPad) + content + " ".repeat(rightPad)
+      }
+      return content.slice(0, innerWidth)
     }
-    const middleRow = v + paddedContent + v
+
+    const middleRow1 = v + centerContent(lines[0]) + v
+    const middleRow2 = v + centerContent(lines[1]) + v
 
     if (isSelected) {
       // Selected: bright white double-line borders
       return [
         ansi.white + topBorder + ansi.reset,
-        ansi.white + middleRow + ansi.reset,
+        ansi.white + middleRow1 + ansi.reset,
+        ansi.white + middleRow2 + ansi.reset,
         ansi.white + bottomBorder + ansi.reset
       ]
     } else if (isDim) {
       // Dim: gray single-line borders
       return [
         ansi.dim + topBorder + ansi.reset,
-        ansi.dim + middleRow + ansi.reset,
+        ansi.dim + middleRow1 + ansi.reset,
+        ansi.dim + middleRow2 + ansi.reset,
         ansi.dim + bottomBorder + ansi.reset
       ]
     }
     // Default: normal single-line borders
-    return [topBorder, middleRow, bottomBorder]
+    return [topBorder, middleRow1, middleRow2, bottomBorder]
   }
 
-  // [−] button
+  // [−] button (two lines: "−" on first line, empty second line)
   const isMinusSelected = windowFocused && state.carouselIndex === 0
-  const [minusT, minusM, minusB] = buildBox(" − ", BUTTON_BOX_WIDTH, isMinusSelected)
+  const [minusT, minusM1, minusM2, minusB] = buildBox([" − ", ""], BUTTON_BOX_WIDTH, isMinusSelected)
   row0Parts.push(minusT)
-  row1Parts.push(minusM)
-  row2Parts.push(minusB)
+  row1Parts.push(minusM1)
+  row2Parts.push(minusM2)
+  row3Parts.push(minusB)
 
-  // Window items
+  // Window items (two lines: repo name on line 1, branch/path + indicator on line 2)
   for (let i = 0; i < state.windows.length; i++) {
     const win = state.windows[i]
     const isSelected = windowFocused && state.carouselIndex === i + 1
     const isCurrent = i === state.currentWindowIndex
 
-    let content = truncateName(win.name)
-    if (isCurrent) content += " ●"
+    const [line1, line2] = splitWindowName(win.name)
+    // Add current indicator to line 2 (or line 1 if line 2 is empty)
+    let displayLine1 = line1
+    let displayLine2 = line2
+    if (isCurrent) {
+      if (line2) {
+        displayLine2 += " ●"
+      } else {
+        displayLine1 += " ●"
+      }
+    }
 
     // Pass window number for superscript (1-indexed, 1-9 only)
     const windowNum = i < 9 ? i + 1 : undefined
-    const [t, m, b] = buildBox(content, WINDOW_BOX_WIDTH, isSelected, false, windowNum)
+    const [t, m1, m2, b] = buildBox([displayLine1, displayLine2], WINDOW_BOX_WIDTH, isSelected, false, windowNum)
     row0Parts.push(t)
-    row1Parts.push(m)
-    row2Parts.push(b)
+    row1Parts.push(m1)
+    row2Parts.push(m2)
+    row3Parts.push(b)
   }
 
-  // [+] button
+  // [+] button (two lines: "+" on first line, empty second line)
   const isPlusSelected = windowFocused && state.carouselIndex === maxIndex
-  const [plusT, plusM, plusB] = buildBox(" + ", BUTTON_BOX_WIDTH, isPlusSelected, !isPlusSelected)
+  const [plusT, plusM1, plusM2, plusB] = buildBox([" + ", ""], BUTTON_BOX_WIDTH, isPlusSelected, !isPlusSelected)
   row0Parts.push(plusT)
-  row1Parts.push(plusM)
-  row2Parts.push(plusB)
+  row1Parts.push(plusM1)
+  row2Parts.push(plusM2)
+  row3Parts.push(plusB)
 
   // Join with spaces between boxes
   const carouselRow0 = row0Parts.join(" ")
   const carouselRow1 = row1Parts.join(" ")
   const carouselRow2 = row2Parts.join(" ")
+  const carouselRow3 = row3Parts.join(" ")
 
-  // Draw the 5-row carousel box with gray outline
+  // Draw the 6-row carousel box with gray outline (2 content lines per box)
   // Use width - 4 so the total rendered width (inner + 2 corners) fits with margin
   const carouselBoxWidth = width - 4
   const carouselStartX = 1
@@ -433,31 +470,37 @@ function render(): void {
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 1)
   out += ansi.dim + box.v + ansi.reset
 
-  // Row 2: Content row of inner boxes (with outer side borders)
+  // Row 2: Content line 1 of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 2)
   out += ansi.dim + box.v + ansi.reset + " " + carouselRow1
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 2)
   out += ansi.dim + box.v + ansi.reset
 
-  // Row 3: Bottom borders of inner boxes (with outer side borders)
+  // Row 3: Content line 2 of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 3)
   out += ansi.dim + box.v + ansi.reset + " " + carouselRow2
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 3)
   out += ansi.dim + box.v + ansi.reset
 
-  // Row 4: Bottom border of outer box
+  // Row 4: Bottom borders of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 4)
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow3
+  out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 4)
+  out += ansi.dim + box.v + ansi.reset
+
+  // Row 5: Bottom border of outer box
+  out += ansi.moveTo(carouselStartX, 5)
   out += ansi.dim + box.bl + box.h.repeat(carouselBoxWidth) + box.br + ansi.reset
 
-  // Separator (moved down to row 5)
-  out += ansi.moveTo(0, 5) + box.h.repeat(width)
+  // Separator (moved down to row 6)
+  out += ansi.moveTo(0, 6) + box.h.repeat(width)
 
   // Layout preview (center area, below carousel box)
   const layout = ALL_LAYOUTS[state.layoutIndex]
   const previewW = Math.min(width - 4, 40)
-  const previewH = Math.min(height - 10, 12)  // Adjusted for taller carousel
+  const previewH = Math.min(height - 11, 12)  // Adjusted for taller 6-row carousel
   const previewX = Math.floor((width - previewW) / 2)
-  const previewY = 7  // Start after carousel (5 rows) + separator (1 row) + gap (1 row)
+  const previewY = 8  // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
   out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH)
 
   // Layout name and counter
