@@ -924,6 +924,7 @@ function runUI(): void {
 
     // Parse input into key sequences
     // Arrow keys send: \x1b[A (up), \x1b[B (down), \x1b[C (right), \x1b[D (left)
+    // Skip translation in dirPicker mode - it expects raw escape sequences
     let i = 0
     while (i < input.length) {
       let key: string
