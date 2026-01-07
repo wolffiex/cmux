@@ -7,7 +7,7 @@ import { getWindows, getWindowInfo, getWindowContext, type TmuxWindow } from "./
 import { generateLayoutString } from "./tmux-layout"
 import { getSummariesForWindows } from "./summaries"
 import { initLog, log } from "./logger"
-import { sanitizeWindowName } from "./utils"
+import { sanitizeWindowName, splitWindowName, truncateName } from "./utils"
 import {
   type DirPickerState,
   type DirPickerResult,
@@ -318,25 +318,6 @@ function render(): void {
   // Window carousel (6 rows tall with gray box outline, 2 content lines per box)
   const windowFocused = state.focus === "window"
   const maxIndex = state.windows.length + 1  // 0=minus, 1..n=windows, n+1=plus
-
-  // Helper to truncate window names to 15 chars
-  const truncateName = (name: string): string => {
-    if (name.length <= 15) return name
-    return name.slice(0, 14) + "…"
-  }
-
-  // Split window name into two lines: [repo/prefix, branch/suffix]
-  // If name has "/" - split at first "/" (repo on line 1, rest on line 2)
-  // Otherwise - put name on line 1, empty line 2
-  const splitWindowName = (name: string): [string, string] => {
-    const slashIndex = name.indexOf("/")
-    if (slashIndex > 0 && slashIndex < name.length - 1) {
-      const line1 = name.slice(0, slashIndex)
-      const line2 = name.slice(slashIndex + 1)
-      return [truncateName(line1), truncateName(line2)]
-    }
-    return [truncateName(name), ""]
-  }
 
   // Build the 4-row carousel content (each window/button is a bordered box with 2 content lines)
   const WINDOW_BOX_WIDTH = 17  // Inner width for window names (15 chars + 2 for padding/indicator)
