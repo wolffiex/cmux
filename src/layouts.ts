@@ -20,15 +20,6 @@ export interface LayoutTemplate {
 // Absolute min height in rows for short panes (watch/logs)
 const MIN_ROWS = 6;
 
-// Helper to create a layout with a min-height bottom pane
-// Returns [main pane, bottom pane] for one column
-function withMinBottom(x: number, width: number): [PaneLayout, PaneLayout] {
-  return [
-    { x, y: 0, width, height: -MIN_ROWS }, // negative = "fill remaining after min"
-    { x, y: -MIN_ROWS, width, height: MIN_ROWS }, // positive int = absolute rows (handled specially)
-  ];
-}
-
 // 1 pane - full screen
 const layouts1: LayoutTemplate[] = [
   {
@@ -123,17 +114,6 @@ const layouts4: LayoutTemplate[] = [
     ],
   },
 ];
-
-const layoutsByCount: Record<number, LayoutTemplate[]> = {
-  1: layouts1,
-  2: layouts2,
-  3: layouts3,
-  4: layouts4,
-};
-
-export function getLayoutsForCount(count: number): LayoutTemplate[] | null {
-  return layoutsByCount[count] || null;
-}
 
 // Flat list of all layouts for cycling with h/l
 export const ALL_LAYOUTS: LayoutTemplate[] = [
