@@ -24,28 +24,28 @@ describe("getWindowName", () => {
   });
 
   test("extracts short branch from fix/ prefix", () => {
-    // Note: truncated to 15 chars
-    expect(getWindowName("/code/claude-code", "fix/npmrc-registry")).toBe("claude-code/npm");
+    // Full name returned - display layer handles truncation
+    expect(getWindowName("/code/claude-code", "fix/npmrc-registry")).toBe("claude-code/npmrc-registry");
   });
 
   test("extracts short branch from feature/ prefix", () => {
-    // Note: truncated to 15 chars
-    expect(getWindowName("/code/api", "feature/PROJ-123-desc")).toBe("api/PROJ-123-de");
+    // Full name returned - display layer handles truncation
+    expect(getWindowName("/code/api", "feature/PROJ-123-desc")).toBe("api/PROJ-123-desc");
   });
 
   test("extracts short branch from nested prefix", () => {
     expect(getWindowName("/code/api", "user/alice/experiment")).toBe("api/experiment");
   });
 
-  test("truncates long names to 15 chars", () => {
+  test("returns full name without truncation", () => {
+    // Full name returned - display layer handles truncation per-line
     const name = getWindowName("/code/api", "feature/very-long-branch-name");
-    expect(name.length).toBeLessThanOrEqual(15);
-    expect(name).toBe("api/very-long-b");
+    expect(name).toBe("api/very-long-branch-name");
   });
 
-  test("preserves repo name during truncation", () => {
+  test("preserves full repo and branch name", () => {
     const name = getWindowName("/code/myrepo", "fix/some-branch");
-    expect(name.startsWith("myrepo/")).toBe(true);
+    expect(name).toBe("myrepo/some-branch");
   });
 
   test("handles empty workdir", () => {
@@ -70,8 +70,8 @@ describe("generateSummary", () => {
     };
 
     const name = generateSummary(context);
-    // Note: truncated to 15 chars
-    expect(name).toBe("repo2/cool-thin");
+    // Full name returned - display layer handles truncation
+    expect(name).toBe("repo2/cool-thing");
   });
 
   test("falls back to first pane when activePaneIndex is invalid", () => {

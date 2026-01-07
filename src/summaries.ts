@@ -26,31 +26,6 @@ function extractRepoName(workdir: string): string {
 }
 
 /**
- * Truncate a window name to fit within the max length.
- * Prefers keeping the repo name intact when possible.
- */
-function truncate(name: string, maxLength: number): string {
-  if (name.length <= maxLength) {
-    return name;
-  }
-
-  // If name contains a slash (repo/branch format), try to preserve the repo
-  const slashIndex = name.indexOf("/");
-  if (slashIndex > 0 && slashIndex < maxLength - 2) {
-    // Keep repo and truncate branch portion
-    const repo = name.slice(0, slashIndex);
-    const branch = name.slice(slashIndex + 1);
-    const remainingSpace = maxLength - repo.length - 1; // -1 for the slash
-    if (remainingSpace > 2) {
-      return `${repo}/${branch.slice(0, remainingSpace)}`;
-    }
-  }
-
-  // Simple truncation as fallback
-  return name.slice(0, maxLength);
-}
-
-/**
  * Generate a window name based on working directory and git branch.
  * Uses a heuristic approach instead of AI for stability and speed.
  *
@@ -77,7 +52,7 @@ export function getWindowName(cwd: string, branch: string | null): string {
     ? branch.substring(branch.lastIndexOf("/") + 1)
     : branch;
 
-  return truncate(`${repo}/${shortBranch}`, 15);
+  return `${repo}/${shortBranch}`;
 }
 
 /**
