@@ -75,6 +75,42 @@ export function getWindows(): TmuxWindow[] {
 }
 
 /**
+ * Extract repository name from a git remote URL.
+ * Handles various URL formats:
+ * - git@github.com:org/repo.git -> "repo"
+ * - https://github.com/org/repo.git -> "repo"
+ * - https://github.com/org/repo -> "repo"
+ * - /path/to/local/repo -> "repo"
+ */
+export function extractRepoNameFromUrl(url: string): string | null {
+  // Remove .git suffix if present
+  let cleanUrl = url.endsWith(".git") ? url.slice(0, -4) : url;
+
+  // Find the last path segment
+  // For SSH URLs like git@github.com:org/repo, the path starts after ':'
+  // For HTTPS URLs like https://github.com/org/repo, the path starts after the domain
+  // For local paths like /path/to/repo, just take the last segment
+
+  // First handle SSH format (git@host:path)
+  const colonIndex = cleanUrl.indexOf(":");
+  if (colonIndex > 0 && !cleanUrl.startsWith("http")) {
+    // SSH format: extract path after the colon
+    const path = cleanUrl.slice(colonIndex + 1);
+    const lastSlash = path.lastIndexOf("/");
+    return lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
+  }
+
+  // For HTTPS or local paths, take the last segment after /
+  const lastSlash = cleanUrl.lastIndexOf("/");
+  if (lastSlash >= 0) {
+    return cleanUrl.slice(lastSlash + 1);
+  }
+
+  // Fallback: return the whole thing if no separator found
+  return cleanUrl || null;
+}
+
+/**
  * Parse SSH host from a pane command like "ssh -t bongo cmux --remote"
  * Returns null if not an SSH command.
  */
@@ -195,25 +231,28 @@ async function getPaneContext(windowTarget: string, paneIndex: number): Promise<
   let gitRepoName: string | null = null;
   if (workdir) {
     try {
-      // Get branch and repo name in parallel
-      const [branchResult, repoResult] = await Promise.all([
+      // Get branch and remote URL in parallel
+      const [branchResult, remoteResult] = await Promise.all([
         execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`),
-        // Use git-common-dir to get the main repo path (works for both regular repos and worktrees)
-        execAsync(`git -C '${workdir}' rev-parse --path-format=absolute --git-common-dir 2>/dev/null`),
+        // Get remote origin URL to extract repo name (works correctly for worktrees)
+        execAsync(`git -C '${workdir}' remote get-url origin 2>/dev/null`),
       ]);
       const branch = branchResult.stdout.trim();
       if (branch) {
         gitBranch = branch;
       }
-      // git-common-dir returns the .git directory, so get the parent's basename
-      const gitDir = repoResult.stdout.trim();
-      if (gitDir && gitDir.endsWith("/.git")) {
-        const repoPath = gitDir.slice(0, -5); // Remove "/.git"
-        const lastSlash = repoPath.lastIndexOf("/");
-        gitRepoName = lastSlash >= 0 ? repoPath.slice(lastSlash + 1) : repoPath;
+      // Parse repo name from remote URL
+      // Handles formats like:
+      // - git@github.com:org/repo.git
+      // - https://github.com/org/repo.git
+      // - https://github.com/org/repo
+      // - /path/to/local/repo
+      const remoteUrl = remoteResult.stdout.trim();
+      if (remoteUrl) {
+        gitRepoName = extractRepoNameFromUrl(remoteUrl);
       }
     } catch {
-      // Not a git repo or git not available
+      // Not a git repo, no remote, or git not available
     }
   }
 
