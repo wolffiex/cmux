@@ -146,29 +146,26 @@ async function getPaneContext(windowTarget: string, paneIndex: number): Promise<
   let gitBranch: string | null = null;
   let gitRepoName: string | null = null;
   if (workdir) {
-    try {
-      // Get branch and remote URL in parallel
-      const [branchResult, remoteResult] = await Promise.all([
-        execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`),
-        // Get remote origin URL to extract repo name (works correctly for worktrees)
-        execAsync(`git -C '${workdir}' remote get-url origin 2>/dev/null`),
-      ]);
-      const branch = branchResult.stdout.trim();
-      if (branch) {
-        gitBranch = branch;
-      }
-      // Parse repo name from remote URL
-      // Handles formats like:
-      // - git@github.com:org/repo.git
-      // - https://github.com/org/repo.git
-      // - https://github.com/org/repo
-      // - /path/to/local/repo
-      const remoteUrl = remoteResult.stdout.trim();
-      if (remoteUrl) {
-        gitRepoName = extractRepoNameFromUrl(remoteUrl);
-      }
-    } catch {
-      // Not a git repo, no remote, or git not available
+    // Get branch and remote URL in parallel, with individual error handling
+    // so that a missing remote doesn't prevent us from getting the branch
+    const [branchResult, remoteResult] = await Promise.all([
+      execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`).catch(() => ({ stdout: "" })),
+      // Get remote origin URL to extract repo name (works correctly for worktrees)
+      execAsync(`git -C '${workdir}' remote get-url origin 2>/dev/null`).catch(() => ({ stdout: "" })),
+    ]);
+    const branch = branchResult.stdout.trim();
+    if (branch) {
+      gitBranch = branch;
+    }
+    // Parse repo name from remote URL
+    // Handles formats like:
+    // - git@github.com:org/repo.git
+    // - https://github.com/org/repo.git
+    // - https://github.com/org/repo
+    // - /path/to/local/repo
+    const remoteUrl = remoteResult.stdout.trim();
+    if (remoteUrl) {
+      gitRepoName = extractRepoNameFromUrl(remoteUrl);
     }
   }
 
