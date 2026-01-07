@@ -4,7 +4,7 @@
  */
 
 import { dirname, join, basename } from "node:path"
-import { readdirSync, statSync } from "node:fs"
+import { readdirSync } from "node:fs"
 
 // ── State ──────────────────────────────────────────────────────────────────
 

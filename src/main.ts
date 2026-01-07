@@ -1,6 +1,5 @@
 import { execSync, spawn } from "node:child_process"
-import { dirname, join, resolve } from "node:path"
-import { readdirSync, existsSync, statSync } from "node:fs"
+import { join } from "node:path"
 import { ALL_LAYOUTS, resolveLayout, type LayoutTemplate } from "./layouts"
 import { renderLayoutPreview } from "./layout-preview"
 import { getWindows, getWindowInfo, getWindowContext, type TmuxWindow } from "./tmux"
