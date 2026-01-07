@@ -163,6 +163,7 @@ export interface PaneContext {
   program: string;
   transcript: string;
   gitBranch: string | null;
+  gitRepoName: string | null;  // Actual repo name (handles worktrees correctly)
 }
 
 export interface WindowContext {
@@ -189,14 +190,27 @@ async function getPaneContext(windowTarget: string, paneIndex: number): Promise<
   const program = programResult.stdout.trim();
   const transcript = transcriptResult.stdout.trimEnd();
 
-  // Check for git branch (fails silently for non-git directories)
+  // Check for git branch and repo name (fails silently for non-git directories)
   let gitBranch: string | null = null;
+  let gitRepoName: string | null = null;
   if (workdir) {
     try {
-      const gitResult = await execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`);
-      const branch = gitResult.stdout.trim();
+      // Get branch and repo name in parallel
+      const [branchResult, repoResult] = await Promise.all([
+        execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`),
+        // Use git-common-dir to get the main repo path (works for both regular repos and worktrees)
+        execAsync(`git -C '${workdir}' rev-parse --path-format=absolute --git-common-dir 2>/dev/null`),
+      ]);
+      const branch = branchResult.stdout.trim();
       if (branch) {
         gitBranch = branch;
+      }
+      // git-common-dir returns the .git directory, so get the parent's basename
+      const gitDir = repoResult.stdout.trim();
+      if (gitDir && gitDir.endsWith("/.git")) {
+        const repoPath = gitDir.slice(0, -5); // Remove "/.git"
+        const lastSlash = repoPath.lastIndexOf("/");
+        gitRepoName = lastSlash >= 0 ? repoPath.slice(lastSlash + 1) : repoPath;
       }
     } catch {
       // Not a git repo or git not available
@@ -208,6 +222,7 @@ async function getPaneContext(windowTarget: string, paneIndex: number): Promise<
     program,
     transcript,
     gitBranch,
+    gitRepoName,
   };
 }
 

@@ -16,11 +16,12 @@ const cache = new Map<number, CachedSummary>();
 const DEFAULT_BRANCHES = ["main", "master", "develop", "dev"];
 
 /**
- * Extract repository name from a directory path.
- * If path is within a git repo, return the repo root basename.
- * Otherwise, return the basename of the path itself.
+ * Extract display name from repo name or workdir.
+ * Prefers gitRepoName if available (handles worktrees correctly),
+ * otherwise falls back to workdir basename.
  */
-function extractRepoName(workdir: string): string {
+function extractDisplayName(gitRepoName: string | null, workdir: string): string {
+  if (gitRepoName) return gitRepoName;
   if (!workdir) return "shell";
   return basename(workdir) || "shell";
 }
@@ -40,8 +41,8 @@ function extractRepoName(workdir: string): string {
  * - cwd=/code/api, branch=feature/PROJ-123-desc -> "api/PROJ-123-desc"
  * - cwd=/code/api, branch=user/alice/experiment -> "api/experiment"
  */
-export function getWindowName(cwd: string, branch: string | null): string {
-  const repo = extractRepoName(cwd);
+export function getWindowName(cwd: string, branch: string | null, gitRepoName?: string | null): string {
+  const repo = extractDisplayName(gitRepoName ?? null, cwd);
 
   if (!branch || DEFAULT_BRANCHES.includes(branch)) {
     return repo;
@@ -83,8 +84,8 @@ export function generateSummary(context: WindowContext): string {
     return context.windowName;
   }
 
-  const name = getWindowName(pane.workdir, pane.gitBranch);
-  log(`[cmux] Generated name: "${name}" from workdir="${pane.workdir}", branch="${pane.gitBranch}"`);
+  const name = getWindowName(pane.workdir, pane.gitBranch, pane.gitRepoName);
+  log(`[cmux] Generated name: "${name}" from workdir="${pane.workdir}", branch="${pane.gitBranch}", gitRepoName="${pane.gitRepoName}"`);
   return name;
 }
 
