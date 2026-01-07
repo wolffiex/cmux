@@ -5,6 +5,7 @@
 
 import { dirname, join, basename } from "node:path"
 import { readdirSync, statSync } from "node:fs"
+import { box } from "./box-chars"
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -157,11 +158,6 @@ export function handleDirPickerKey(
 }
 
 // ── Rendering ──────────────────────────────────────────────────────────────
-
-const box = {
-  tl: "┌", tr: "┐", bl: "└", br: "┘",
-  h: "─", v: "│",
-}
 
 /**
  * Render the directory picker UI to a string.
