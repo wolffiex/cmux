@@ -3,11 +3,13 @@
  */
 
 /**
- * Sanitize summary text for use as tmux window name
- * @param summary - AI-generated window name
- * @param maxLength - Maximum length (default 15)
+ * Sanitize summary text for use as tmux window name.
+ * Removes special characters that could cause issues with tmux.
+ * Display truncation is handled by the UI layer, not here.
+ * @param summary - Generated window name
+ * @param maxLength - Maximum length (default 50, generous to allow display layer to handle truncation)
  */
-export function sanitizeWindowName(summary: string, maxLength: number = 15): string {
+export function sanitizeWindowName(summary: string, maxLength: number = 50): string {
   let name = summary
     .replace(/["'`$\\]/g, "")
     .replace(/[^\x20-\x7E]/g, "")
