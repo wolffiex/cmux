@@ -4,12 +4,7 @@
 
 import type { LayoutTemplate } from "./layouts"
 
-const box = {
-  tl: "┌", tr: "┐", bl: "└", br: "┘",
-  h: "─", v: "│",
-  ltee: "├", rtee: "┤", ttee: "┬", btee: "┴",
-  cross: "┼",
-}
+import { box } from "./box-chars"
 
 interface Rect {
   x: number

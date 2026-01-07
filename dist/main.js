@@ -469,7 +469,7 @@ function resolveLayout(template, windowWidth, windowHeight) {
   });
 }
 
-// src/layout-preview.ts
+// src/box-chars.ts
 var box = {
   tl: "┌",
   tr: "┐",
@@ -481,8 +481,16 @@ var box = {
   rtee: "┤",
   ttee: "┬",
   btee: "┴",
-  cross: "┼"
+  cross: "┼",
+  dtl: "╔",
+  dtr: "╗",
+  dbl: "╚",
+  dbr: "╝",
+  dh: "═",
+  dv: "║"
 };
+
+// src/layout-preview.ts
 function toRects(template, width, height) {
   return template.panes.map((pane) => {
     const py = pane.y < 0 ? 0.7 : pane.y;
@@ -1346,14 +1354,6 @@ function handleDirPickerKey(state, key) {
   }
   return { action: "continue", state };
 }
-var box2 = {
-  tl: "┌",
-  tr: "┐",
-  bl: "└",
-  br: "┘",
-  h: "─",
-  v: "│"
-};
 function renderDirPicker(state, width, height) {
   const { input, filtered, selectedIndex } = state;
   const boxWidth = Math.min(width - 4, 40);
@@ -1361,15 +1361,15 @@ function renderDirPicker(state, width, height) {
   const boxX = Math.floor((width - boxWidth) / 2);
   const boxY = Math.floor((height - boxHeight) / 2);
   let lines = [];
-  lines.push(box2.tl + box2.h.repeat(boxWidth - 2) + box2.tr);
+  lines.push(box.tl + box.h.repeat(boxWidth - 2) + box.tr);
   const inputLabel = "> ";
   const cursor = "█";
   const maxInputLen = boxWidth - 4 - inputLabel.length - cursor.length;
   const displayInput = input.length > maxInputLen ? input.slice(-maxInputLen) : input;
   const inputLine = inputLabel + displayInput + cursor;
   const inputPadded = inputLine.padEnd(boxWidth - 2);
-  lines.push(box2.v + inputPadded + box2.v);
-  lines.push(box2.v + " ".repeat(boxWidth - 2) + box2.v);
+  lines.push(box.v + inputPadded + box.v);
+  lines.push(box.v + " ".repeat(boxWidth - 2) + box.v);
   const listHeight = boxHeight - 4;
   const visibleCount = Math.min(filtered.length, listHeight);
   let scrollOffset = 0;
@@ -1386,12 +1386,12 @@ function renderDirPicker(state, width, height) {
       const displayName = name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + "…" : name;
       const line = prefix + displayName;
       const padded = line.padEnd(boxWidth - 2);
-      lines.push(box2.v + padded + box2.v);
+      lines.push(box.v + padded + box.v);
     } else {
-      lines.push(box2.v + " ".repeat(boxWidth - 2) + box2.v);
+      lines.push(box.v + " ".repeat(boxWidth - 2) + box.v);
     }
   }
-  lines.push(box2.bl + box2.h.repeat(boxWidth - 2) + box2.br);
+  lines.push(box.bl + box.h.repeat(boxWidth - 2) + box.br);
   const ESC = "\x1B";
   const CSI = `${ESC}[`;
   const moveTo = (x, y) => `${CSI}${y + 1};${x + 1}H`;
@@ -1490,25 +1490,6 @@ var ansi = {
   inverse: `${CSI}7m`,
   white: `${CSI}97m`
 };
-var box3 = {
-  tl: "┌",
-  tr: "┐",
-  bl: "└",
-  br: "┘",
-  h: "─",
-  v: "│",
-  ltee: "├",
-  rtee: "┤",
-  ttee: "┬",
-  btee: "┴",
-  cross: "┼",
-  dtl: "╔",
-  dtr: "╗",
-  dbl: "╚",
-  dbr: "╝",
-  dh: "═",
-  dv: "║"
-};
 var superscript = ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"];
 function drawLayoutPreview(template, x, y, w, h) {
   const lines = renderLayoutPreview(template, w, h);
@@ -1604,12 +1585,12 @@ function render() {
   let row2Parts = [];
   let row3Parts = [];
   const buildBox = (lines, innerWidth, isSelected, isDim = false, windowNumber) => {
-    const tl = isSelected ? box3.dtl : box3.tl;
-    const tr = isSelected ? box3.dtr : box3.tr;
-    const bl = isSelected ? box3.dbl : box3.bl;
-    const br = isSelected ? box3.dbr : box3.br;
-    const h = isSelected ? box3.dh : box3.h;
-    const v = isSelected ? box3.dv : box3.v;
+    const tl = isSelected ? box.dtl : box.tl;
+    const tr = isSelected ? box.dtr : box.tr;
+    const bl = isSelected ? box.dbl : box.bl;
+    const br = isSelected ? box.dbr : box.br;
+    const h = isSelected ? box.dh : box.h;
+    const v = isSelected ? box.dv : box.v;
     let topBorder;
     if (windowNumber !== undefined && windowNumber >= 0 && windowNumber <= 9) {
       topBorder = tl + h.repeat(innerWidth - 1) + superscript[windowNumber] + tr;
@@ -1694,26 +1675,26 @@ function render() {
   const carouselBoxWidth = width - 4;
   const carouselStartX = 1;
   out += ansi.moveTo(carouselStartX, 0);
-  out += ansi.dim + box3.tl + box3.h.repeat(carouselBoxWidth) + box3.tr + ansi.reset;
+  out += ansi.dim + box.tl + box.h.repeat(carouselBoxWidth) + box.tr + ansi.reset;
   out += ansi.moveTo(carouselStartX, 1);
-  out += ansi.dim + box3.v + ansi.reset + " " + carouselRow0;
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow0;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 1);
-  out += ansi.dim + box3.v + ansi.reset;
+  out += ansi.dim + box.v + ansi.reset;
   out += ansi.moveTo(carouselStartX, 2);
-  out += ansi.dim + box3.v + ansi.reset + " " + carouselRow1;
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow1;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 2);
-  out += ansi.dim + box3.v + ansi.reset;
+  out += ansi.dim + box.v + ansi.reset;
   out += ansi.moveTo(carouselStartX, 3);
-  out += ansi.dim + box3.v + ansi.reset + " " + carouselRow2;
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow2;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 3);
-  out += ansi.dim + box3.v + ansi.reset;
+  out += ansi.dim + box.v + ansi.reset;
   out += ansi.moveTo(carouselStartX, 4);
-  out += ansi.dim + box3.v + ansi.reset + " " + carouselRow3;
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow3;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 4);
-  out += ansi.dim + box3.v + ansi.reset;
+  out += ansi.dim + box.v + ansi.reset;
   out += ansi.moveTo(carouselStartX, 5);
-  out += ansi.dim + box3.bl + box3.h.repeat(carouselBoxWidth) + box3.br + ansi.reset;
-  out += ansi.moveTo(0, 6) + box3.h.repeat(width);
+  out += ansi.dim + box.bl + box.h.repeat(carouselBoxWidth) + box.br + ansi.reset;
+  out += ansi.moveTo(0, 6) + box.h.repeat(width);
   const layout = ALL_LAYOUTS[state.layoutIndex];
   const previewW = Math.min(width - 4, 40);
   const previewH = Math.min(height - 11, 12);
@@ -1728,7 +1709,7 @@ function render() {
     out += ansi.inverse;
   out += ` ${counter} `;
   out += ansi.reset;
-  out += ansi.moveTo(0, height - 2) + box3.h.repeat(width);
+  out += ansi.moveTo(0, height - 2) + box.h.repeat(width);
   const hints = state.mode === "dirPicker" ? "type to filter  jk nav  ⏎ select  esc cancel" : "tab focus  hjkl nav  ⏎ apply";
   out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset;
   if (state.mode === "dirPicker" && state.dirPicker) {

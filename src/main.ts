@@ -7,6 +7,7 @@ import { generateLayoutString } from "./tmux-layout"
 import { getSummariesForWindows } from "./summaries"
 import { initLog, log } from "./logger"
 import { sanitizeWindowName, splitWindowName, truncateName } from "./utils"
+import { box } from "./box-chars"
 import {
   type DirPickerState,
   type DirPickerResult,
@@ -149,17 +150,6 @@ const ansi = {
   reset: `${CSI}0m`,
   inverse: `${CSI}7m`,
   white: `${CSI}97m`,  // Bright white foreground
-}
-
-// Box drawing
-const box = {
-  tl: "┌", tr: "┐", bl: "└", br: "┘",
-  h: "─", v: "│",
-  ltee: "├", rtee: "┤", ttee: "┬", btee: "┴",
-  cross: "┼",
-  // Double-line variants for selection
-  dtl: "╔", dtr: "╗", dbl: "╚", dbr: "╝",
-  dh: "═", dv: "║",
 }
 
 // Superscript digits for window numbering
