@@ -150,6 +150,8 @@ const ansi = {
   reset: `${CSI}0m`,
   inverse: `${CSI}7m`,
   white: `${CSI}97m`,  // Bright white foreground
+  red: `${CSI}91m`,    // Bright red foreground
+  redBg: `${CSI}41m`,  // Red background
 }
 
 // Superscript digits for window numbering
@@ -321,12 +323,14 @@ function render(): void {
   // Helper to build a box element (returns 4 rows for 2-line content)
   // Selected items use double-line borders (bright/white), non-selected use single-line (dim/gray)
   // windowNumber is optional 1-indexed number to show as superscript in top-right corner
+  // isRed renders with red styling for delete confirmation
   const buildBox = (
     lines: [string, string],  // Two content lines
     innerWidth: number,
     isSelected: boolean,
     isDim: boolean = false,
-    windowNumber?: number
+    windowNumber?: number,
+    isRed: boolean = false
   ): [string, string, string, string] => {
     // Choose border characters based on selection state
     const tl = isSelected ? box.dtl : box.tl
@@ -359,7 +363,15 @@ function render(): void {
     const middleRow1 = v + centerContent(lines[0]) + v
     const middleRow2 = v + centerContent(lines[1]) + v
 
-    if (isSelected) {
+    if (isRed) {
+      // Red styling for delete confirmation
+      return [
+        ansi.red + topBorder + ansi.reset,
+        ansi.red + middleRow1 + ansi.reset,
+        ansi.red + middleRow2 + ansi.reset,
+        ansi.red + bottomBorder + ansi.reset
+      ]
+    } else if (isSelected) {
       // Selected: bright white double-line borders
       return [
         ansi.white + topBorder + ansi.reset,
@@ -380,48 +392,50 @@ function render(): void {
     return [topBorder, middleRow1, middleRow2, bottomBorder]
   }
 
-  // [−] button (shows "Delete? ⏎" when confirming, two-line format)
-  if (state.confirmingDelete) {
-    const confirmWidth = 10  // "Delete? ⏎"
-    const [t, m1, m2, b] = buildBox(["Delete?", "⏎"], confirmWidth, true)
-    row0Parts.push(t)
-    row1Parts.push(m1)
-    row2Parts.push(m2)
-    row3Parts.push(b)
-  } else {
-    const isMinusSelected = windowFocused && state.carouselIndex === 0
-    const [minusT, minusM1, minusM2, minusB] = buildBox([" − ", ""], BUTTON_BOX_WIDTH, isMinusSelected)
-    row0Parts.push(minusT)
-    row1Parts.push(minusM1)
-    row2Parts.push(minusM2)
-    row3Parts.push(minusB)
-  }
+  // [−] button (always shows as normal button, delete confirmation appears inline in window)
+  const isMinusSelected = windowFocused && state.carouselIndex === 0
+  const [minusT, minusM1, minusM2, minusB] = buildBox([" − ", ""], BUTTON_BOX_WIDTH, isMinusSelected)
+  row0Parts.push(minusT)
+  row1Parts.push(minusM1)
+  row2Parts.push(minusM2)
+  row3Parts.push(minusB)
 
   // Window items (two lines: repo name on line 1, branch/path + indicator on line 2)
   for (let i = 0; i < state.windows.length; i++) {
     const win = state.windows[i]
     const isSelected = windowFocused && state.carouselIndex === i + 1
     const isCurrent = i === state.currentWindowIndex
-
-    const [line1, line2] = splitWindowName(win.name)
-    // Add current indicator to line 2 (or line 1 if line 2 is empty)
-    let displayLine1 = line1
-    let displayLine2 = line2
-    if (isCurrent) {
-      if (line2) {
-        displayLine2 += " ●"
-      } else {
-        displayLine1 += " ●"
-      }
-    }
+    const isConfirmingThisWindow = state.confirmingDelete && isCurrent
 
     // Pass window number for superscript (1-indexed, 1-9 only)
     const windowNum = i < 9 ? i + 1 : undefined
-    const [t, m1, m2, b] = buildBox([displayLine1, displayLine2], WINDOW_BOX_WIDTH, isSelected, false, windowNum)
-    row0Parts.push(t)
-    row1Parts.push(m1)
-    row2Parts.push(m2)
-    row3Parts.push(b)
+
+    if (isConfirmingThisWindow) {
+      // Show delete confirmation inline in this window's box
+      const [t, m1, m2, b] = buildBox(["Delete?", "[⏎] yes [esc]"], WINDOW_BOX_WIDTH, true, false, windowNum, true)
+      row0Parts.push(t)
+      row1Parts.push(m1)
+      row2Parts.push(m2)
+      row3Parts.push(b)
+    } else {
+      const [line1, line2] = splitWindowName(win.name)
+      // Add current indicator to line 2 (or line 1 if line 2 is empty)
+      let displayLine1 = line1
+      let displayLine2 = line2
+      if (isCurrent) {
+        if (line2) {
+          displayLine2 += " ●"
+        } else {
+          displayLine1 += " ●"
+        }
+      }
+
+      const [t, m1, m2, b] = buildBox([displayLine1, displayLine2], WINDOW_BOX_WIDTH, isSelected, false, windowNum)
+      row0Parts.push(t)
+      row1Parts.push(m1)
+      row2Parts.push(m2)
+      row3Parts.push(b)
+    }
   }
 
   // [+] button (two lines: "+" on first line, empty second line)
@@ -653,18 +667,17 @@ function handleMainKey(key: string): boolean {
       break
     case " ":
     case "\r": // Enter
+      // If delete confirmation is showing, Enter confirms the deletion
+      if (state.confirmingDelete) {
+        removeCurrentWindow()
+        return false // Exit UI after deletion
+      }
+
       if (state.focus === "window") {
         if (state.carouselIndex === 0) {
-          // Minus button - delete window
-          if (state.confirmingDelete) {
-            // Second Enter - actually delete and exit
-            removeCurrentWindow()
-            return false // Exit UI after deletion
-          } else {
-            // First Enter - show confirmation
-            if (state.windows.length > 1) {
-              state.confirmingDelete = true
-            }
+          // Minus button - show delete confirmation (inline in current window)
+          if (state.windows.length > 1) {
+            state.confirmingDelete = true
           }
         } else if (state.carouselIndex === maxCarouselIndex) {
           // Plus button - open directory picker
@@ -697,15 +710,14 @@ function handleMainKey(key: string): boolean {
     case "q":
       return false
     case "-":
-      // Minus key - trigger delete action (same as pressing Enter on minus button)
+      // Minus key - trigger delete confirmation (shows inline in current window)
       if (state.confirmingDelete) {
         // Second press - actually delete and exit
         removeCurrentWindow()
         return false
       } else {
-        // First press - show confirmation (if more than one window)
+        // First press - show confirmation inline in current window (if more than one window)
         if (state.windows.length > 1) {
-          state.carouselIndex = 0  // Move to minus button to show confirmation UI
           state.focus = "window"
           state.confirmingDelete = true
         }
