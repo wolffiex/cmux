@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test"
-import { sanitizeWindowName } from "../src/utils"
+import { sanitizeWindowName, splitWindowName, truncateName } from "../src/utils"
 
 /**
  * Regression tests for long window name handling.
@@ -11,23 +11,6 @@ import { sanitizeWindowName } from "../src/utils"
  *
  * The fix increased the limit to 50 chars so the display layer can properly handle truncation.
  */
-
-// Recreate the display-layer functions from main.ts for testing the full pipeline
-// These are the exact implementations from main.ts
-function truncateName(name: string): string {
-  if (name.length <= 15) return name
-  return name.slice(0, 14) + "…"
-}
-
-function splitWindowName(name: string): [string, string] {
-  const slashIndex = name.indexOf("/")
-  if (slashIndex > 0 && slashIndex < name.length - 1) {
-    const line1 = name.slice(0, slashIndex)
-    const line2 = name.slice(slashIndex + 1)
-    return [truncateName(line1), truncateName(line2)]
-  }
-  return [truncateName(name), ""]
-}
 
 describe("sanitizeWindowName", () => {
   test("preserves repo/branch format under 50 chars", () => {

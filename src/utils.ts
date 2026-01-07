@@ -3,6 +3,30 @@
  */
 
 /**
+ * Truncate a name to 15 characters with ellipsis if needed.
+ * Used by the display layer for window names.
+ */
+export function truncateName(name: string): string {
+  if (name.length <= 15) return name
+  return name.slice(0, 14) + "…"
+}
+
+/**
+ * Split window name into two lines: [repo/prefix, branch/suffix]
+ * If name has "/" - split at first "/" (repo on line 1, rest on line 2)
+ * Otherwise - put name on line 1, empty line 2
+ */
+export function splitWindowName(name: string): [string, string] {
+  const slashIndex = name.indexOf("/")
+  if (slashIndex > 0 && slashIndex < name.length - 1) {
+    const line1 = name.slice(0, slashIndex)
+    const line2 = name.slice(slashIndex + 1)
+    return [truncateName(line1), truncateName(line2)]
+  }
+  return [truncateName(name), ""]
+}
+
+/**
  * Sanitize summary text for use as tmux window name.
  * Removes special characters that could cause issues with tmux.
  * Display truncation is handled by the UI layer, not here.
