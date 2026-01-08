@@ -152,7 +152,7 @@ export function processBranchName(branch: string): string | null {
  * 3. Process branch: null if main/master, else strip everything before last /
  * 4. If branch is null, return just repo
  * 5. Combine repo/branch, if <= 15 chars return it
- * 6. Truncate branch from end with "..." to fit 15 chars
+ * 6. Truncate branch from front with "..." to fit 15 chars
  * 7. If branch budget < 4 chars, just return repo
  */
 export function generateWindowName(panePath: string, config: Map<string, string>): string {
@@ -191,8 +191,8 @@ export function generateWindowName(panePath: string, config: Map<string, string>
     return repo
   }
 
-  // Truncate branch with "..." at end
-  const truncatedBranch = branch.slice(0, branchBudget - 3) + "..."
+  // Truncate branch with "..." at front for better readability
+  const truncatedBranch = "..." + branch.slice(-(branchBudget - 3))
   return `${repo}/${truncatedBranch}`
 }
 
