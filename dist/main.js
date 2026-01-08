@@ -1,5 +1,21 @@
-// src/main.ts
-var {execSync: execSync2, spawn} = (() => ({}));
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, {
+      get: all[name],
+      enumerable: true,
+      configurable: true,
+      set: (newValue) => all[name] = () => newValue
+    });
+};
+var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined")
+    return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
 
 // node:path
 function assertPath(path) {
@@ -317,305 +333,12 @@ function parse(path) {
     ret.dir = "/";
   return ret;
 }
-var sep = "/";
-var delimiter = ":";
-var posix = ((p) => (p.posix = p, p))({ resolve, normalize, isAbsolute, join, relative, _makeLong, dirname, basename, extname, format, parse, sep, delimiter, win32: null, posix: null });
-
-// src/layouts.ts
-var MIN_ROWS = 6;
-var layouts1 = [
-  {
-    name: "full",
-    panes: [{ x: 0, y: 0, width: 1, height: 1 }]
-  }
-];
-var layouts2 = [
-  {
-    name: "50/50",
-    panes: [
-      { x: 0, y: 0, width: 0.5, height: 1 },
-      { x: 0.5, y: 0, width: 0.5, height: 1 }
-    ]
-  }
-];
-var layouts3 = [
-  {
-    name: "left + right with bottom",
-    panes: [
-      { x: 0, y: 0, width: 0.5, height: 1 },
-      { x: 0.5, y: 0, width: 0.5, height: -MIN_ROWS },
-      { x: 0.5, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS }
-    ]
-  },
-  {
-    name: "left with bottom + right",
-    panes: [
-      { x: 0, y: 0, width: 0.5, height: -MIN_ROWS },
-      { x: 0, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS },
-      { x: 0.5, y: 0, width: 0.5, height: 1 }
-    ]
-  },
-  {
-    name: "left + right stacked",
-    panes: [
-      { x: 0, y: 0, width: 0.5, height: 1 },
-      { x: 0.5, y: 0, width: 0.5, height: 0.5 },
-      { x: 0.5, y: 0.5, width: 0.5, height: 0.5 }
-    ]
-  },
-  {
-    name: "left stacked + right",
-    panes: [
-      { x: 0, y: 0, width: 0.5, height: 0.5 },
-      { x: 0, y: 0.5, width: 0.5, height: 0.5 },
-      { x: 0.5, y: 0, width: 0.5, height: 1 }
-    ]
-  }
-];
-var layouts4 = [
-  {
-    name: "both with bottom",
-    panes: [
-      { x: 0, y: 0, width: 0.5, height: -MIN_ROWS },
-      { x: 0, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS },
-      { x: 0.5, y: 0, width: 0.5, height: -MIN_ROWS },
-      { x: 0.5, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS }
-    ]
-  },
-  {
-    name: "left min + right stacked",
-    panes: [
-      { x: 0, y: 0, width: 0.5, height: -MIN_ROWS },
-      { x: 0, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS },
-      { x: 0.5, y: 0, width: 0.5, height: 0.5 },
-      { x: 0.5, y: 0.5, width: 0.5, height: 0.5 }
-    ]
-  },
-  {
-    name: "left stacked + right min",
-    panes: [
-      { x: 0, y: 0, width: 0.5, height: 0.5 },
-      { x: 0, y: 0.5, width: 0.5, height: 0.5 },
-      { x: 0.5, y: 0, width: 0.5, height: -MIN_ROWS },
-      { x: 0.5, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS }
-    ]
-  },
-  {
-    name: "both stacked",
-    panes: [
-      { x: 0, y: 0, width: 0.5, height: 0.5 },
-      { x: 0, y: 0.5, width: 0.5, height: 0.5 },
-      { x: 0.5, y: 0, width: 0.5, height: 0.5 },
-      { x: 0.5, y: 0.5, width: 0.5, height: 0.5 }
-    ]
-  }
-];
-var ALL_LAYOUTS = [
-  ...layouts1,
-  ...layouts2,
-  ...layouts3,
-  ...layouts4
-];
-function resolveLayout(template, windowWidth, windowHeight) {
-  const xPositions = [...new Set(template.panes.map((p) => p.x))].sort((a, b) => a - b);
-  const numVSeparators = xPositions.length - 1;
-  const usableWidth = windowWidth - numVSeparators;
-  const columns = new Map;
-  for (const pane of template.panes) {
-    if (!columns.has(pane.x))
-      columns.set(pane.x, []);
-    columns.get(pane.x).push(pane.y);
-  }
-  return template.panes.map((pane) => {
-    const colIndex = xPositions.indexOf(pane.x);
-    const xBase = Math.floor(pane.x * usableWidth);
-    const x = xBase + colIndex;
-    let width;
-    if (pane.x + pane.width >= 1) {
-      width = windowWidth - x;
-    } else {
-      width = Math.floor(pane.width * usableWidth);
-    }
-    const yPositionsInCol = [...new Set(template.panes.filter((p) => p.x === pane.x).map((p) => p.y))].sort((a, b) => a - b);
-    const numHSeparators = yPositionsInCol.length - 1;
-    const usableHeight = windowHeight - numHSeparators;
-    let y;
-    const rowIndex = yPositionsInCol.indexOf(pane.y);
-    if (pane.y < 0) {
-      const absRows = Math.abs(pane.y);
-      y = windowHeight - absRows;
-    } else if (pane.y <= 1) {
-      const yBase = Math.floor(pane.y * usableHeight);
-      y = yBase + rowIndex;
-    } else {
-      y = pane.y;
-    }
-    let height;
-    if (pane.height < 0 && pane.height > -1) {
-      height = Math.floor(Math.abs(pane.height) * usableHeight);
-    } else if (pane.height < 0) {
-      const reservedRows = Math.abs(pane.height);
-      height = windowHeight - reservedRows - 1;
-    } else if (pane.height <= 1) {
-      if (pane.y + pane.height >= 1) {
-        height = windowHeight - y;
-      } else {
-        height = Math.floor(pane.height * usableHeight);
-      }
-    } else {
-      height = pane.height;
-    }
-    return { x, y, width, height };
-  });
-}
-
-// src/layout-preview.ts
-var box = {
-  tl: "┌",
-  tr: "┐",
-  bl: "└",
-  br: "┘",
-  h: "─",
-  v: "│",
-  ltee: "├",
-  rtee: "┤",
-  ttee: "┬",
-  btee: "┴",
-  cross: "┼"
-};
-function toRects(template, width, height) {
-  return template.panes.map((pane) => {
-    const py = pane.y < 0 ? 0.7 : pane.y;
-    const ph = pane.height > 0 && pane.height <= 1 ? pane.height : 0.3;
-    return {
-      x: Math.floor(pane.x * width),
-      y: Math.floor(py * height),
-      w: Math.floor(pane.width * width),
-      h: Math.floor(ph * height)
-    };
-  });
-}
-function renderLayoutPreview(template, width, height) {
-  const grid = Array.from({ length: height }, () => Array.from({ length: width }, () => " "));
-  const rects = toRects(template, width, height);
-  drawBox(grid, 0, 0, width, height);
-  const xSplits = new Set;
-  const ySplits = new Set;
-  for (const rect of rects) {
-    if (rect.x > 0)
-      xSplits.add(rect.x);
-    if (rect.y > 0)
-      ySplits.add(rect.y);
-  }
-  for (const x of xSplits) {
-    if (x > 0 && x < width - 1) {
-      drawVLine(grid, x, 0, height);
-    }
-  }
-  for (const y of ySplits) {
-    if (y > 0 && y < height - 1) {
-      const panesAtY = rects.filter((r) => r.y === y);
-      for (const pane of panesAtY) {
-        drawHLine(grid, pane.x, y, pane.w);
-      }
-    }
-  }
-  fixIntersections(grid, width, height);
-  const sortedRects = [...rects].map((r, i) => ({ ...r, origIndex: i, area: r.w * r.h })).sort((a, b) => b.area - a.area);
-  sortedRects.forEach((rect, i) => {
-    const cx = rect.x + Math.floor(rect.w / 2);
-    const cy = rect.y + Math.floor(rect.h / 2);
-    if (cx > 0 && cx < width - 1 && cy > 0 && cy < height - 1) {
-      grid[cy][cx] = String(i + 1);
-    }
-  });
-  return grid.map((row) => row.join(""));
-}
-function drawBox(grid, x, y, w, h) {
-  const maxY = grid.length - 1;
-  const maxX = grid[0].length - 1;
-  if (y <= maxY && x <= maxX)
-    grid[y][x] = box.tl;
-  if (y <= maxY && x + w - 1 <= maxX)
-    grid[y][x + w - 1] = box.tr;
-  if (y + h - 1 <= maxY && x <= maxX)
-    grid[y + h - 1][x] = box.bl;
-  if (y + h - 1 <= maxY && x + w - 1 <= maxX)
-    grid[y + h - 1][x + w - 1] = box.br;
-  for (let i = x + 1;i < x + w - 1 && i <= maxX; i++) {
-    if (y <= maxY)
-      grid[y][i] = box.h;
-    if (y + h - 1 <= maxY)
-      grid[y + h - 1][i] = box.h;
-  }
-  for (let j = y + 1;j < y + h - 1 && j <= maxY; j++) {
-    if (x <= maxX)
-      grid[j][x] = box.v;
-    if (x + w - 1 <= maxX)
-      grid[j][x + w - 1] = box.v;
-  }
-}
-function drawVLine(grid, x, y, h) {
-  for (let j = y;j < y + h && j < grid.length; j++) {
-    if (x < grid[0].length) {
-      const current = grid[j][x];
-      if (current === " ") {
-        grid[j][x] = box.v;
-      }
-    }
-  }
-}
-function drawHLine(grid, x, y, w) {
-  if (y >= grid.length)
-    return;
-  for (let i = x;i < x + w && i < grid[0].length; i++) {
-    const current = grid[y][i];
-    if (current === " ") {
-      grid[y][i] = box.h;
-    }
-  }
-}
-function fixIntersections(grid, width, height) {
-  for (let y = 0;y < height; y++) {
-    for (let x = 0;x < width; x++) {
-      const c = grid[y][x];
-      if (c !== box.h && c !== box.v)
-        continue;
-      const up = y > 0 ? grid[y - 1][x] : null;
-      const down = y < height - 1 ? grid[y + 1][x] : null;
-      const left = x > 0 ? grid[y][x - 1] : null;
-      const right = x < width - 1 ? grid[y][x + 1] : null;
-      const hasUp = isVertical(up);
-      const hasDown = isVertical(down);
-      const hasLeft = isHorizontal(left);
-      const hasRight = isHorizontal(right);
-      if (hasUp && hasDown && hasLeft && hasRight) {
-        grid[y][x] = box.cross;
-      } else if (hasUp && hasDown && hasRight && !hasLeft) {
-        grid[y][x] = box.ltee;
-      } else if (hasUp && hasDown && hasLeft && !hasRight) {
-        grid[y][x] = box.rtee;
-      } else if (hasLeft && hasRight && hasDown && !hasUp) {
-        grid[y][x] = box.ttee;
-      } else if (hasLeft && hasRight && hasUp && !hasDown) {
-        grid[y][x] = box.btee;
-      }
-    }
-  }
-}
-function isVertical(c) {
-  return c === box.v || c === box.ltee || c === box.rtee || c === box.cross || c === box.tl || c === box.tr || c === box.bl || c === box.br || c === box.ttee || c === box.btee;
-}
-function isHorizontal(c) {
-  return c === box.h || c === box.ltee || c === box.rtee || c === box.cross || c === box.tl || c === box.tr || c === box.bl || c === box.br || c === box.ttee || c === box.btee;
-}
-if (false) {}
-
-// src/tmux.ts
-var {execSync, exec} = (() => ({}));
+var sep = "/", delimiter = ":", posix;
+var init_path = __esm(() => {
+  posix = ((p) => (p.posix = p, p))({ resolve, normalize, isAbsolute, join, relative, _makeLong, dirname, basename, extname, format, parse, sep, delimiter, win32: null, posix: null });
+});
 
 // node:util
-var formatRegExp = /%[sdj%]/g;
 function format2(f, ...args) {
   if (!isString(f)) {
     var objects = [f];
@@ -650,36 +373,6 @@ function format2(f, ...args) {
       str += " " + inspect(x);
   return str;
 }
-var debuglog = ((debugs = {}, debugEnvRegex = {}, debugEnv) => ((debugEnv = typeof process < "u" && false) && (debugEnv = debugEnv.replace(/[|\\{}()[\]^$+?.]/g, "\\$&").replace(/\*/g, ".*").replace(/,/g, "$|^").toUpperCase()), debugEnvRegex = new RegExp("^" + debugEnv + "$", "i"), (set) => {
-  if (set = set.toUpperCase(), !debugs[set])
-    if (debugEnvRegex.test(set))
-      debugs[set] = function(...args) {
-        console.error("%s: %s", set, pid, format2.apply(null, ...args));
-      };
-    else
-      debugs[set] = function() {};
-  return debugs[set];
-}))();
-var inspect = ((i) => (i.colors = { bold: [1, 22], italic: [3, 23], underline: [4, 24], inverse: [7, 27], white: [37, 39], grey: [90, 39], black: [30, 39], blue: [34, 39], cyan: [36, 39], green: [32, 39], magenta: [35, 39], red: [31, 39], yellow: [33, 39] }, i.styles = { special: "cyan", number: "yellow", boolean: "yellow", undefined: "grey", null: "bold", string: "green", date: "magenta", regexp: "red" }, i.custom = Symbol.for("nodejs.util.inspect.custom"), i))(function(obj, opts, ...rest) {
-  var ctx = { seen: [], stylize: stylizeNoColor };
-  if (rest.length >= 1)
-    ctx.depth = rest[0];
-  if (rest.length >= 2)
-    ctx.colors = rest[1];
-  if (isBoolean(opts))
-    ctx.showHidden = opts;
-  else if (opts)
-    _extend(ctx, opts);
-  if (isUndefined(ctx.showHidden))
-    ctx.showHidden = false;
-  if (isUndefined(ctx.depth))
-    ctx.depth = 2;
-  if (isUndefined(ctx.colors))
-    ctx.colors = false;
-  if (ctx.colors)
-    ctx.stylize = stylizeWithColor;
-  return formatValue(ctx, obj, ctx.depth);
-});
 function stylizeWithColor(str, styleType) {
   var style = inspect.styles[styleType];
   if (style)
@@ -886,39 +579,73 @@ function _extend(origin, add) {
 function hasOwnProperty(obj, prop) {
   return Object.prototype.hasOwnProperty.call(obj, prop);
 }
-var promisify = ((x) => (x.custom = Symbol.for("nodejs.util.promisify.custom"), x))(function(original) {
-  if (typeof original !== "function")
-    throw TypeError('The "original" argument must be of type Function');
-  if (kCustomPromisifiedSymbol && original[kCustomPromisifiedSymbol]) {
-    var fn = original[kCustomPromisifiedSymbol];
-    if (typeof fn !== "function")
-      throw TypeError('The "nodejs.util.promisify.custom" argument must be of type Function');
-    return Object.defineProperty(fn, kCustomPromisifiedSymbol, { value: fn, enumerable: false, writable: false, configurable: true }), fn;
-  }
-  function fn(...args) {
-    var promiseResolve, promiseReject, promise = new Promise(function(resolve2, reject) {
-      promiseResolve = resolve2, promiseReject = reject;
-    });
-    args.push(function(err, value) {
-      if (err)
-        promiseReject(err);
+var formatRegExp, debuglog, inspect, promisify;
+var init_util = __esm(() => {
+  formatRegExp = /%[sdj%]/g;
+  debuglog = ((debugs = {}, debugEnvRegex = {}, debugEnv) => ((debugEnv = typeof process < "u" && false) && (debugEnv = debugEnv.replace(/[|\\{}()[\]^$+?.]/g, "\\$&").replace(/\*/g, ".*").replace(/,/g, "$|^").toUpperCase()), debugEnvRegex = new RegExp("^" + debugEnv + "$", "i"), (set) => {
+    if (set = set.toUpperCase(), !debugs[set])
+      if (debugEnvRegex.test(set))
+        debugs[set] = function(...args) {
+          console.error("%s: %s", set, pid, format2.apply(null, ...args));
+        };
       else
-        promiseResolve(value);
-    });
-    try {
-      original.apply(this, args);
-    } catch (err) {
-      promiseReject(err);
+        debugs[set] = function() {};
+    return debugs[set];
+  }))();
+  inspect = ((i) => (i.colors = { bold: [1, 22], italic: [3, 23], underline: [4, 24], inverse: [7, 27], white: [37, 39], grey: [90, 39], black: [30, 39], blue: [34, 39], cyan: [36, 39], green: [32, 39], magenta: [35, 39], red: [31, 39], yellow: [33, 39] }, i.styles = { special: "cyan", number: "yellow", boolean: "yellow", undefined: "grey", null: "bold", string: "green", date: "magenta", regexp: "red" }, i.custom = Symbol.for("nodejs.util.inspect.custom"), i))(function(obj, opts, ...rest) {
+    var ctx = { seen: [], stylize: stylizeNoColor };
+    if (rest.length >= 1)
+      ctx.depth = rest[0];
+    if (rest.length >= 2)
+      ctx.colors = rest[1];
+    if (isBoolean(opts))
+      ctx.showHidden = opts;
+    else if (opts)
+      _extend(ctx, opts);
+    if (isUndefined(ctx.showHidden))
+      ctx.showHidden = false;
+    if (isUndefined(ctx.depth))
+      ctx.depth = 2;
+    if (isUndefined(ctx.colors))
+      ctx.colors = false;
+    if (ctx.colors)
+      ctx.stylize = stylizeWithColor;
+    return formatValue(ctx, obj, ctx.depth);
+  });
+  promisify = ((x) => (x.custom = Symbol.for("nodejs.util.promisify.custom"), x))(function(original) {
+    if (typeof original !== "function")
+      throw TypeError('The "original" argument must be of type Function');
+    if (kCustomPromisifiedSymbol && original[kCustomPromisifiedSymbol]) {
+      var fn = original[kCustomPromisifiedSymbol];
+      if (typeof fn !== "function")
+        throw TypeError('The "nodejs.util.promisify.custom" argument must be of type Function');
+      return Object.defineProperty(fn, kCustomPromisifiedSymbol, { value: fn, enumerable: false, writable: false, configurable: true }), fn;
     }
-    return promise;
-  }
-  if (Object.setPrototypeOf(fn, Object.getPrototypeOf(original)), kCustomPromisifiedSymbol)
-    Object.defineProperty(fn, kCustomPromisifiedSymbol, { value: fn, enumerable: false, writable: false, configurable: true });
-  return Object.defineProperties(fn, Object.getOwnPropertyDescriptors(original));
+    function fn(...args) {
+      var promiseResolve, promiseReject, promise = new Promise(function(resolve2, reject) {
+        promiseResolve = resolve2, promiseReject = reject;
+      });
+      args.push(function(err, value) {
+        if (err)
+          promiseReject(err);
+        else
+          promiseResolve(value);
+      });
+      try {
+        original.apply(this, args);
+      } catch (err) {
+        promiseReject(err);
+      }
+      return promise;
+    }
+    if (Object.setPrototypeOf(fn, Object.getPrototypeOf(original)), kCustomPromisifiedSymbol)
+      Object.defineProperty(fn, kCustomPromisifiedSymbol, { value: fn, enumerable: false, writable: false, configurable: true });
+    return Object.defineProperties(fn, Object.getOwnPropertyDescriptors(original));
+  });
 });
 
 // src/tmux.ts
-var execAsync = promisify(exec);
+var {execSync, exec} = (() => ({}));
 function getWindowInfo() {
   const format3 = "#{window_width}:#{window_height}:#{pane_id}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_title}";
   const output = execSync(`tmux list-panes -F '${format3}'`).toString().trim();
@@ -954,83 +681,482 @@ function getWindows() {
     };
   });
 }
-function extractRepoNameFromUrl(url) {
-  let cleanUrl = url.endsWith(".git") ? url.slice(0, -4) : url;
-  const colonIndex = cleanUrl.indexOf(":");
-  if (colonIndex > 0 && !cleanUrl.startsWith("http")) {
-    const path = cleanUrl.slice(colonIndex + 1);
-    const lastSlash2 = path.lastIndexOf("/");
-    return lastSlash2 >= 0 ? path.slice(lastSlash2 + 1) : path;
-  }
-  const lastSlash = cleanUrl.lastIndexOf("/");
-  if (lastSlash >= 0) {
-    return cleanUrl.slice(lastSlash + 1);
-  }
-  return cleanUrl || null;
-}
-async function getPaneContext(windowTarget, paneIndex) {
-  const target = `${windowTarget}.${paneIndex}`;
-  const [workdirResult, programResult, transcriptResult] = await Promise.all([
-    execAsync(`tmux display-message -p -t '${target}' '#{pane_current_path}'`).catch(() => ({ stdout: "" })),
-    execAsync(`tmux display-message -p -t '${target}' '#{pane_current_command}'`).catch(() => ({ stdout: "" })),
-    execAsync(`tmux capture-pane -p -t '${target}' -S -50`).catch(() => ({ stdout: "" }))
-  ]);
-  const workdir = workdirResult.stdout.trim();
-  const program = programResult.stdout.trim();
-  const transcript = transcriptResult.stdout.trimEnd();
-  let gitBranch = null;
-  let gitRepoName = null;
-  if (workdir) {
-    try {
-      const [branchResult, remoteResult] = await Promise.all([
-        execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`),
-        execAsync(`git -C '${workdir}' remote get-url origin 2>/dev/null`)
-      ]);
-      const branch = branchResult.stdout.trim();
-      if (branch) {
-        gitBranch = branch;
-      }
-      const remoteUrl = remoteResult.stdout.trim();
-      if (remoteUrl) {
-        gitRepoName = extractRepoNameFromUrl(remoteUrl);
-      }
-    } catch {}
-  }
-  return {
-    workdir,
-    program,
-    transcript,
-    gitBranch,
-    gitRepoName
-  };
-}
-async function getWindowContext(windowIndex) {
-  const windowTarget = `:${windowIndex}`;
-  const [nameResult, panesResult] = await Promise.all([
-    execAsync(`tmux display-message -p -t '${windowTarget}' '#{window_name}'`),
-    execAsync(`tmux list-panes -t '${windowTarget}' -F '#{pane_index}:#{pane_active}'`)
-  ]);
-  const windowName = nameResult.stdout.trim();
-  const paneLines = panesResult.stdout.trim().split(`
+var execAsync;
+var init_tmux = __esm(() => {
+  init_util();
+  execAsync = promisify(exec);
+});
+
+// src/logger.ts
+var {appendFileSync, writeFileSync} = (() => ({}));
+function initLog() {
+  writeFileSync(LOG_FILE, `=== cmux started ${new Date().toISOString()} ===
 `);
-  let activePaneIndex = 0;
-  const paneIndices = [];
-  for (const line of paneLines) {
-    const [indexStr, activeStr] = line.split(":");
-    const paneIndex = Number(indexStr);
-    paneIndices.push(paneIndex);
-    if (activeStr === "1") {
-      activePaneIndex = paneIndices.length - 1;
+}
+function log(...args) {
+  const msg = args.map((a) => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" ");
+  try {
+    appendFileSync(LOG_FILE, `${msg}
+`);
+  } catch (e) {}
+}
+var LOG_FILE = "/tmp/cmux.log";
+var init_logger = () => {};
+
+// src/window-naming.ts
+var exports_window_naming = {};
+__export(exports_window_naming, {
+  renameAllWindows: () => renameAllWindows,
+  processRepoName: () => processRepoName,
+  processBranchName: () => processBranchName,
+  loadRepoConfig: () => loadRepoConfig,
+  getRepoFromPath: () => getRepoFromPath,
+  getConfigPath: () => getConfigPath,
+  generateWindowName: () => generateWindowName
+});
+var {execSync: execSync2} = (() => ({}));
+function getConfigPath() {
+  const xdgConfig = process.env.XDG_CONFIG_HOME || `${process.env.HOME}/.config`;
+  return `${xdgConfig}/cmux/repos`;
+}
+function loadRepoConfig() {
+  const config = new Map;
+  try {
+    const configPath = getConfigPath();
+    const content = (()=>{throw new Error("Cannot require module "+"node:fs");})().readFileSync(configPath, "utf-8");
+    for (const line of content.split(`
+`)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#"))
+        continue;
+      const eqIndex = trimmed.indexOf("=");
+      if (eqIndex > 0) {
+        const key = trimmed.slice(0, eqIndex).trim();
+        const value = trimmed.slice(eqIndex + 1).trim();
+        if (key && value) {
+          config.set(key, value);
+        }
+      }
+    }
+  } catch {}
+  return config;
+}
+function getRepoFromPath(panePath) {
+  if (!panePath)
+    return null;
+  try {
+    const gitRoot = execSync2(`git -C '${panePath}' rev-parse --show-toplevel 2>/dev/null`).toString().trim();
+    if (!gitRoot)
+      return null;
+    const repo = basename(gitRoot);
+    let branch;
+    try {
+      branch = execSync2(`git -C '${panePath}' rev-parse --abbrev-ref HEAD 2>/dev/null`).toString().trim();
+      if (branch === "HEAD") {
+        branch = execSync2(`git -C '${panePath}' rev-parse --short HEAD 2>/dev/null`).toString().trim();
+      }
+    } catch {
+      branch = "unknown";
+    }
+    return { repo, branch };
+  } catch {
+    return null;
+  }
+}
+function processRepoName(repo, config) {
+  const alias = config.get(repo);
+  if (alias)
+    return alias;
+  if (repo.length > 10) {
+    return "..." + repo.slice(-9);
+  }
+  return repo;
+}
+function processBranchName(branch) {
+  if (!branch)
+    return null;
+  if (branch === "main" || branch === "master") {
+    return null;
+  }
+  const lastSlash = branch.lastIndexOf("/");
+  if (lastSlash >= 0) {
+    return branch.slice(lastSlash + 1);
+  }
+  return branch;
+}
+function generateWindowName(panePath, config) {
+  const MAX_LEN = 15;
+  const gitInfo = getRepoFromPath(panePath);
+  if (!gitInfo) {
+    const name = panePath ? basename(panePath) : "shell";
+    return name.length > MAX_LEN ? name.slice(0, MAX_LEN - 3) + "..." : name;
+  }
+  const repo = processRepoName(gitInfo.repo, config);
+  const branch = processBranchName(gitInfo.branch);
+  if (!branch) {
+    return repo.length > MAX_LEN ? repo.slice(0, MAX_LEN - 3) + "..." : repo;
+  }
+  const combined = `${repo}/${branch}`;
+  if (combined.length <= MAX_LEN) {
+    return combined;
+  }
+  const branchBudget = MAX_LEN - repo.length - 1;
+  if (branchBudget < 4) {
+    return repo;
+  }
+  const truncatedBranch = branch.slice(0, branchBudget - 3) + "...";
+  return `${repo}/${truncatedBranch}`;
+}
+function getActivePanePath(windowIndex) {
+  try {
+    const path = execSync2(`tmux display-message -p -t :${windowIndex} '#{pane_current_path}'`).toString().trim();
+    return path;
+  } catch {
+    return "";
+  }
+}
+function getPaneCommand(windowIndex) {
+  try {
+    const cmd = execSync2(`tmux display-message -p -t :${windowIndex} '#{pane_current_command}'`).toString().trim();
+    return cmd || "zsh";
+  } catch {
+    return "zsh";
+  }
+}
+async function renameAllWindows() {
+  const config = loadRepoConfig();
+  const windows = getWindows();
+  let renamedCount = 0;
+  for (const window of windows) {
+    const panePath = getActivePanePath(window.index);
+    let newName;
+    if (panePath) {
+      newName = generateWindowName(panePath, config);
+    } else {
+      newName = getPaneCommand(window.index);
+    }
+    if (newName && newName.length > 0) {
+      try {
+        execSync2(`tmux rename-window -t :${window.index} "${newName}"`);
+        log(`[window-naming] Renamed window ${window.index} to "${newName}"`);
+        renamedCount++;
+      } catch (e) {
+        log(`[window-naming] Failed to rename window ${window.index}:`, e);
+      }
     }
   }
-  const panes = await Promise.all(paneIndices.map((paneIndex) => getPaneContext(windowTarget, paneIndex)));
-  return {
-    windowIndex,
-    windowName,
-    panes,
-    activePaneIndex
-  };
+  return renamedCount;
 }
+var init_window_naming = __esm(() => {
+  init_path();
+  init_tmux();
+  init_logger();
+});
+
+// src/main.ts
+init_path();
+var {execSync: execSync3, spawn} = (() => ({}));
+
+// src/layouts.ts
+var MIN_ROWS = 6;
+var layouts1 = [
+  {
+    name: "full",
+    panes: [{ x: 0, y: 0, width: 1, height: 1 }]
+  }
+];
+var layouts2 = [
+  {
+    name: "50/50",
+    panes: [
+      { x: 0, y: 0, width: 0.5, height: 1 },
+      { x: 0.5, y: 0, width: 0.5, height: 1 }
+    ]
+  }
+];
+var layouts3 = [
+  {
+    name: "left + right with bottom",
+    panes: [
+      { x: 0, y: 0, width: 0.5, height: 1 },
+      { x: 0.5, y: 0, width: 0.5, height: -MIN_ROWS },
+      { x: 0.5, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS }
+    ]
+  },
+  {
+    name: "left with bottom + right",
+    panes: [
+      { x: 0, y: 0, width: 0.5, height: -MIN_ROWS },
+      { x: 0, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS },
+      { x: 0.5, y: 0, width: 0.5, height: 1 }
+    ]
+  },
+  {
+    name: "left + right stacked",
+    panes: [
+      { x: 0, y: 0, width: 0.5, height: 1 },
+      { x: 0.5, y: 0, width: 0.5, height: 0.5 },
+      { x: 0.5, y: 0.5, width: 0.5, height: 0.5 }
+    ]
+  },
+  {
+    name: "left stacked + right",
+    panes: [
+      { x: 0, y: 0, width: 0.5, height: 0.5 },
+      { x: 0, y: 0.5, width: 0.5, height: 0.5 },
+      { x: 0.5, y: 0, width: 0.5, height: 1 }
+    ]
+  }
+];
+var layouts4 = [
+  {
+    name: "both with bottom",
+    panes: [
+      { x: 0, y: 0, width: 0.5, height: -MIN_ROWS },
+      { x: 0, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS },
+      { x: 0.5, y: 0, width: 0.5, height: -MIN_ROWS },
+      { x: 0.5, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS }
+    ]
+  },
+  {
+    name: "left min + right stacked",
+    panes: [
+      { x: 0, y: 0, width: 0.5, height: -MIN_ROWS },
+      { x: 0, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS },
+      { x: 0.5, y: 0, width: 0.5, height: 0.5 },
+      { x: 0.5, y: 0.5, width: 0.5, height: 0.5 }
+    ]
+  },
+  {
+    name: "left stacked + right min",
+    panes: [
+      { x: 0, y: 0, width: 0.5, height: 0.5 },
+      { x: 0, y: 0.5, width: 0.5, height: 0.5 },
+      { x: 0.5, y: 0, width: 0.5, height: -MIN_ROWS },
+      { x: 0.5, y: -MIN_ROWS, width: 0.5, height: MIN_ROWS }
+    ]
+  },
+  {
+    name: "both stacked",
+    panes: [
+      { x: 0, y: 0, width: 0.5, height: 0.5 },
+      { x: 0, y: 0.5, width: 0.5, height: 0.5 },
+      { x: 0.5, y: 0, width: 0.5, height: 0.5 },
+      { x: 0.5, y: 0.5, width: 0.5, height: 0.5 }
+    ]
+  }
+];
+var ALL_LAYOUTS = [
+  ...layouts1,
+  ...layouts2,
+  ...layouts3,
+  ...layouts4
+];
+function resolveLayout(template, windowWidth, windowHeight) {
+  const xPositions = [...new Set(template.panes.map((p) => p.x))].sort((a, b) => a - b);
+  const numVSeparators = xPositions.length - 1;
+  const usableWidth = windowWidth - numVSeparators;
+  const columns = new Map;
+  for (const pane of template.panes) {
+    if (!columns.has(pane.x))
+      columns.set(pane.x, []);
+    columns.get(pane.x).push(pane.y);
+  }
+  return template.panes.map((pane) => {
+    const colIndex = xPositions.indexOf(pane.x);
+    const xBase = Math.floor(pane.x * usableWidth);
+    const x = xBase + colIndex;
+    let width;
+    if (pane.x + pane.width >= 1) {
+      width = windowWidth - x;
+    } else {
+      width = Math.floor(pane.width * usableWidth);
+    }
+    const yPositionsInCol = [...new Set(template.panes.filter((p) => p.x === pane.x).map((p) => p.y))].sort((a, b) => a - b);
+    const numHSeparators = yPositionsInCol.length - 1;
+    const usableHeight = windowHeight - numHSeparators;
+    let y;
+    const rowIndex = yPositionsInCol.indexOf(pane.y);
+    if (pane.y < 0) {
+      const absRows = Math.abs(pane.y);
+      y = windowHeight - absRows;
+    } else if (pane.y <= 1) {
+      const yBase = Math.floor(pane.y * usableHeight);
+      y = yBase + rowIndex;
+    } else {
+      y = pane.y;
+    }
+    let height;
+    if (pane.height < 0 && pane.height > -1) {
+      height = Math.floor(Math.abs(pane.height) * usableHeight);
+    } else if (pane.height < 0) {
+      const reservedRows = Math.abs(pane.height);
+      height = windowHeight - reservedRows - 1;
+    } else if (pane.height <= 1) {
+      if (pane.y + pane.height >= 1) {
+        height = windowHeight - y;
+      } else {
+        height = Math.floor(pane.height * usableHeight);
+      }
+    } else {
+      height = pane.height;
+    }
+    return { x, y, width, height };
+  });
+}
+
+// src/box-chars.ts
+var box = {
+  tl: "┌",
+  tr: "┐",
+  bl: "└",
+  br: "┘",
+  h: "─",
+  v: "│",
+  ltee: "├",
+  rtee: "┤",
+  ttee: "┬",
+  btee: "┴",
+  cross: "┼",
+  dtl: "╔",
+  dtr: "╗",
+  dbl: "╚",
+  dbr: "╝",
+  dh: "═",
+  dv: "║"
+};
+
+// src/layout-preview.ts
+function toRects(template, width, height) {
+  return template.panes.map((pane) => {
+    const py = pane.y < 0 ? 0.7 : pane.y;
+    const ph = pane.height > 0 && pane.height <= 1 ? pane.height : 0.3;
+    return {
+      x: Math.floor(pane.x * width),
+      y: Math.floor(py * height),
+      w: Math.floor(pane.width * width),
+      h: Math.floor(ph * height)
+    };
+  });
+}
+function renderLayoutPreview(template, width, height) {
+  const grid = Array.from({ length: height }, () => Array.from({ length: width }, () => " "));
+  const rects = toRects(template, width, height);
+  drawBox(grid, 0, 0, width, height);
+  const xSplits = new Set;
+  const ySplits = new Set;
+  for (const rect of rects) {
+    if (rect.x > 0)
+      xSplits.add(rect.x);
+    if (rect.y > 0)
+      ySplits.add(rect.y);
+  }
+  for (const x of xSplits) {
+    if (x > 0 && x < width - 1) {
+      drawVLine(grid, x, 0, height);
+    }
+  }
+  for (const y of ySplits) {
+    if (y > 0 && y < height - 1) {
+      const panesAtY = rects.filter((r) => r.y === y);
+      for (const pane of panesAtY) {
+        drawHLine(grid, pane.x, y, pane.w);
+      }
+    }
+  }
+  fixIntersections(grid, width, height);
+  const sortedRects = [...rects].map((r, i) => ({ ...r, origIndex: i, area: r.w * r.h })).sort((a, b) => b.area - a.area);
+  sortedRects.forEach((rect, i) => {
+    const cx = rect.x + Math.floor(rect.w / 2);
+    const cy = rect.y + Math.floor(rect.h / 2);
+    if (cx > 0 && cx < width - 1 && cy > 0 && cy < height - 1) {
+      grid[cy][cx] = String(i + 1);
+    }
+  });
+  return grid.map((row) => row.join(""));
+}
+function drawBox(grid, x, y, w, h) {
+  const maxY = grid.length - 1;
+  const maxX = grid[0].length - 1;
+  if (y <= maxY && x <= maxX)
+    grid[y][x] = box.tl;
+  if (y <= maxY && x + w - 1 <= maxX)
+    grid[y][x + w - 1] = box.tr;
+  if (y + h - 1 <= maxY && x <= maxX)
+    grid[y + h - 1][x] = box.bl;
+  if (y + h - 1 <= maxY && x + w - 1 <= maxX)
+    grid[y + h - 1][x + w - 1] = box.br;
+  for (let i = x + 1;i < x + w - 1 && i <= maxX; i++) {
+    if (y <= maxY)
+      grid[y][i] = box.h;
+    if (y + h - 1 <= maxY)
+      grid[y + h - 1][i] = box.h;
+  }
+  for (let j = y + 1;j < y + h - 1 && j <= maxY; j++) {
+    if (x <= maxX)
+      grid[j][x] = box.v;
+    if (x + w - 1 <= maxX)
+      grid[j][x + w - 1] = box.v;
+  }
+}
+function drawVLine(grid, x, y, h) {
+  for (let j = y;j < y + h && j < grid.length; j++) {
+    if (x < grid[0].length) {
+      const current = grid[j][x];
+      if (current === " ") {
+        grid[j][x] = box.v;
+      }
+    }
+  }
+}
+function drawHLine(grid, x, y, w) {
+  if (y >= grid.length)
+    return;
+  for (let i = x;i < x + w && i < grid[0].length; i++) {
+    const current = grid[y][i];
+    if (current === " ") {
+      grid[y][i] = box.h;
+    }
+  }
+}
+function fixIntersections(grid, width, height) {
+  for (let y = 0;y < height; y++) {
+    for (let x = 0;x < width; x++) {
+      const c = grid[y][x];
+      if (c !== box.h && c !== box.v)
+        continue;
+      const up = y > 0 ? grid[y - 1][x] : null;
+      const down = y < height - 1 ? grid[y + 1][x] : null;
+      const left = x > 0 ? grid[y][x - 1] : null;
+      const right = x < width - 1 ? grid[y][x + 1] : null;
+      const hasUp = isVertical(up);
+      const hasDown = isVertical(down);
+      const hasLeft = isHorizontal(left);
+      const hasRight = isHorizontal(right);
+      if (hasUp && hasDown && hasLeft && hasRight) {
+        grid[y][x] = box.cross;
+      } else if (hasUp && hasDown && hasRight && !hasLeft) {
+        grid[y][x] = box.ltee;
+      } else if (hasUp && hasDown && hasLeft && !hasRight) {
+        grid[y][x] = box.rtee;
+      } else if (hasLeft && hasRight && hasDown && !hasUp) {
+        grid[y][x] = box.ttee;
+      } else if (hasLeft && hasRight && hasUp && !hasDown) {
+        grid[y][x] = box.btee;
+      }
+    }
+  }
+}
+function isVertical(c) {
+  return c === box.v || c === box.ltee || c === box.rtee || c === box.cross || c === box.tl || c === box.tr || c === box.bl || c === box.br || c === box.ttee || c === box.btee;
+}
+function isHorizontal(c) {
+  return c === box.h || c === box.ltee || c === box.rtee || c === box.cross || c === box.tl || c === box.tr || c === box.bl || c === box.br || c === box.ttee || c === box.btee;
+}
+if (false) {}
+
+// src/main.ts
+init_tmux();
 
 // src/tmux-layout.ts
 function calculateChecksum(layout) {
@@ -1149,79 +1275,8 @@ function generateLayoutString(panes, windowWidth, windowHeight) {
   return `${checksum},${layout}`;
 }
 
-// src/logger.ts
-var {appendFileSync, writeFileSync} = (() => ({}));
-var LOG_FILE = "/tmp/cmux.log";
-function initLog() {
-  writeFileSync(LOG_FILE, `=== cmux started ${new Date().toISOString()} ===
-`);
-}
-function log(...args) {
-  const msg = args.map((a) => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" ");
-  try {
-    appendFileSync(LOG_FILE, `${msg}
-`);
-  } catch (e) {}
-}
-
-// src/summaries.ts
-var cache = new Map;
-var DEFAULT_BRANCHES = ["main", "master", "develop", "dev"];
-function extractDisplayName(gitRepoName, workdir) {
-  if (gitRepoName)
-    return gitRepoName;
-  if (!workdir)
-    return "shell";
-  return basename(workdir) || "shell";
-}
-function getWindowName(cwd, branch, gitRepoName) {
-  const repo = extractDisplayName(gitRepoName ?? null, cwd);
-  if (!branch || DEFAULT_BRANCHES.includes(branch)) {
-    return repo;
-  }
-  const shortBranch = branch.includes("/") ? branch.substring(branch.lastIndexOf("/") + 1) : branch;
-  return `${repo}/${shortBranch}`;
-}
-function hashContext(context) {
-  const activePaneIndex = context.activePaneIndex ?? 0;
-  const pane = context.panes[activePaneIndex] ?? context.panes[0];
-  if (!pane)
-    return "";
-  return `${pane.workdir}|${pane.gitBranch ?? ""}`;
-}
-function generateSummary(context) {
-  log("[cmux] generateSummary called for window:", context.windowIndex);
-  const activePaneIndex = context.activePaneIndex ?? 0;
-  const pane = context.panes[activePaneIndex] ?? context.panes[0];
-  if (!pane) {
-    log("[cmux] No panes found, using window name");
-    return context.windowName;
-  }
-  const name = getWindowName(pane.workdir, pane.gitBranch, pane.gitRepoName);
-  log(`[cmux] Generated name: "${name}" from workdir="${pane.workdir}", branch="${pane.gitBranch}", gitRepoName="${pane.gitRepoName}"`);
-  return name;
-}
-function getSummary(context) {
-  const currentHash = hashContext(context);
-  const cached = cache.get(context.windowIndex);
-  if (cached && cached.contextHash === currentHash) {
-    return cached.summary;
-  }
-  const summary = generateSummary(context);
-  cache.set(context.windowIndex, {
-    summary,
-    contextHash: currentHash
-  });
-  return summary;
-}
-function getSummariesForWindows(contexts) {
-  const results = new Map;
-  for (const context of contexts) {
-    const summary = getSummary(context);
-    results.set(context.windowIndex, summary);
-  }
-  return results;
-}
+// src/main.ts
+init_logger();
 
 // src/utils.ts
 function truncateName(name) {
@@ -1238,23 +1293,9 @@ function splitWindowName(name) {
   }
   return [truncateName(name), ""];
 }
-function sanitizeWindowName(summary, maxLength = 50) {
-  let name = summary.replace(/["'`$\\]/g, "").replace(/[^\x20-\x7E]/g, "").trim();
-  if (name.length <= maxLength) {
-    return name;
-  }
-  name = name.slice(0, maxLength);
-  const lastSpace = name.lastIndexOf(" ");
-  const lastHyphen = name.lastIndexOf("-");
-  const boundary = Math.max(lastSpace, lastHyphen);
-  if (boundary > 0 && boundary < name.length - 1) {
-    name = name.slice(0, boundary);
-  }
-  name = name.replace(/[-_:;,.\s]+$/, "").trim();
-  return name;
-}
 
 // src/dir-picker.ts
+init_path();
 var {readdirSync} = (() => ({}));
 function initDirPickerState(currentPath) {
   const parentPath = dirname(currentPath);
@@ -1346,14 +1387,6 @@ function handleDirPickerKey(state, key) {
   }
   return { action: "continue", state };
 }
-var box2 = {
-  tl: "┌",
-  tr: "┐",
-  bl: "└",
-  br: "┘",
-  h: "─",
-  v: "│"
-};
 function renderDirPicker(state, width, height) {
   const { input, filtered, selectedIndex } = state;
   const boxWidth = Math.min(width - 4, 40);
@@ -1361,15 +1394,15 @@ function renderDirPicker(state, width, height) {
   const boxX = Math.floor((width - boxWidth) / 2);
   const boxY = Math.floor((height - boxHeight) / 2);
   let lines = [];
-  lines.push(box2.tl + box2.h.repeat(boxWidth - 2) + box2.tr);
+  lines.push(box.tl + box.h.repeat(boxWidth - 2) + box.tr);
   const inputLabel = "> ";
   const cursor = "█";
   const maxInputLen = boxWidth - 4 - inputLabel.length - cursor.length;
   const displayInput = input.length > maxInputLen ? input.slice(-maxInputLen) : input;
   const inputLine = inputLabel + displayInput + cursor;
   const inputPadded = inputLine.padEnd(boxWidth - 2);
-  lines.push(box2.v + inputPadded + box2.v);
-  lines.push(box2.v + " ".repeat(boxWidth - 2) + box2.v);
+  lines.push(box.v + inputPadded + box.v);
+  lines.push(box.v + " ".repeat(boxWidth - 2) + box.v);
   const listHeight = boxHeight - 4;
   const visibleCount = Math.min(filtered.length, listHeight);
   let scrollOffset = 0;
@@ -1386,12 +1419,12 @@ function renderDirPicker(state, width, height) {
       const displayName = name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + "…" : name;
       const line = prefix + displayName;
       const padded = line.padEnd(boxWidth - 2);
-      lines.push(box2.v + padded + box2.v);
+      lines.push(box.v + padded + box.v);
     } else {
-      lines.push(box2.v + " ".repeat(boxWidth - 2) + box2.v);
+      lines.push(box.v + " ".repeat(boxWidth - 2) + box.v);
     }
   }
-  lines.push(box2.bl + box2.h.repeat(boxWidth - 2) + box2.br);
+  lines.push(box.bl + box.h.repeat(boxWidth - 2) + box.br);
   const ESC = "\x1B";
   const CSI = `${ESC}[`;
   const moveTo = (x, y) => `${CSI}${y + 1};${x + 1}H`;
@@ -1488,26 +1521,9 @@ var ansi = {
   dim: `${CSI}2m`,
   reset: `${CSI}0m`,
   inverse: `${CSI}7m`,
-  white: `${CSI}97m`
-};
-var box3 = {
-  tl: "┌",
-  tr: "┐",
-  bl: "└",
-  br: "┘",
-  h: "─",
-  v: "│",
-  ltee: "├",
-  rtee: "┤",
-  ttee: "┬",
-  btee: "┴",
-  cross: "┼",
-  dtl: "╔",
-  dtr: "╗",
-  dbl: "╚",
-  dbr: "╝",
-  dh: "═",
-  dv: "║"
+  white: `${CSI}97m`,
+  red: `${CSI}91m`,
+  redBg: `${CSI}41m`
 };
 var superscript = ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"];
 function drawLayoutPreview(template, x, y, w, h) {
@@ -1603,13 +1619,13 @@ function render() {
   let row1Parts = [];
   let row2Parts = [];
   let row3Parts = [];
-  const buildBox = (lines, innerWidth, isSelected, isDim = false, windowNumber) => {
-    const tl = isSelected ? box3.dtl : box3.tl;
-    const tr = isSelected ? box3.dtr : box3.tr;
-    const bl = isSelected ? box3.dbl : box3.bl;
-    const br = isSelected ? box3.dbr : box3.br;
-    const h = isSelected ? box3.dh : box3.h;
-    const v = isSelected ? box3.dv : box3.v;
+  const buildBox = (lines, innerWidth, isSelected, isDim = false, windowNumber, isRed = false) => {
+    const tl = isSelected ? box.dtl : box.tl;
+    const tr = isSelected ? box.dtr : box.tr;
+    const bl = isSelected ? box.dbl : box.bl;
+    const br = isSelected ? box.dbr : box.br;
+    const h = isSelected ? box.dh : box.h;
+    const v = isSelected ? box.dv : box.v;
     let topBorder;
     if (windowNumber !== undefined && windowNumber >= 0 && windowNumber <= 9) {
       topBorder = tl + h.repeat(innerWidth - 1) + superscript[windowNumber] + tr;
@@ -1628,7 +1644,14 @@ function render() {
     };
     const middleRow1 = v + centerContent(lines[0]) + v;
     const middleRow2 = v + centerContent(lines[1]) + v;
-    if (isSelected) {
+    if (isRed) {
+      return [
+        ansi.red + topBorder + ansi.reset,
+        ansi.red + middleRow1 + ansi.reset,
+        ansi.red + middleRow2 + ansi.reset,
+        ansi.red + bottomBorder + ansi.reset
+      ];
+    } else if (isSelected) {
       return [
         ansi.white + topBorder + ansi.reset,
         ansi.white + middleRow1 + ansi.reset,
@@ -1645,41 +1668,41 @@ function render() {
     }
     return [topBorder, middleRow1, middleRow2, bottomBorder];
   };
-  if (state.confirmingDelete) {
-    const confirmWidth = 10;
-    const [t, m1, m2, b] = buildBox(["Delete?", "⏎"], confirmWidth, true);
-    row0Parts.push(t);
-    row1Parts.push(m1);
-    row2Parts.push(m2);
-    row3Parts.push(b);
-  } else {
-    const isMinusSelected = windowFocused && state.carouselIndex === 0;
-    const [minusT, minusM1, minusM2, minusB] = buildBox([" − ", ""], BUTTON_BOX_WIDTH, isMinusSelected);
-    row0Parts.push(minusT);
-    row1Parts.push(minusM1);
-    row2Parts.push(minusM2);
-    row3Parts.push(minusB);
-  }
+  const isMinusSelected = windowFocused && state.carouselIndex === 0;
+  const [minusT, minusM1, minusM2, minusB] = buildBox([" − ", ""], BUTTON_BOX_WIDTH, isMinusSelected);
+  row0Parts.push(minusT);
+  row1Parts.push(minusM1);
+  row2Parts.push(minusM2);
+  row3Parts.push(minusB);
   for (let i = 0;i < state.windows.length; i++) {
     const win = state.windows[i];
     const isSelected = windowFocused && state.carouselIndex === i + 1;
     const isCurrent = i === state.currentWindowIndex;
-    const [line1, line2] = splitWindowName(win.name);
-    let displayLine1 = line1;
-    let displayLine2 = line2;
-    if (isCurrent) {
-      if (line2) {
-        displayLine2 += " ●";
-      } else {
-        displayLine1 += " ●";
-      }
-    }
+    const isConfirmingThisWindow = state.confirmingDelete && isCurrent;
     const windowNum = i < 9 ? i + 1 : undefined;
-    const [t, m1, m2, b] = buildBox([displayLine1, displayLine2], WINDOW_BOX_WIDTH, isSelected, false, windowNum);
-    row0Parts.push(t);
-    row1Parts.push(m1);
-    row2Parts.push(m2);
-    row3Parts.push(b);
+    if (isConfirmingThisWindow) {
+      const [t, m1, m2, b] = buildBox(["Delete?", "[⏎] yes [esc]"], WINDOW_BOX_WIDTH, true, false, windowNum, true);
+      row0Parts.push(t);
+      row1Parts.push(m1);
+      row2Parts.push(m2);
+      row3Parts.push(b);
+    } else {
+      const [line1, line2] = splitWindowName(win.name);
+      let displayLine1 = line1;
+      let displayLine2 = line2;
+      if (isCurrent) {
+        if (line2) {
+          displayLine2 += " ●";
+        } else {
+          displayLine1 += " ●";
+        }
+      }
+      const [t, m1, m2, b] = buildBox([displayLine1, displayLine2], WINDOW_BOX_WIDTH, isSelected, false, windowNum);
+      row0Parts.push(t);
+      row1Parts.push(m1);
+      row2Parts.push(m2);
+      row3Parts.push(b);
+    }
   }
   const isPlusSelected = windowFocused && state.carouselIndex === maxIndex;
   const [plusT, plusM1, plusM2, plusB] = buildBox([" + ", ""], BUTTON_BOX_WIDTH, isPlusSelected, !isPlusSelected);
@@ -1694,26 +1717,26 @@ function render() {
   const carouselBoxWidth = width - 4;
   const carouselStartX = 1;
   out += ansi.moveTo(carouselStartX, 0);
-  out += ansi.dim + box3.tl + box3.h.repeat(carouselBoxWidth) + box3.tr + ansi.reset;
+  out += ansi.dim + box.tl + box.h.repeat(carouselBoxWidth) + box.tr + ansi.reset;
   out += ansi.moveTo(carouselStartX, 1);
-  out += ansi.dim + box3.v + ansi.reset + " " + carouselRow0;
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow0;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 1);
-  out += ansi.dim + box3.v + ansi.reset;
+  out += ansi.dim + box.v + ansi.reset;
   out += ansi.moveTo(carouselStartX, 2);
-  out += ansi.dim + box3.v + ansi.reset + " " + carouselRow1;
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow1;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 2);
-  out += ansi.dim + box3.v + ansi.reset;
+  out += ansi.dim + box.v + ansi.reset;
   out += ansi.moveTo(carouselStartX, 3);
-  out += ansi.dim + box3.v + ansi.reset + " " + carouselRow2;
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow2;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 3);
-  out += ansi.dim + box3.v + ansi.reset;
+  out += ansi.dim + box.v + ansi.reset;
   out += ansi.moveTo(carouselStartX, 4);
-  out += ansi.dim + box3.v + ansi.reset + " " + carouselRow3;
+  out += ansi.dim + box.v + ansi.reset + " " + carouselRow3;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 4);
-  out += ansi.dim + box3.v + ansi.reset;
+  out += ansi.dim + box.v + ansi.reset;
   out += ansi.moveTo(carouselStartX, 5);
-  out += ansi.dim + box3.bl + box3.h.repeat(carouselBoxWidth) + box3.br + ansi.reset;
-  out += ansi.moveTo(0, 6) + box3.h.repeat(width);
+  out += ansi.dim + box.bl + box.h.repeat(carouselBoxWidth) + box.br + ansi.reset;
+  out += ansi.moveTo(0, 6) + box.h.repeat(width);
   const layout = ALL_LAYOUTS[state.layoutIndex];
   const previewW = Math.min(width - 4, 40);
   const previewH = Math.min(height - 11, 12);
@@ -1728,7 +1751,7 @@ function render() {
     out += ansi.inverse;
   out += ` ${counter} `;
   out += ansi.reset;
-  out += ansi.moveTo(0, height - 2) + box3.h.repeat(width);
+  out += ansi.moveTo(0, height - 2) + box.h.repeat(width);
   const hints = state.mode === "dirPicker" ? "type to filter  jk nav  ⏎ select  esc cancel" : "tab focus  hjkl nav  ⏎ apply";
   out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset;
   if (state.mode === "dirPicker" && state.dirPicker) {
@@ -1738,23 +1761,9 @@ function render() {
 }
 async function renameWindowsOnStartup() {
   try {
-    const windows = getWindows();
-    if (windows.length === 0)
-      return;
-    log(`[cmux] Startup rename for ${windows.length} window(s)`);
-    const contexts = await Promise.all(windows.map((w) => getWindowContext(w.index)));
-    const summaries = getSummariesForWindows(contexts);
-    for (const [windowIndex, summary] of summaries) {
-      const shortName = sanitizeWindowName(summary);
-      if (shortName.length > 0) {
-        try {
-          execSync2(`tmux rename-window -t :${windowIndex} "${shortName}"`);
-          log(`[cmux] Renamed window ${windowIndex} to "${shortName}"`);
-        } catch (e) {
-          log(`[cmux] Rename failed for window ${windowIndex}:`, e);
-        }
-      }
-    }
+    const { renameAllWindows: renameAllWindows2 } = await Promise.resolve().then(() => (init_window_naming(), exports_window_naming));
+    const count = await renameAllWindows2();
+    log(`[cmux] Startup renamed ${count} window(s)`);
     state.windows = getWindows();
     render();
   } catch (e) {
@@ -1847,15 +1856,14 @@ function handleMainKey(key) {
       break;
     case " ":
     case "\r":
+      if (state.confirmingDelete) {
+        removeCurrentWindow();
+        return false;
+      }
       if (state.focus === "window") {
         if (state.carouselIndex === 0) {
-          if (state.confirmingDelete) {
-            removeCurrentWindow();
-            return false;
-          } else {
-            if (state.windows.length > 1) {
-              state.confirmingDelete = true;
-            }
+          if (state.windows.length > 1) {
+            state.confirmingDelete = true;
           }
         } else if (state.carouselIndex === maxCarouselIndex) {
           openDirPicker();
@@ -1864,7 +1872,7 @@ function handleMainKey(key) {
           const selectedWindow = state.windows[windowIndex2];
           if (selectedWindow && windowIndex2 !== state.currentWindowIndex) {
             try {
-              execSync2(`tmux select-window -t :${selectedWindow.index}`);
+              execSync3(`tmux select-window -t :${selectedWindow.index}`);
             } catch {}
             return false;
           }
@@ -1889,7 +1897,6 @@ function handleMainKey(key) {
         return false;
       } else {
         if (state.windows.length > 1) {
-          state.carouselIndex = 0;
           state.focus = "window";
           state.confirmingDelete = true;
         }
@@ -1912,7 +1919,7 @@ function handleMainKey(key) {
       if (windowIndex < state.windows.length) {
         const selectedWindow = state.windows[windowIndex];
         try {
-          execSync2(`tmux select-window -t :${selectedWindow.index}`);
+          execSync3(`tmux select-window -t :${selectedWindow.index}`);
         } catch {}
         return false;
       }
@@ -1922,7 +1929,7 @@ function handleMainKey(key) {
 }
 function openDirPicker() {
   try {
-    const currentPath = execSync2("tmux display-message -p '#{pane_current_path}'").toString().trim();
+    const currentPath = execSync3("tmux display-message -p '#{pane_current_path}'").toString().trim();
     if (currentPath) {
       state.dirPicker = initDirPickerState(currentPath);
       state.mode = "dirPicker";
@@ -1936,11 +1943,11 @@ function openDirPicker() {
 function createNewWindowAtPath(targetPath) {
   try {
     const pathArg = `-c "${targetPath}"`;
-    execSync2(`tmux new-window ${pathArg}`);
+    execSync3(`tmux new-window ${pathArg}`);
     const layout = ALL_LAYOUTS[state.layoutIndex];
     const paneCount = layout.panes.length;
     for (let i = 1;i < paneCount; i++) {
-      execSync2(`tmux split-window ${pathArg}`);
+      execSync3(`tmux split-window ${pathArg}`);
     }
     const windowInfo = getWindowInfo();
     const resolved = resolveLayout(layout, windowInfo.width, windowInfo.height);
@@ -1949,18 +1956,18 @@ function createNewWindowAtPath(targetPath) {
       ...r
     }));
     const layoutString = generateLayoutString(panes, windowInfo.width, windowInfo.height);
-    execSync2(`tmux select-layout '${layoutString}'`);
+    execSync3(`tmux select-layout '${layoutString}'`);
   } catch (e) {}
 }
 function createNewWindow() {
   try {
-    const currentPath = execSync2("tmux display-message -p '#{pane_current_path}'").toString().trim();
+    const currentPath = execSync3("tmux display-message -p '#{pane_current_path}'").toString().trim();
     const pathArg = currentPath ? `-c "${currentPath}"` : "";
-    execSync2(`tmux new-window ${pathArg}`);
+    execSync3(`tmux new-window ${pathArg}`);
     const layout = ALL_LAYOUTS[state.layoutIndex];
     const paneCount = layout.panes.length;
     for (let i = 1;i < paneCount; i++) {
-      execSync2(`tmux split-window ${pathArg}`);
+      execSync3(`tmux split-window ${pathArg}`);
     }
     const windowInfo = getWindowInfo();
     const resolved = resolveLayout(layout, windowInfo.width, windowInfo.height);
@@ -1969,7 +1976,7 @@ function createNewWindow() {
       ...r
     }));
     const layoutString = generateLayoutString(panes, windowInfo.width, windowInfo.height);
-    execSync2(`tmux select-layout '${layoutString}'`);
+    execSync3(`tmux select-layout '${layoutString}'`);
   } catch (e) {}
 }
 function removeCurrentWindow() {
@@ -1977,28 +1984,28 @@ function removeCurrentWindow() {
     return;
   try {
     const windowToDelete = state.windows[state.currentWindowIndex];
-    execSync2(`tmux kill-window -t :${windowToDelete.index}`);
+    execSync3(`tmux kill-window -t :${windowToDelete.index}`);
   } catch (e) {}
 }
 function applyAndExit() {
   const layout = ALL_LAYOUTS[state.layoutIndex];
   const targetWindow = state.windows[state.currentWindowIndex];
   try {
-    const currentPath = execSync2("tmux display-message -p '#{pane_current_path}'").toString().trim();
+    const currentPath = execSync3("tmux display-message -p '#{pane_current_path}'").toString().trim();
     const pathArg = currentPath ? `-c "${currentPath}"` : "";
     const windowInfo = getWindowInfo();
     const paneCount = layout.panes.length;
     const currentPaneCount = windowInfo.panes.length;
     if (!targetWindow.active) {
-      execSync2(`tmux select-window -t :${targetWindow.index}`);
+      execSync3(`tmux select-window -t :${targetWindow.index}`);
     }
     if (currentPaneCount < paneCount) {
       for (let i = currentPaneCount;i < paneCount; i++) {
-        execSync2(`tmux split-window ${pathArg}`);
+        execSync3(`tmux split-window ${pathArg}`);
       }
     } else if (currentPaneCount > paneCount) {
       for (let i = currentPaneCount;i > paneCount; i--) {
-        execSync2(`tmux kill-pane`);
+        execSync3(`tmux kill-pane`);
       }
     }
     const updatedInfo = getWindowInfo();
@@ -2008,7 +2015,7 @@ function applyAndExit() {
       ...r
     }));
     const layoutString = generateLayoutString(panes, updatedInfo.width, updatedInfo.height);
-    execSync2(`tmux select-layout '${layoutString}'`);
+    execSync3(`tmux select-layout '${layoutString}'`);
   } catch (e) {}
 }
 function isInsideTmux() {
@@ -2034,9 +2041,6 @@ function startTmuxSession() {
   ];
   if (apiKey) {
     tmuxArgs.push(";", "set-environment", "-gh", "ANTHROPIC_API_KEY", apiKey);
-  }
-  if (apiKey) {
-    tmuxArgs.push(";", "run-shell", "-b", `ANTHROPIC_API_KEY='${apiKey}' bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`);
   }
   const tmux = spawn("tmux", tmuxArgs, {
     stdio: "inherit"

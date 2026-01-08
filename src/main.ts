@@ -2,11 +2,10 @@ import { execSync, spawn } from "node:child_process"
 import { join } from "node:path"
 import { ALL_LAYOUTS, resolveLayout, type LayoutTemplate } from "./layouts"
 import { renderLayoutPreview } from "./layout-preview"
-import { getWindows, getWindowInfo, getWindowContext, type TmuxWindow } from "./tmux"
+import { getWindows, getWindowInfo, type TmuxWindow } from "./tmux"
 import { generateLayoutString } from "./tmux-layout"
-import { getSummariesForWindows } from "./summaries"
 import { initLog, log } from "./logger"
-import { sanitizeWindowName, splitWindowName, truncateName } from "./utils"
+import { splitWindowName } from "./utils"
 import { box } from "./box-chars"
 import {
   type DirPickerState,
@@ -530,36 +529,14 @@ function render(): void {
 // ── Startup window rename ───────────────────────────────────────────────────
 
 /**
- * Rename all windows immediately on startup using heuristic-based names.
+ * Rename all windows on startup using 15-char heuristic.
  * Runs async so it doesn't block the initial UI render.
  */
 async function renameWindowsOnStartup(): Promise<void> {
   try {
-    const windows = getWindows()
-    if (windows.length === 0) return
-
-    log(`[cmux] Startup rename for ${windows.length} window(s)`)
-
-    // Get contexts for all windows
-    const contexts = await Promise.all(
-      windows.map(w => getWindowContext(w.index))
-    )
-
-    // Get heuristic-based names
-    const summaries = getSummariesForWindows(contexts)
-
-    // Rename windows
-    for (const [windowIndex, summary] of summaries) {
-      const shortName = sanitizeWindowName(summary)
-      if (shortName.length > 0) {
-        try {
-          execSync(`tmux rename-window -t :${windowIndex} "${shortName}"`)
-          log(`[cmux] Renamed window ${windowIndex} to "${shortName}"`)
-        } catch (e) {
-          log(`[cmux] Rename failed for window ${windowIndex}:`, e)
-        }
-      }
-    }
+    const { renameAllWindows } = await import("./window-naming")
+    const count = await renameAllWindows()
+    log(`[cmux] Startup renamed ${count} window(s)`)
 
     // Refresh window list to show updated names
     state.windows = getWindows()
@@ -924,14 +901,15 @@ function startTmuxSession(): void {
     tmuxArgs.push(";", "set-environment", "-gh", "ANTHROPIC_API_KEY", apiKey);
   }
 
-  // Start background window renamer (runs detached, outputs to /dev/null)
-  // Pass API key inline to avoid persisting it in tmux environment
-  if (apiKey) {
-    tmuxArgs.push(
-      ";",
-      "run-shell", "-b", `ANTHROPIC_API_KEY='${apiKey}' bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`
-    );
-  }
+  // Background renaming disabled - use R keybind in the UI instead.
+  // The new window-naming algorithm runs on startup and on-demand via R key,
+  // which provides better control and doesn't require background processes.
+  // if (apiKey) {
+  //   tmuxArgs.push(
+  //     ";",
+  //     "run-shell", "-b", `ANTHROPIC_API_KEY='${apiKey}' bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`
+  //   );
+  // }
 
   const tmux = spawn("tmux", tmuxArgs, {
     stdio: "inherit",
