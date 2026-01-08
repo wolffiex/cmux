@@ -107,16 +107,16 @@ export function getRepoFromPath(panePath: string): { repo: string; branch: strin
 
 /**
  * Apply config alias or truncate repo name.
- * If > 10 chars and no alias, truncates with "..." + last 9 chars.
+ * If > 10 chars and no alias, truncates with "…" + last 9 chars.
  */
 export function processRepoName(repo: string, config: Map<string, string>): string {
   // Check for config alias first
   const alias = config.get(repo)
   if (alias) return alias
 
-  // Truncate if > 10 chars: "..." + last 9 chars
+  // Truncate if > 10 chars: "…" + last 9 chars
   if (repo.length > 10) {
-    return "..." + repo.slice(-9)
+    return "…" + repo.slice(-9)
   }
 
   return repo
@@ -152,7 +152,7 @@ export function processBranchName(branch: string): string | null {
  * 3. Process branch: null if main/master, else strip everything before last /
  * 4. If branch is null, return just repo
  * 5. Combine repo/branch, if <= 15 chars return it
- * 6. Truncate branch from front with "..." to fit 15 chars
+ * 6. Truncate branch from front with "…" to fit 15 chars
  * 7. If branch budget < 4 chars, just return repo
  */
 export function generateWindowName(panePath: string, config: Map<string, string>): string {
@@ -164,7 +164,7 @@ export function generateWindowName(panePath: string, config: Map<string, string>
   if (!gitInfo) {
     // Not a git repo - use basename of path
     const name = panePath ? basename(panePath) : "shell"
-    return name.length > MAX_LEN ? name.slice(0, MAX_LEN - 3) + "..." : name
+    return name.length > MAX_LEN ? name.slice(0, MAX_LEN - 1) + "…" : name
   }
 
   const repo = processRepoName(gitInfo.repo, config)
@@ -172,7 +172,7 @@ export function generateWindowName(panePath: string, config: Map<string, string>
 
   // No branch (main/master) - just return repo
   if (!branch) {
-    return repo.length > MAX_LEN ? repo.slice(0, MAX_LEN - 3) + "..." : repo
+    return repo.length > MAX_LEN ? repo.slice(0, MAX_LEN - 1) + "…" : repo
   }
 
   // Try combined name
@@ -191,8 +191,8 @@ export function generateWindowName(panePath: string, config: Map<string, string>
     return repo
   }
 
-  // Truncate branch with "..." at front for better readability
-  const truncatedBranch = "..." + branch.slice(-(branchBudget - 3))
+  // Truncate branch with "…" at front for better readability
+  const truncatedBranch = "…" + branch.slice(-(branchBudget - 1))
   return `${repo}/${truncatedBranch}`
 }
 

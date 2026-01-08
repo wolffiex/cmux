@@ -116,12 +116,12 @@ describe("processRepoName", () => {
     expect(processRepoName("1234567890", config)).toBe("1234567890")
   })
 
-  test("truncates with ... prefix when > 10 chars", () => {
+  test("truncates with … prefix when > 10 chars", () => {
     const config = new Map<string, string>()
-    // "12345678901" is 11 chars -> "..." + last 9 = "...345678901" (12 chars)
-    expect(processRepoName("12345678901", config)).toBe("...345678901")
-    // "claude-cli-internal" is 19 chars -> "..." + last 9 = "...-internal" (12 chars)
-    expect(processRepoName("claude-cli-internal", config)).toBe("...-internal")
+    // "12345678901" is 11 chars -> "…" + last 9 = "…345678901" (10 chars)
+    expect(processRepoName("12345678901", config)).toBe("…345678901")
+    // "claude-cli-internal" is 19 chars -> "…" + last 9 = "…-internal" (10 chars)
+    expect(processRepoName("claude-cli-internal", config)).toBe("…-internal")
   })
 
   test("config alias takes precedence over truncation", () => {
@@ -174,7 +174,7 @@ describe("generateWindowName", () => {
     const longName = "/tmp/this-is-a-very-long-directory-name"
     const name = generateWindowName(longName, new Map())
     expect(name.length).toBeLessThanOrEqual(15)
-    expect(name.endsWith("...")).toBe(true)
+    expect(name.endsWith("…")).toBe(true)
   })
 
   test("enforces 15 char max", () => {
