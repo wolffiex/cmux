@@ -1,8 +1,16 @@
 #!/usr/bin/env bun
 /**
+ * DEPRECATED - Not used by default
+ *
+ * This was causing issues:
+ * - Overwrites aliased window names from ~/.config/cmux/repos
+ * - Zombie processes accumulate
+ *
+ * To run manually: bun src/background-renamer.ts
+ *
+ * ---
  * Background process that periodically renames tmux windows based on context.
  * Uses a heuristic approach: repo-name/branch-suffix for feature branches.
- * Spawned by cmux when starting a tmux session.
  */
 
 import { execSync } from "node:child_process";

@@ -17,7 +17,6 @@ import {
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf")
 const SELF_PATH = import.meta.path
-const BACKGROUND_RENAMER_PATH = join(import.meta.dir, "background-renamer.ts")
 
 // ── State ──────────────────────────────────────────────────────────────────
 type Focus = "window" | "layout"
@@ -900,16 +899,6 @@ function startTmuxSession(): void {
   if (apiKey) {
     tmuxArgs.push(";", "set-environment", "-gh", "ANTHROPIC_API_KEY", apiKey);
   }
-
-  // Background renaming disabled - use R keybind in the UI instead.
-  // The new window-naming algorithm runs on startup and on-demand via R key,
-  // which provides better control and doesn't require background processes.
-  // if (apiKey) {
-  //   tmuxArgs.push(
-  //     ";",
-  //     "run-shell", "-b", `ANTHROPIC_API_KEY='${apiKey}' bun ${BACKGROUND_RENAMER_PATH} >/dev/null 2>&1`
-  //   );
-  // }
 
   const tmux = spawn("tmux", tmuxArgs, {
     stdio: "inherit",
