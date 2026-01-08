@@ -66,7 +66,21 @@ export function getRepoFromPath(panePath: string): { repo: string; branch: strin
 
     if (!gitRoot) return null
 
-    const repo = basename(gitRoot)
+    // Get repo name - handle worktrees specially
+    // For worktrees, git-dir points to main-repo/.git/worktrees/NAME
+    // Using basename(gitRoot) would return "worktree" or similar, not the actual repo name
+    let repo: string
+    const gitDir = execSync(`git -C '${panePath}' rev-parse --git-dir 2>/dev/null`)
+      .toString()
+      .trim()
+
+    if (gitDir.includes("/worktrees/")) {
+      // Extract main repo path from git-dir (e.g., /path/to/repo/.git/worktrees/name -> /path/to/repo)
+      const mainRepoPath = gitDir.replace(/\/\.git\/worktrees\/.*$/, "")
+      repo = basename(mainRepoPath)
+    } else {
+      repo = basename(gitRoot)
+    }
 
     // Get current branch
     let branch: string
