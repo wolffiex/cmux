@@ -1,6 +1,7 @@
 /**
  * Window naming algorithm for cmux.
- * Generates concise window names based on git repo/branch with 15 char max.
+ * Generates window names based on git repo/branch.
+ * Display truncation is handled by the UI layer.
  */
 
 import { execSync } from "node:child_process"
@@ -106,19 +107,15 @@ export function getRepoFromPath(panePath: string): { repo: string; branch: strin
 }
 
 /**
- * Apply config alias or truncate repo name.
- * If > 10 chars and no alias, truncates with "…" + last 9 chars.
+ * Apply config alias if available, otherwise return repo name as-is.
+ * Display truncation is handled by the UI layer.
  */
 export function processRepoName(repo: string, config: Map<string, string>): string {
   // Check for config alias first
   const alias = config.get(repo)
   if (alias) return alias
 
-  // Truncate if > 10 chars: "…" + last 9 chars
-  if (repo.length > 10) {
-    return "…" + repo.slice(-9)
-  }
-
+  // Return repo name as-is - UI layer handles truncation
   return repo
 }
 
@@ -144,27 +141,23 @@ export function processBranchName(branch: string): string | null {
 }
 
 /**
- * Generate a window name with 15 char max.
+ * Generate a window name from git repo/branch.
+ * Display truncation is handled by the UI layer.
  *
  * Algorithm:
  * 1. Get git context from path. Not a git repo? Use basename(path)
- * 2. Process repo: config alias > truncate if >10 chars > use as-is
+ * 2. Process repo: config alias > use as-is
  * 3. Process branch: null if main/master, else strip everything before last /
  * 4. If branch is null, return just repo
- * 5. Combine repo/branch, if <= 15 chars return it
- * 6. Truncate branch from front with "…" to fit 15 chars
- * 7. If branch budget < 4 chars, just return repo
+ * 5. Return repo/branch combined
  */
 export function generateWindowName(panePath: string, config: Map<string, string>): string {
-  const MAX_LEN = 15
-
   // Get git context
   const gitInfo = getRepoFromPath(panePath)
 
   if (!gitInfo) {
     // Not a git repo - use basename of path
-    const name = panePath ? basename(panePath) : "shell"
-    return name.length > MAX_LEN ? name.slice(0, MAX_LEN - 1) + "…" : name
+    return panePath ? basename(panePath) : "shell"
   }
 
   const repo = processRepoName(gitInfo.repo, config)
@@ -172,28 +165,11 @@ export function generateWindowName(panePath: string, config: Map<string, string>
 
   // No branch (main/master) - just return repo
   if (!branch) {
-    return repo.length > MAX_LEN ? repo.slice(0, MAX_LEN - 1) + "…" : repo
-  }
-
-  // Try combined name
-  const combined = `${repo}/${branch}`
-  if (combined.length <= MAX_LEN) {
-    return combined
-  }
-
-  // Need to truncate - calculate branch budget
-  // Format: repo/branch... where branch... must fit
-  // repo + "/" + branch portion = MAX_LEN
-  const branchBudget = MAX_LEN - repo.length - 1 // 1 for "/"
-
-  // If branch budget < 4 chars, just return repo
-  if (branchBudget < 4) {
     return repo
   }
 
-  // Truncate branch with "…" at front for better readability
-  const truncatedBranch = "…" + branch.slice(-(branchBudget - 1))
-  return `${repo}/${truncatedBranch}`
+  // Return full repo/branch - UI layer handles display truncation
+  return `${repo}/${branch}`
 }
 
 /**

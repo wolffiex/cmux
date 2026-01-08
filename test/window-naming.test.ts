@@ -110,21 +110,16 @@ describe("processRepoName", () => {
     expect(processRepoName("long-repo-name", config)).toBe("short")
   })
 
-  test("returns repo name as-is when <= 10 chars", () => {
+  test("returns repo name as-is regardless of length", () => {
     const config = new Map<string, string>()
     expect(processRepoName("myrepo", config)).toBe("myrepo")
     expect(processRepoName("1234567890", config)).toBe("1234567890")
+    // No longer truncates - UI layer handles display truncation
+    expect(processRepoName("12345678901", config)).toBe("12345678901")
+    expect(processRepoName("claude-cli-internal", config)).toBe("claude-cli-internal")
   })
 
-  test("truncates with … prefix when > 10 chars", () => {
-    const config = new Map<string, string>()
-    // "12345678901" is 11 chars -> "…" + last 9 = "…345678901" (10 chars)
-    expect(processRepoName("12345678901", config)).toBe("…345678901")
-    // "claude-cli-internal" is 19 chars -> "…" + last 9 = "…-internal" (10 chars)
-    expect(processRepoName("claude-cli-internal", config)).toBe("…-internal")
-  })
-
-  test("config alias takes precedence over truncation", () => {
+  test("config alias takes precedence", () => {
     const config = new Map([["very-long-repository-name", "vlrn"]])
     expect(processRepoName("very-long-repository-name", config)).toBe("vlrn")
   })
@@ -169,22 +164,22 @@ describe("generateWindowName", () => {
     expect(name).toBe("shell")
   })
 
-  test("truncates non-git names over 15 chars", () => {
-    // Use a very long directory name (non-git)
+  test("returns full basename without truncation", () => {
+    // No longer truncates - UI layer handles display truncation
     const longName = "/tmp/this-is-a-very-long-directory-name"
     const name = generateWindowName(longName, new Map())
-    expect(name.length).toBeLessThanOrEqual(15)
-    expect(name.endsWith("…")).toBe(true)
+    expect(name).toBe("this-is-a-very-long-directory-name")
   })
 
-  test("enforces 15 char max", () => {
-    // Any generated name should be <= 15 chars
+  test("returns full name for any path length", () => {
+    // Names are no longer limited - UI layer handles truncation
     const paths = ["/tmp", "/usr/local/bin", "/home/user/very-long-path-name"]
+    const expected = ["tmp", "bin", "very-long-path-name"]
     const config = new Map<string, string>()
 
-    for (const p of paths) {
-      const name = generateWindowName(p, config)
-      expect(name.length).toBeLessThanOrEqual(15)
+    for (let i = 0; i < paths.length; i++) {
+      const name = generateWindowName(paths[i], config)
+      expect(name).toBe(expected[i])
     }
   })
 })
