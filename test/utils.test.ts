@@ -71,6 +71,9 @@ describe("splitWindowName (display layer)", () => {
     // Should have ellipsis for truncated names
     expect(line1).toContain("…")
     expect(line2).toContain("…")
+    // line1 truncates from back (repo name), line2 truncates from front (branch name)
+    expect(line1).toBe("very-long-repo…")  // back truncation
+    expect(line2).toBe("…ng-branch-name")  // front truncation - keeps meaningful suffix
   })
 
   test("handles slash at start (no split)", () => {
@@ -104,7 +107,7 @@ describe("full pipeline: sanitize -> split -> truncate", () => {
     const testCases = [
       { input: "research-apps/v2-rewrite", expectLine1: "research-apps", expectLine2: "v2-rewrite" },
       { input: "anthropic/claude-code", expectLine1: "anthropic", expectLine2: "claude-code" },
-      { input: "cmux/feature-branch-name", expectLine1: "cmux", expectLine2: "feature-branch…" },
+      { input: "cmux/feature-branch-name", expectLine1: "cmux", expectLine2: "…re-branch-name" },
       { input: "my-project/fix-bug-123", expectLine1: "my-project", expectLine2: "fix-bug-123" },
       { input: "long-repo-name/long-branch", expectLine1: "long-repo-name", expectLine2: "long-branch" },
     ]
@@ -147,9 +150,10 @@ describe("full pipeline: sanitize -> split -> truncate", () => {
     expect(line1.length).toBeGreaterThan(0)
     expect(line2.length).toBeGreaterThan(0)
 
-    // Should contain the start of each part
-    expect(line1).toMatch(/^claude-code/)
-    expect(line2).toMatch(/^feature/)
+    // line1 (repo) truncates from back, line2 (branch) truncates from front
+    // Note: sanitizeWindowName truncates at word boundary so "branch-name" is removed
+    expect(line1).toMatch(/^claude-code/)       // repo keeps start
+    expect(line2).toBe("…extremely-long")       // branch keeps end after sanitization
   })
 })
 

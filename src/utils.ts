@@ -12,6 +12,15 @@ export function truncateName(name: string): string {
 }
 
 /**
+ * Truncate from front, keeping the END (for branch names).
+ * Branch suffixes like "-truncation" are more meaningful than prefixes like "worker-".
+ */
+function truncateFromFront(name: string, maxLen = 15): string {
+  if (name.length <= maxLen) return name
+  return "…" + name.slice(-(maxLen - 1))
+}
+
+/**
  * Split window name into two lines: [repo/prefix, branch/suffix]
  * If name has "/" - split at first "/" (repo on line 1, rest on line 2)
  * Otherwise - put name on line 1, empty line 2
@@ -21,7 +30,7 @@ export function splitWindowName(name: string): [string, string] {
   if (slashIndex > 0 && slashIndex < name.length - 1) {
     const line1 = name.slice(0, slashIndex)
     const line2 = name.slice(slashIndex + 1)
-    return [truncateName(line1), truncateName(line2)]
+    return [truncateName(line1), truncateFromFront(line2)]
   }
   return [truncateName(name), ""]
 }
