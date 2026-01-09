@@ -4,6 +4,8 @@ import { ALL_LAYOUTS, resolveLayout, type LayoutTemplate } from "./layouts"
 import { renderLayoutPreview } from "./layout-preview"
 import { getWindows, getWindowInfo, type TmuxWindow } from "./tmux"
 import { generateLayoutString } from "./tmux-layout"
+import { matchPanesToSlots, type Pane, type Slot } from "./pane-matcher"
+import { computeSwaps, executeSwaps } from "./swap-orchestrator"
 import { initLog, log } from "./logger"
 import { splitWindowName } from "./utils"
 import { box } from "./box-chars"
@@ -836,40 +838,92 @@ function applyAndExit(): void {
     const currentPath = execSync("tmux display-message -p '#{pane_current_path}'").toString().trim()
     const pathArg = currentPath ? `-c "${currentPath}"` : ""
 
-    const windowInfo = getWindowInfo()
-    const paneCount = layout.panes.length
-    const currentPaneCount = windowInfo.panes.length
-
     // Switch to target window if different
     if (!targetWindow.active) {
       execSync(`tmux select-window -t :${targetWindow.index}`)
     }
 
-    // Adjust pane count
-    if (currentPaneCount < paneCount) {
-      // Need more panes - split (preserving working directory)
-      for (let i = currentPaneCount; i < paneCount; i++) {
-        execSync(`tmux split-window ${pathArg}`)
-      }
-    } else if (currentPaneCount > paneCount) {
-      // Too many panes - kill extras
-      for (let i = currentPaneCount; i > paneCount; i--) {
-        execSync(`tmux kill-pane`)
+    // 1. Get current window info
+    const windowInfo = getWindowInfo()
+    const currentPanes: Pane[] = windowInfo.panes.map(p => ({
+      id: p.id,
+      x: p.left,
+      y: p.top,
+      width: p.width,
+      height: p.height,
+    }))
+
+    // 2. Resolve target layout to absolute coordinates
+    const resolved = resolveLayout(layout, windowInfo.width, windowInfo.height)
+    const slots: Slot[] = resolved.map(r => ({
+      x: r.x,
+      y: r.y,
+      width: r.width,
+      height: r.height,
+    }))
+
+    // 3. Match panes to slots by position
+    const { matches, unmatchedSlots, unmatchedPanes } = matchPanesToSlots(currentPanes, slots)
+
+    // 4. Create new panes for unmatched slots (need more panes)
+    for (const _slotIndex of unmatchedSlots) {
+      execSync(`tmux split-window ${pathArg}`)
+    }
+
+    // 5. Compute and execute swap sequence to reorder panes
+    // Re-fetch pane info after creates to get the new pane order
+    const afterCreates = getWindowInfo()
+    const currentOrder = afterCreates.panes.map(p => p.id)
+
+    // Build desired order: for each slot (in order), which pane should be there?
+    // matched panes go to their matched slots, new panes fill unmatched slots
+    const desiredOrder: string[] = new Array(slots.length)
+
+    // Place matched panes
+    for (const match of matches) {
+      desiredOrder[match.slotIndex] = match.paneId
+    }
+
+    // Identify newly created panes (IDs not in original matches)
+    const matchedPaneIds = new Set(matches.map(m => m.paneId))
+    const newPaneIds = currentOrder.filter(id => !matchedPaneIds.has(id) && !unmatchedPanes.includes(id))
+
+    // Place new panes into unmatched slots
+    for (let i = 0; i < unmatchedSlots.length; i++) {
+      const slotIndex = unmatchedSlots[i]
+      const newPaneId = newPaneIds[i]
+      if (newPaneId) {
+        desiredOrder[slotIndex] = newPaneId
       }
     }
 
-    // Re-fetch pane info after adjustments
-    const updatedInfo = getWindowInfo()
+    // Filter out undefined slots and panes that will be killed
+    const filteredCurrentOrder = currentOrder.filter(id => !unmatchedPanes.includes(id))
+    const filteredDesiredOrder = desiredOrder.filter(id => id !== undefined)
 
-    // Resolve layout to absolute coords
-    const resolved = resolveLayout(layout, updatedInfo.width, updatedInfo.height)
+    // Execute swaps if needed
+    if (filteredCurrentOrder.length === filteredDesiredOrder.length && filteredCurrentOrder.length > 0) {
+      const swaps = computeSwaps(filteredCurrentOrder, filteredDesiredOrder)
+      if (swaps.length > 0) {
+        executeSwaps(`:${targetWindow.index}`, swaps)
+      }
+    }
+
+    // 6. Kill unmatched panes AFTER swaps (excess panes)
+    for (const paneId of unmatchedPanes) {
+      execSync(`tmux kill-pane -t '${paneId}'`)
+    }
+
+    // 7. Re-fetch pane info and apply final layout geometry
+    const finalInfo = getWindowInfo()
+    const finalResolved = resolveLayout(layout, finalInfo.width, finalInfo.height)
 
     // Generate tmux layout string
-    const panes = resolved.map((r, i) => ({
-      id: updatedInfo.panes[i]?.id || `%${i}`,
+    const finalPanes = finalResolved.map((r, i) => ({
+      id: finalInfo.panes[i]?.id || `%${i}`,
       ...r,
     }))
-    const layoutString = generateLayoutString(panes, updatedInfo.width, updatedInfo.height)
+    const layoutString = generateLayoutString(finalPanes, finalInfo.width, finalInfo.height)
 
     // Apply the layout
     execSync(`tmux select-layout '${layoutString}'`)
