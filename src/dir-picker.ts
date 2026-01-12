@@ -196,7 +196,6 @@ export function renderDirPicker(
 
   // Directory listing
   const listHeight = boxHeight - 4  // Account for borders, input, separator
-  const visibleCount = Math.min(filtered.length, listHeight)
 
   // Calculate scroll offset to keep selected item visible
   let scrollOffset = 0

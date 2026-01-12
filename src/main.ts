@@ -96,8 +96,8 @@ function initState(): State {
     currentWindowIndex,
     layoutIndex,
     carouselIndex: currentWindowIndex + 1,  // Start on current window (index 0 = minus)
-    focus: "window" as Focus,
-    mode: "main" as Mode,
+    focus: "window",
+    mode: "main",
     // Animation state (for layout)
     animating: false,
     animationDirection: null,
@@ -178,7 +178,6 @@ const ansi = {
   inverse: `${CSI}7m`,
   white: `${CSI}97m`,  // Bright white foreground
   red: `${CSI}91m`,    // Bright red foreground
-  redBg: `${CSI}41m`,  // Red background
 }
 
 // Superscript digits for window numbering
@@ -327,8 +326,9 @@ function startAnimation(direction: AnimationDirection): void {
 }
 
 // ── Window swap animation ───────────────────────────────────────────────────
+// Swap animation: 200ms total - fast enough to feel responsive, slow enough to be visible
 const WINDOW_SWAP_FRAMES = 8
-const WINDOW_SWAP_FRAME_MS = 25  // 8 frames * 25ms = 200ms total
+const WINDOW_SWAP_FRAME_MS = 25
 
 // Quadratic ease-out for smooth deceleration
 function easeOut(t: number): number {
