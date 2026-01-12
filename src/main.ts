@@ -535,17 +535,20 @@ function render(): void {
       const fromBox = windowBoxes[fromIdx]
       const toBox = windowBoxes[toIdx]
 
-      // Apply offsets by adding/removing spaces
+      // Apply offsets by adding padding only (no truncation)
       // When progress=1, boxes should be fully swapped
+      // Each box shifts within its fixed-width slot without content loss
       const applyOffset = (box: [string, string, string, string], chars: number, direction: 'left' | 'right'): [string, string, string, string] => {
         if (chars === 0) return box
         return box.map(row => {
           if (direction === 'right') {
-            // Moving right: add spaces at start, trim from end
-            return ' '.repeat(chars) + row.slice(0, -chars)
+            // Moving right: add spaces to the LEFT (pushing box right in its slot)
+            // Don't truncate - let it overflow into adjacent slot space
+            return ' '.repeat(chars) + row
           } else {
-            // Moving left: trim from start, add spaces at end
-            return row.slice(chars) + ' '.repeat(chars)
+            // Moving left: add spaces to the RIGHT (pushing box left in its slot)
+            // Don't truncate - let it overflow into adjacent slot space
+            return row + ' '.repeat(chars)
           }
         }) as [string, string, string, string]
       }
