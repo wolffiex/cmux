@@ -49,11 +49,26 @@ interface State {
   dirPicker: DirPickerState | null
 }
 
+/**
+ * Renumber windows sequentially to eliminate gaps.
+ * Uses tmux move-window -r which respects the session's base-index setting.
+ */
+function renumberWindows(): void {
+  try {
+    execSync('tmux move-window -r', { stdio: 'ignore' })
+  } catch (e) {
+    // Ignore errors (e.g., not in tmux)
+  }
+}
+
 function initState(): State {
   let windows: TmuxWindow[] = []
   let currentWindowIndex = 0
   let layoutIndex = 0
   let currentPaneCount = 1
+
+  // Renumber windows on startup to eliminate any gaps
+  renumberWindows()
 
   try {
     windows = getWindows()
@@ -335,6 +350,8 @@ function startWindowSwapAnimation(fromIndex: number, toIndex: number, direction:
       const toWindow = state.windows[toIndex]
       try {
         execSync(`tmux swap-window -d -s :${fromWindow.index} -t :${toWindow.index}`)
+        // Renumber windows to eliminate gaps after swap
+        renumberWindows()
         // Refresh window list
         state.windows = getWindows()
         // Update carousel to follow the swapped window
@@ -922,6 +939,8 @@ function removeCurrentWindow(): void {
   try {
     const windowToDelete = state.windows[state.currentWindowIndex]
     execSync(`tmux kill-window -t :${windowToDelete.index}`)
+    // Renumber windows to eliminate gaps after deletion
+    renumberWindows()
   } catch (e) {
     // Ignore errors
   }
