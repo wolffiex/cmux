@@ -32,11 +32,17 @@ interface State {
   carouselIndex: number  // 0 = minus, 1..n = windows, n+1 = plus
   focus: Focus
   mode: Mode
-  // Animation state
+  // Animation state (for layout)
   animating: boolean
   animationDirection: AnimationDirection
   animationFrame: number
   previousLayoutIndex: number
+  // Window swap animation state
+  windowSwapAnimating: boolean
+  windowSwapDirection: AnimationDirection
+  windowSwapFrame: number
+  windowSwapFromIndex: number  // Index in windows array
+  windowSwapToIndex: number    // Index in windows array
   // Delete confirmation state
   confirmingDelete: boolean
   // Directory picker state
@@ -77,11 +83,17 @@ function initState(): State {
     carouselIndex: currentWindowIndex + 1,  // Start on current window (index 0 = minus)
     focus: "window" as Focus,
     mode: "main" as Mode,
-    // Animation state
+    // Animation state (for layout)
     animating: false,
     animationDirection: null,
     animationFrame: 0,
     previousLayoutIndex: layoutIndex,
+    // Window swap animation state
+    windowSwapAnimating: false,
+    windowSwapDirection: null,
+    windowSwapFrame: 0,
+    windowSwapFromIndex: -1,
+    windowSwapToIndex: -1,
     // Delete confirmation state
     confirmingDelete: false,
     // Directory picker state
@@ -299,6 +311,50 @@ function startAnimation(direction: AnimationDirection): void {
   setTimeout(tick, ANIMATION_FRAME_MS)
 }
 
+// ── Window swap animation ───────────────────────────────────────────────────
+const WINDOW_SWAP_FRAMES = 8
+const WINDOW_SWAP_FRAME_MS = 20
+
+function startWindowSwapAnimation(fromIndex: number, toIndex: number, direction: AnimationDirection): void {
+  state.windowSwapAnimating = true
+  state.windowSwapDirection = direction
+  state.windowSwapFrame = 0
+  state.windowSwapFromIndex = fromIndex
+  state.windowSwapToIndex = toIndex
+
+  const tick = () => {
+    state.windowSwapFrame++
+
+    if (state.windowSwapFrame >= WINDOW_SWAP_FRAMES) {
+      // Animation complete - now perform the actual swap
+      state.windowSwapAnimating = false
+      state.windowSwapDirection = null
+
+      // Perform the tmux swap
+      const fromWindow = state.windows[fromIndex]
+      const toWindow = state.windows[toIndex]
+      try {
+        execSync(`tmux swap-window -d -s :${fromWindow.index} -t :${toWindow.index}`)
+        // Refresh window list
+        state.windows = getWindows()
+        // Update carousel to follow the swapped window
+        state.carouselIndex = toIndex + 1  // +1 because 0 is minus button
+        state.currentWindowIndex = toIndex
+      } catch {
+        // Ignore errors
+      }
+      render()
+      return
+    }
+
+    // Render animation frame
+    render()
+    setTimeout(tick, WINDOW_SWAP_FRAME_MS)
+  }
+
+  setTimeout(tick, WINDOW_SWAP_FRAME_MS)
+}
+
 // ── Main render ────────────────────────────────────────────────────────────
 function render(): void {
   const width = process.stdout.columns || 80
@@ -401,6 +457,9 @@ function render(): void {
   row3Parts.push(minusB)
 
   // Window items (two lines: repo name on line 1, branch/path + indicator on line 2)
+  // During swap animation, we render windows in swapped order based on animation progress
+  const windowBoxes: [string, string, string, string][] = []
+
   for (let i = 0; i < state.windows.length; i++) {
     const win = state.windows[i]
     const isSelected = windowFocused && state.carouselIndex === i + 1
@@ -412,11 +471,7 @@ function render(): void {
 
     if (isConfirmingThisWindow) {
       // Show delete confirmation inline in this window's box
-      const [t, m1, m2, b] = buildBox(["Delete?", "[⏎] yes [esc]"], WINDOW_BOX_WIDTH, true, false, windowNum, true)
-      row0Parts.push(t)
-      row1Parts.push(m1)
-      row2Parts.push(m2)
-      row3Parts.push(b)
+      windowBoxes.push(buildBox(["Delete?", "[⏎] yes [esc]"], WINDOW_BOX_WIDTH, true, false, windowNum, true))
     } else {
       const [line1, line2] = splitWindowName(win.name)
       // Add current indicator to line 2 (or line 1 if line 2 is empty)
@@ -430,12 +485,28 @@ function render(): void {
         }
       }
 
-      const [t, m1, m2, b] = buildBox([displayLine1, displayLine2], WINDOW_BOX_WIDTH, isSelected, false, windowNum)
-      row0Parts.push(t)
-      row1Parts.push(m1)
-      row2Parts.push(m2)
-      row3Parts.push(b)
+      windowBoxes.push(buildBox([displayLine1, displayLine2], WINDOW_BOX_WIDTH, isSelected, false, windowNum))
     }
+  }
+
+  // During swap animation, swap the boxes visually
+  if (state.windowSwapAnimating && state.windowSwapFromIndex >= 0 && state.windowSwapToIndex >= 0) {
+    const fromIdx = state.windowSwapFromIndex
+    const toIdx = state.windowSwapToIndex
+    if (fromIdx < windowBoxes.length && toIdx < windowBoxes.length) {
+      // Swap the boxes to show them trading places
+      const temp = windowBoxes[fromIdx]
+      windowBoxes[fromIdx] = windowBoxes[toIdx]
+      windowBoxes[toIdx] = temp
+    }
+  }
+
+  // Add window boxes to row parts
+  for (const [t, m1, m2, b] of windowBoxes) {
+    row0Parts.push(t)
+    row1Parts.push(m1)
+    row2Parts.push(m2)
+    row3Parts.push(b)
   }
 
   // [+] button (two lines: "+" on first line, empty second line)
@@ -588,11 +659,16 @@ function handleMainKey(key: string): boolean {
   else if (key === "\x1b[C") normalizedKey = "l" // Right arrow
   else if (key === "\x1b[D") normalizedKey = "h" // Left arrow
 
-  // During animation, ignore layout navigation keys but allow other actions
+  // During animation, ignore navigation keys but allow other actions
   if (state.animating && (normalizedKey === "h" || normalizedKey === "j" || normalizedKey === "k" || normalizedKey === "l")) {
     if (state.focus === "layout") {
       return true // Ignore layout nav during animation, but don't quit
     }
+  }
+
+  // During window swap animation, ignore window navigation
+  if (state.windowSwapAnimating && (normalizedKey === "h" || normalizedKey === "l" || normalizedKey === "\x1bh" || normalizedKey === "\x1bl")) {
+    return true // Ignore window nav during swap animation
   }
 
   const maxCarouselIndex = state.windows.length + 1  // 0=minus, 1..n=windows, n+1=plus
@@ -725,6 +801,28 @@ function handleMainKey(key: string): boolean {
           // Ignore errors
         }
         return false // Exit UI after switching window
+      }
+      break
+    case "\x1bh": // Alt+h - move window left
+      if (state.focus === "window" && !state.windowSwapAnimating) {
+        // Only works when on an actual window (carouselIndex 1 to windows.length)
+        const currentIdx = state.carouselIndex - 1  // Convert to window array index
+        if (currentIdx > 0 && currentIdx < state.windows.length) {
+          // Can move left - start animation
+          startWindowSwapAnimation(currentIdx, currentIdx - 1, "left")
+          return true // Animation handles render
+        }
+      }
+      break
+    case "\x1bl": // Alt+l - move window right
+      if (state.focus === "window" && !state.windowSwapAnimating) {
+        // Only works when on an actual window (carouselIndex 1 to windows.length)
+        const currentIdx = state.carouselIndex - 1  // Convert to window array index
+        if (currentIdx >= 0 && currentIdx < state.windows.length - 1) {
+          // Can move right - start animation
+          startWindowSwapAnimation(currentIdx, currentIdx + 1, "right")
+          return true // Animation handles render
+        }
       }
       break
   }
@@ -990,17 +1088,28 @@ function runUI(): void {
     while (i < input.length) {
       let key: string
 
-      // Check for escape sequences (arrow keys)
-      if (input[i] === "\x1b" && input[i + 1] === "[") {
-        const arrowChar = input[i + 2]
-        if (arrowChar === "A" || arrowChar === "B" || arrowChar === "C" || arrowChar === "D") {
-          // Pass arrow key escape sequence through as-is
-          // handleMainKey() will convert to hjkl for main mode
-          // handleDirPickerKey() expects raw sequences for dirPicker mode
-          key = input.slice(i, i + 3)
-          i += 3
+      // Check for escape sequences
+      if (input[i] === "\x1b" && i + 1 < input.length) {
+        if (input[i + 1] === "[") {
+          // Arrow key sequences: ESC [ A/B/C/D
+          const arrowChar = input[i + 2]
+          if (arrowChar === "A" || arrowChar === "B" || arrowChar === "C" || arrowChar === "D") {
+            // Pass arrow key escape sequence through as-is
+            // handleMainKey() will convert to hjkl for main mode
+            // handleDirPickerKey() expects raw sequences for dirPicker mode
+            key = input.slice(i, i + 3)
+            i += 3
+          } else {
+            // Unknown escape sequence, treat as regular escape
+            key = input[i]
+            i++
+          }
+        } else if (input[i + 1] !== "[") {
+          // Alt+key sequences: ESC followed by letter (no bracket)
+          // e.g., Alt+h = "\x1bh", Alt+l = "\x1bl"
+          key = input.slice(i, i + 2)
+          i += 2
         } else {
-          // Unknown escape sequence, treat as regular escape
           key = input[i]
           i++
         }
