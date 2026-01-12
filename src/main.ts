@@ -330,6 +330,11 @@ function startAnimation(direction: AnimationDirection): void {
 const WINDOW_SWAP_FRAMES = 8
 const WINDOW_SWAP_FRAME_MS = 25  // 8 frames * 25ms = 200ms total
 
+// Quadratic ease-out for smooth deceleration
+function easeOut(t: number): number {
+  return 1 - Math.pow(1 - t, 2)
+}
+
 function startWindowSwapAnimation(fromIndex: number, toIndex: number, direction: AnimationDirection): void {
   state.windowSwapAnimating = true
   state.windowSwapDirection = direction
@@ -506,15 +511,48 @@ function render(): void {
     }
   }
 
-  // During swap animation, swap the boxes visually
+  // During swap animation, apply smooth sliding with ease-out
   if (state.windowSwapAnimating && state.windowSwapFromIndex >= 0 && state.windowSwapToIndex >= 0) {
     const fromIdx = state.windowSwapFromIndex
     const toIdx = state.windowSwapToIndex
     if (fromIdx < windowBoxes.length && toIdx < windowBoxes.length) {
-      // Swap the boxes to show them trading places
-      const temp = windowBoxes[fromIdx]
-      windowBoxes[fromIdx] = windowBoxes[toIdx]
-      windowBoxes[toIdx] = temp
+      // Calculate animation progress with ease-out
+      const rawProgress = state.windowSwapFrame / WINDOW_SWAP_FRAMES
+      const progress = easeOut(rawProgress)
+
+      // Total width of a window box (inner + 2 borders) + 1 space gap
+      const boxTotalWidth = WINDOW_BOX_WIDTH + 2 + 1  // 20 chars
+
+      // Calculate offset in characters (how far each box has moved)
+      const offset = Math.round(progress * boxTotalWidth)
+
+      // The "from" window moves toward "to" position
+      // The "to" window moves toward "from" position
+      // For adjacent windows: from moves right (+offset), to moves left (-offset) or vice versa
+      const movingRight = toIdx > fromIdx  // from window is moving right
+
+      // Create offset versions of the boxes
+      const fromBox = windowBoxes[fromIdx]
+      const toBox = windowBoxes[toIdx]
+
+      // Apply offsets by adding/removing spaces
+      // When progress=1, boxes should be fully swapped
+      const applyOffset = (box: [string, string, string, string], chars: number, direction: 'left' | 'right'): [string, string, string, string] => {
+        if (chars === 0) return box
+        return box.map(row => {
+          if (direction === 'right') {
+            // Moving right: add spaces at start, trim from end
+            return ' '.repeat(chars) + row.slice(0, -chars)
+          } else {
+            // Moving left: trim from start, add spaces at end
+            return row.slice(chars) + ' '.repeat(chars)
+          }
+        }) as [string, string, string, string]
+      }
+
+      // Apply offsets: from moves toward to, to moves toward from
+      windowBoxes[fromIdx] = applyOffset(fromBox, offset, movingRight ? 'right' : 'left')
+      windowBoxes[toIdx] = applyOffset(toBox, offset, movingRight ? 'left' : 'right')
     }
   }
 
