@@ -511,7 +511,13 @@ function render(): void {
     }
   }
 
-  // During swap animation, apply smooth sliding with ease-out
+  // During swap animation, render the two swapping windows as a combined "swap zone"
+  // The swap zone has constant width = box1Width + gap + box2Width
+  // Both windows slide within this zone, trading positions without clipping
+  let swapZoneFromIdx = -1
+  let swapZoneToIdx = -1
+  let swapZoneRows: [string, string, string, string] | null = null
+
   if (state.windowSwapAnimating && state.windowSwapFromIndex >= 0 && state.windowSwapToIndex >= 0) {
     const fromIdx = state.windowSwapFromIndex
     const toIdx = state.windowSwapToIndex
@@ -520,51 +526,94 @@ function render(): void {
       const rawProgress = state.windowSwapFrame / WINDOW_SWAP_FRAMES
       const progress = easeOut(rawProgress)
 
-      // Total width of a window box (inner + 2 borders) + 1 space gap
-      const boxTotalWidth = WINDOW_BOX_WIDTH + 2 + 1  // 20 chars
+      // Box width = inner + 2 borders
+      const boxWidth = WINDOW_BOX_WIDTH + 2  // 19 chars
+      const gap = 1  // Gap between boxes
 
-      // Calculate offset in characters (how far each box has moved)
-      const offset = Math.round(progress * boxTotalWidth)
+      // Swap zone width = two boxes + gap between them
+      const zoneWidth = boxWidth + gap + boxWidth  // 39 chars
 
-      // The "from" window moves toward "to" position
-      // The "to" window moves toward "from" position
-      // For adjacent windows: from moves right (+offset), to moves left (-offset) or vice versa
-      const movingRight = toIdx > fromIdx  // from window is moving right
+      // Get the boxes (ensure left box comes first)
+      const leftIdx = Math.min(fromIdx, toIdx)
+      const rightIdx = Math.max(fromIdx, toIdx)
+      const leftBox = windowBoxes[leftIdx]
+      const rightBox = windowBoxes[rightIdx]
 
-      // Create offset versions of the boxes
-      const fromBox = windowBoxes[fromIdx]
-      const toBox = windowBoxes[toIdx]
+      // Determine which box is moving right (the "from" box)
+      const leftIsMovingRight = fromIdx === leftIdx
 
-      // Apply offsets by adding padding only (no truncation)
-      // When progress=1, boxes should be fully swapped
-      // Each box shifts within its fixed-width slot without content loss
-      const applyOffset = (box: [string, string, string, string], chars: number, direction: 'left' | 'right'): [string, string, string, string] => {
-        if (chars === 0) return box
-        return box.map(row => {
-          if (direction === 'right') {
-            // Moving right: add spaces to the LEFT (pushing box right in its slot)
-            // Don't truncate - let it overflow into adjacent slot space
-            return ' '.repeat(chars) + row
-          } else {
-            // Moving left: add spaces to the RIGHT (pushing box left in its slot)
-            // Don't truncate - let it overflow into adjacent slot space
-            return row + ' '.repeat(chars)
-          }
-        }) as [string, string, string, string]
+      // Calculate positions within the zone
+      // At progress 0: left box at position 0, right box at position (boxWidth + gap)
+      // At progress 1: boxes have swapped - left box at (boxWidth + gap), right box at 0
+      const leftStart = 0
+      const leftEnd = zoneWidth - boxWidth
+      const rightStart = zoneWidth - boxWidth
+      const rightEnd = 0
+
+      let leftPos: number
+      let rightPos: number
+
+      if (leftIsMovingRight) {
+        // Left box (from) moves right, right box (to) moves left
+        leftPos = Math.round(leftStart + progress * (leftEnd - leftStart))
+        rightPos = Math.round(rightStart + progress * (rightEnd - rightStart))
+      } else {
+        // Right box (from) moves left, left box (to) moves right
+        rightPos = Math.round(rightStart + progress * (rightEnd - rightStart))
+        leftPos = Math.round(leftStart + progress * (leftEnd - leftStart))
       }
 
-      // Apply offsets: from moves toward to, to moves toward from
-      windowBoxes[fromIdx] = applyOffset(fromBox, offset, movingRight ? 'right' : 'left')
-      windowBoxes[toIdx] = applyOffset(toBox, offset, movingRight ? 'left' : 'right')
+      // Render the swap zone
+      swapZoneRows = leftBox.map((row1, rowIdx) => {
+        const row2 = rightBox[rowIdx]
+
+        // Create a zone buffer filled with spaces
+        const buffer: string[] = new Array(zoneWidth).fill(' ')
+
+        // Place right box first (background if overlapping)
+        const chars2 = [...row2]
+        for (let i = 0; i < chars2.length && rightPos + i < zoneWidth; i++) {
+          if (rightPos + i >= 0) {
+            buffer[rightPos + i] = chars2[i]
+          }
+        }
+
+        // Place left box second (foreground if overlapping - this is the selected box)
+        const chars1 = [...row1]
+        for (let i = 0; i < chars1.length && leftPos + i < zoneWidth; i++) {
+          if (leftPos + i >= 0) {
+            buffer[leftPos + i] = chars1[i]
+          }
+        }
+
+        return buffer.join('')
+      }) as [string, string, string, string]
+
+      swapZoneFromIdx = leftIdx
+      swapZoneToIdx = rightIdx
     }
   }
 
   // Add window boxes to row parts
-  for (const [t, m1, m2, b] of windowBoxes) {
-    row0Parts.push(t)
-    row1Parts.push(m1)
-    row2Parts.push(m2)
-    row3Parts.push(b)
+  // If swap animation is active, replace the two swapping boxes with the swap zone
+  for (let i = 0; i < windowBoxes.length; i++) {
+    if (swapZoneRows && i === swapZoneFromIdx) {
+      // Add the swap zone in place of the first swapping box
+      row0Parts.push(swapZoneRows[0])
+      row1Parts.push(swapZoneRows[1])
+      row2Parts.push(swapZoneRows[2])
+      row3Parts.push(swapZoneRows[3])
+    } else if (swapZoneRows && i === swapZoneToIdx) {
+      // Skip the second swapping box (it's included in the swap zone)
+      continue
+    } else {
+      // Normal box
+      const [t, m1, m2, b] = windowBoxes[i]
+      row0Parts.push(t)
+      row1Parts.push(m1)
+      row2Parts.push(m2)
+      row3Parts.push(b)
+    }
   }
 
   // [+] button (two lines: "+" on first line, empty second line)
