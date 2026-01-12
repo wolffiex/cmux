@@ -563,15 +563,22 @@ function render(): void {
         leftPos = Math.round(leftStart + progress * (leftEnd - leftStart))
       }
 
+      // Helper to strip ANSI codes and get pure visual characters
+      const stripAnsi = (str: string): string => str.replace(/\x1b\[[0-9;]*m/g, '')
+
       // Render the swap zone
       swapZoneRows = leftBox.map((row1, rowIdx) => {
         const row2 = rightBox[rowIdx]
+
+        // Strip ANSI codes to get pure visual characters for buffer manipulation
+        const pureRow1 = stripAnsi(row1)
+        const pureRow2 = stripAnsi(row2)
 
         // Create a zone buffer filled with spaces
         const buffer: string[] = new Array(zoneWidth).fill(' ')
 
         // Place right box first (background if overlapping)
-        const chars2 = [...row2]
+        const chars2 = [...pureRow2]
         for (let i = 0; i < chars2.length && rightPos + i < zoneWidth; i++) {
           if (rightPos + i >= 0) {
             buffer[rightPos + i] = chars2[i]
@@ -579,14 +586,16 @@ function render(): void {
         }
 
         // Place left box second (foreground if overlapping - this is the selected box)
-        const chars1 = [...row1]
+        const chars1 = [...pureRow1]
         for (let i = 0; i < chars1.length && leftPos + i < zoneWidth; i++) {
           if (leftPos + i >= 0) {
             buffer[leftPos + i] = chars1[i]
           }
         }
 
-        return buffer.join('')
+        // Re-apply styling: selected box (left) gets white color
+        // The result has the left (selected) box overlaid on the right box
+        return ansi.white + buffer.join('') + ansi.reset
       }) as [string, string, string, string]
 
       swapZoneFromIdx = leftIdx
