@@ -328,7 +328,7 @@ function startAnimation(direction: AnimationDirection): void {
 
 // ── Window swap animation ───────────────────────────────────────────────────
 const WINDOW_SWAP_FRAMES = 8
-const WINDOW_SWAP_FRAME_MS = 20
+const WINDOW_SWAP_FRAME_MS = 25  // 8 frames * 25ms = 200ms total
 
 function startWindowSwapAnimation(fromIndex: number, toIndex: number, direction: AnimationDirection): void {
   state.windowSwapAnimating = true
