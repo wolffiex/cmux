@@ -7,20 +7,13 @@
  * fully visible (no clipping) and visually trade positions within the zone.
  */
 
+import { easeOut } from "../src/utils"
+import { box } from "../src/box-chars"
+
+// Animation constants - must match values exported from main.ts
 const WINDOW_BOX_WIDTH = 17  // Inner width for window names
 const WINDOW_SWAP_FRAMES = 8
 const BUTTON_BOX_WIDTH = 3   // Inner width for +/- buttons
-
-// Quadratic ease-out for smooth deceleration
-function easeOut(t: number): number {
-  return 1 - Math.pow(1 - t, 2)
-}
-
-// Box drawing characters
-const box = {
-  tl: "┌", tr: "┐", bl: "└", br: "┘", h: "─", v: "│",
-  dtl: "╔", dtr: "╗", dbl: "╚", dbr: "╝", dh: "═", dv: "║",
-}
 
 // Build a simple window box (4 rows)
 function buildBox(name: string, innerWidth: number, isSelected: boolean): [string, string, string, string] {

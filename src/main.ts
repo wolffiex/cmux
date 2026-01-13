@@ -7,7 +7,7 @@ import { generateLayoutString } from "./tmux-layout"
 import { matchPanesToSlots, type Pane, type Slot } from "./pane-matcher"
 import { computeSwaps, executeSwaps } from "./swap-orchestrator"
 import { initLog, log } from "./logger"
-import { splitWindowName } from "./utils"
+import { splitWindowName, stripAnsi, easeOut } from "./utils"
 import { box } from "./box-chars"
 import {
   type DirPickerState,
@@ -326,14 +326,11 @@ function startAnimation(direction: AnimationDirection): void {
   setTimeout(tick, ANIMATION_FRAME_MS)
 }
 
-// ── Window swap animation ───────────────────────────────────────────────────
-const WINDOW_SWAP_FRAMES = 8
-const WINDOW_SWAP_FRAME_MS = 25  // 8 frames * 25ms = 200ms total
-
-// Quadratic ease-out for smooth deceleration
-function easeOut(t: number): number {
-  return 1 - Math.pow(1 - t, 2)
-}
+// ── Window swap animation constants (exported for test/debug-swap-animation.ts) ─
+export const WINDOW_SWAP_FRAMES = 8
+export const WINDOW_SWAP_FRAME_MS = 25  // 8 frames * 25ms = 200ms total
+export const WINDOW_BOX_WIDTH = 17  // Inner width for window names
+export const BUTTON_BOX_WIDTH = 3   // Inner width for +/- buttons
 
 function startWindowSwapAnimation(fromIndex: number, toIndex: number, direction: AnimationDirection): void {
   state.windowSwapAnimating = true
@@ -389,8 +386,7 @@ function render(): void {
   const maxIndex = state.windows.length + 1  // 0=minus, 1..n=windows, n+1=plus
 
   // Build the 4-row carousel content (each window/button is a bordered box with 2 content lines)
-  const WINDOW_BOX_WIDTH = 17  // Inner width for window names (15 chars + 2 for padding/indicator)
-  const BUTTON_BOX_WIDTH = 3   // Inner width for +/- buttons
+  // Note: WINDOW_BOX_WIDTH and BUTTON_BOX_WIDTH are module-level constants
 
   // Build arrays for each row of the carousel content
   let row0Parts: string[] = []  // Top borders
@@ -563,10 +559,7 @@ function render(): void {
         leftPos = Math.round(leftStart + progress * (leftEnd - leftStart))
       }
 
-      // Helper to strip ANSI codes and get pure visual characters
-      const stripAnsi = (str: string): string => str.replace(/\x1b\[[0-9;]*m/g, '')
-
-      // Render the swap zone
+      // Render the swap zone (stripAnsi imported from utils.ts)
       swapZoneRows = leftBox.map((row1, rowIdx) => {
         const row2 = rightBox[rowIdx]
 

@@ -3,6 +3,24 @@
  */
 
 /**
+ * Strip ANSI escape codes from a string.
+ * @param str - String potentially containing ANSI escape codes
+ * @returns String with all ANSI escape codes removed
+ */
+export function stripAnsi(str: string): string {
+  return str.replace(/\x1b\[[0-9;]*m/g, '')
+}
+
+/**
+ * Quadratic ease-out for smooth animation deceleration.
+ * @param t - Progress value from 0 to 1
+ * @returns Eased progress value
+ */
+export function easeOut(t: number): number {
+  return 1 - Math.pow(1 - t, 2)
+}
+
+/**
  * Truncate a name to 15 characters with ellipsis if needed.
  * Used by the display layer for window names.
  */
