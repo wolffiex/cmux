@@ -15,9 +15,14 @@ bun src/main.ts
 tmux display-popup -w 80% -h 80% -E 'bun /path/to/cmux/src/main.ts'
 ```
 
+## Environment Variables
+
+- `CMUX_DEBUG=1` - Enables debug logging to `/tmp/cmux.log`
+- `CMUX_BENCHMARK=1` - Headless mode for benchmarking (exits after init)
+
 ## Architecture
 
-Single binary (`src/main.ts`) using raw ANSI for fast startup (~23ms).
+Single binary (`src/main.ts`) using raw ANSI for fast startup (~22ms).
 
 ### Files
 
