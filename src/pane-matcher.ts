@@ -67,15 +67,19 @@ export function centerDistance(pane: Pane, slot: Slot): number {
  * Strategy:
  * - If there's overlap, use overlap area as score (larger = better)
  * - If no overlap, use negative distance (closer = less negative = better)
+ * - Add a small top-bias so existing panes prefer top slots when scores are similar
+ *   (this ensures new panes appear at the bottom, not displacing existing content)
  */
-function calculateMatchScore(pane: Pane, slot: Slot): number {
+function calculateMatchScore(pane: Pane, slot: Slot, topBias: number = 0): number {
   const overlap = calculateOverlap(pane, slot);
   if (overlap > 0) {
-    return overlap;
+    // Add topBias to prefer slots with smaller Y values
+    return overlap + topBias;
   }
   // No overlap: use negative distance so closer panes score higher
   // Add a small offset to ensure all distance-based scores are negative
-  return -centerDistance(pane, slot) - 1;
+  // Also add topBias for consistency
+  return -centerDistance(pane, slot) - 1 + topBias;
 }
 
 /**
@@ -89,14 +93,25 @@ export function matchPanesToSlots(panes: Pane[], slots: Slot[]): MatchResult {
   const matchedPaneIds = new Set<string>();
   const matchedSlotIndices = new Set<number>();
 
+  // Calculate max Y to normalize top-bias (slots at top get higher bias)
+  const maxY = slots.length > 0 ? Math.max(...slots.map(s => s.y)) : 0;
+  // Top-bias is small enough not to override clear geometric matches,
+  // but large enough to break ties. Value of 0.5 means top slot gets
+  // up to 0.5 extra score points compared to bottom slot.
+  const TOP_BIAS_WEIGHT = 0.5;
+
   // Build score matrix
   const scores: Array<{ paneId: string; slotIndex: number; score: number }> = [];
   for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+    const slot = slots[slotIndex];
+    // topBias: higher for slots with smaller Y (closer to top)
+    // Normalized to range [0, TOP_BIAS_WEIGHT]
+    const topBias = maxY > 0 ? TOP_BIAS_WEIGHT * (1 - slot.y / maxY) : 0;
     for (const pane of panes) {
       scores.push({
         paneId: pane.id,
         slotIndex,
-        score: calculateMatchScore(pane, slots[slotIndex]),
+        score: calculateMatchScore(pane, slot, topBias),
       });
     }
   }

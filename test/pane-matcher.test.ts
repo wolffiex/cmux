@@ -433,10 +433,44 @@ describe("matchPanesToSlots", () => {
       const leftMatch = result.matches.find((m) => m.slotIndex === 0);
       expect(leftMatch?.paneId).toBe("%0");
 
-      // Right pane should match one of the right slots
-      const rightMatches = result.matches.filter((m) => m.slotIndex === 1 || m.slotIndex === 2);
-      expect(rightMatches).toHaveLength(1);
-      expect(rightMatches[0].paneId).toBe("%1");
+      // Right pane should match TOP-RIGHT slot (index 1), not bottom
+      // This ensures new panes appear at the bottom, preserving existing content at top
+      const rightMatch = result.matches.find((m) => m.paneId === "%1");
+      expect(rightMatch?.slotIndex).toBe(1); // top-right slot
+
+      // Bottom-right slot (index 2) should be unmatched - new pane goes there
+      expect(result.unmatchedSlots).toContain(2);
+    });
+
+    test("2 panes to 3 panes (adding bottom-left)", () => {
+      // Start: left pane + right pane
+      const panes: Pane[] = [
+        { id: "%0", x: 0, y: 0, width: 40, height: 24 },
+        { id: "%1", x: 40, y: 0, width: 40, height: 24 },
+      ];
+      // Target: left-top + left-bottom + right pane
+      const slots: Slot[] = [
+        { x: 0, y: 0, width: 40, height: 12 },
+        { x: 0, y: 12, width: 40, height: 12 },
+        { x: 40, y: 0, width: 40, height: 24 },
+      ];
+
+      const result = matchPanesToSlots(panes, slots);
+
+      expect(result.matches).toHaveLength(2);
+      expect(result.unmatchedSlots).toHaveLength(1);
+      expect(result.unmatchedPanes).toHaveLength(0);
+
+      // Left pane should match TOP-LEFT slot (index 0), not bottom
+      const leftMatch = result.matches.find((m) => m.paneId === "%0");
+      expect(leftMatch?.slotIndex).toBe(0); // top-left slot
+
+      // Right pane should match right slot
+      const rightMatch = result.matches.find((m) => m.paneId === "%1");
+      expect(rightMatch?.slotIndex).toBe(2);
+
+      // Bottom-left slot (index 1) should be unmatched - new pane goes there
+      expect(result.unmatchedSlots).toContain(1);
     });
 
     test("3 panes to 2 panes (removing bottom-right)", () => {
