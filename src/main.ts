@@ -2,7 +2,7 @@ import { execSync, spawn } from "node:child_process"
 import { join } from "node:path"
 import { ALL_LAYOUTS, resolveLayout, type LayoutTemplate } from "./layouts"
 import { renderLayoutPreview } from "./layout-preview"
-import { getWindows, getWindowInfo, type TmuxWindow } from "./tmux"
+import { getWindows, getWindowInfo, getStartupInfo, type TmuxWindow } from "./tmux"
 import { generateLayoutString } from "./tmux-layout"
 import { matchPanesToSlots, type Pane, type Slot } from "./pane-matcher"
 import { computeSwaps, executeSwaps } from "./swap-orchestrator"
@@ -65,22 +65,16 @@ function initState(): State {
   let windows: TmuxWindow[] = []
   let currentWindowIndex = 0
   let layoutIndex = 0
-  let currentPaneCount = 1
-
-  // Renumber windows on startup to eliminate any gaps
-  renumberWindows()
 
   try {
-    windows = getWindows()
+    // Single batched tmux command for startup (combines renumber + list-windows + list-panes)
+    const startupInfo = getStartupInfo()
+    windows = startupInfo.windows
     currentWindowIndex = windows.findIndex(w => w.active)
     if (currentWindowIndex < 0) currentWindowIndex = 0
 
-    // Get current pane count
-    const windowInfo = getWindowInfo()
-    currentPaneCount = windowInfo.panes.length
-
     // Find first layout with matching pane count
-    layoutIndex = ALL_LAYOUTS.findIndex(l => l.panes.length === currentPaneCount)
+    layoutIndex = ALL_LAYOUTS.findIndex(l => l.panes.length === startupInfo.currentWindowPaneCount)
     if (layoutIndex < 0) layoutIndex = 0
   } catch (e) {
     // Not in tmux - use dummy data for testing
@@ -116,7 +110,8 @@ function initState(): State {
   }
 }
 
-const state = initState()
+// State is initialized lazily in runUI() after alt-screen switch for faster visual feedback
+let state: State
 
 // ── Benchmark mode ─────────────────────────────────────────────────────────
 const BENCHMARK_MODE = !!process.env.CMUX_BENCHMARK
@@ -1179,11 +1174,17 @@ function runUI(): void {
     console.error("Not a TTY")
     process.exit(1)
   }
-  initLog()
-  log('[cmux] runUI starting')
+
+  // Switch to alt-screen immediately for instant visual feedback
   process.stdout.write(ansi.altScreen + ansi.hideCursor)
   process.stdin.setRawMode(true)
   process.stdin.resume()
+
+  // Initialize state after alt-screen switch (includes tmux queries)
+  state = initState()
+
+  initLog()
+  log('[cmux] runUI starting')
 
   render()
 

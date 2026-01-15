@@ -75,6 +75,62 @@ export function getWindows(): TmuxWindow[] {
 }
 
 /**
+ * Result of batched startup query.
+ */
+export interface StartupInfo {
+  windows: TmuxWindow[];
+  currentWindowPaneCount: number;
+}
+
+/**
+ * Get all startup info in a single tmux command.
+ * Combines: move-window -r, list-windows, and list-panes for current window.
+ * This reduces 3 subprocess spawns to 1 for faster startup.
+ */
+export function getStartupInfo(): StartupInfo {
+  // Use \n as section separator and | as field separator within sections
+  // Section 1: list-windows output (one line per window)
+  // Section 2: list-panes output for current window (just need count)
+  const windowFormat = "#{window_index}|#{window_name}|#{window_active}|#{window_bell_flag}|#{window_activity_flag}|#{pane_current_command}";
+  const paneFormat = "#{pane_id}";
+
+  // Chain commands: renumber, then output windows, then separator, then panes
+  // Using \; to chain tmux commands
+  const cmd = `tmux move-window -r \\; list-windows -F '${windowFormat}' \\; display-message -p 'SECTION_SEP' \\; list-panes -F '${paneFormat}'`;
+
+  const output = execSync(cmd).toString().trim();
+
+  // Split by the separator
+  const sections = output.split("SECTION_SEP\n");
+  const windowsSection = sections[0]?.trim() || "";
+  const panesSection = sections[1]?.trim() || "";
+
+  // Parse windows
+  const windows: TmuxWindow[] = windowsSection
+    .split("\n")
+    .filter(line => line.length > 0)
+    .map((line) => {
+      const [index, name, active, bell, activity, paneCommand] = line.split("|");
+      return {
+        index: Number(index),
+        name,
+        active: active === "1",
+        bell: bell === "1",
+        activity: activity === "1",
+        paneCommand: paneCommand || "",
+      };
+    });
+
+  // Count panes (each line is one pane)
+  const currentWindowPaneCount = panesSection
+    .split("\n")
+    .filter(line => line.length > 0)
+    .length || 1;
+
+  return { windows, currentWindowPaneCount };
+}
+
+/**
  * Extract repository name from a git remote URL.
  * Handles various URL formats:
  * - git@github.com:org/repo.git -> "repo"
