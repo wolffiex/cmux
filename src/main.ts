@@ -1059,6 +1059,9 @@ function applyAndExit(): void {
       height: p.height,
     }))
 
+    log(`[layout] Applying "${layout.name}" (${layout.panes.length} panes) to window with ${currentPanes.length} panes`)
+    log(`[layout] Current panes:`, currentPanes.map(p => `${p.id} at (${p.x},${p.y}) ${p.width}x${p.height}`))
+
     // 2. Resolve target layout to absolute coordinates
     const resolved = resolveLayout(layout, windowInfo.width, windowInfo.height)
     const slots: Slot[] = resolved.map(r => ({
@@ -1068,8 +1071,14 @@ function applyAndExit(): void {
       height: r.height,
     }))
 
+    log(`[layout] Target slots:`, slots.map((s, i) => `slot${i} at (${s.x},${s.y}) ${s.width}x${s.height}`))
+
     // 3. Match panes to slots by position
     const { matches, unmatchedSlots, unmatchedPanes } = matchPanesToSlots(currentPanes, slots)
+
+    log(`[layout] Matches:`, matches.map(m => `${m.paneId} -> slot${m.slotIndex} (score: ${m.score})`))
+    log(`[layout] Unmatched slots (need new panes):`, unmatchedSlots)
+    log(`[layout] Unmatched panes (will be killed):`, unmatchedPanes)
 
     // 4. Create new panes for unmatched slots (need more panes)
     for (const _slotIndex of unmatchedSlots) {
@@ -1107,9 +1116,14 @@ function applyAndExit(): void {
     const filteredCurrentOrder = currentOrder.filter(id => !unmatchedPanes.includes(id))
     const filteredDesiredOrder = desiredOrder.filter(id => id !== undefined)
 
+    log(`[layout] After creates - current order:`, currentOrder)
+    log(`[layout] Desired order:`, desiredOrder)
+    log(`[layout] New pane IDs:`, newPaneIds)
+
     // Execute swaps if needed
     if (filteredCurrentOrder.length === filteredDesiredOrder.length && filteredCurrentOrder.length > 0) {
       const swaps = computeSwaps(filteredCurrentOrder, filteredDesiredOrder)
+      log(`[layout] Swaps to execute:`, swaps)
       if (swaps.length > 0) {
         executeSwaps(`:${targetWindow.index}`, swaps)
       }
@@ -1133,8 +1147,9 @@ function applyAndExit(): void {
 
     // Apply the layout
     execSync(`tmux select-layout '${layoutString}'`)
+    log(`[layout] Applied layout successfully`)
   } catch (e) {
-    // Not in tmux or error - just exit silently
+    log(`[layout] Error applying layout:`, e)
   }
 }
 
