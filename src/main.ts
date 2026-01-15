@@ -118,6 +118,9 @@ function initState(): State {
 
 const state = initState()
 
+// ── Benchmark mode ─────────────────────────────────────────────────────────
+const BENCHMARK_MODE = !!process.env.CMUX_BENCHMARK
+
 // ── Polling ────────────────────────────────────────────────────────────────
 let pollInterval: Timer | null = null
 const POLL_INTERVAL_MS = 1500
@@ -1183,6 +1186,13 @@ function runUI(): void {
   process.stdin.resume()
 
   render()
+
+  // Benchmark mode: exit immediately after first render
+  if (BENCHMARK_MODE) {
+    cleanup()
+    return
+  }
+
   startPolling()
 
   // Rename windows immediately on startup (async, doesn't block UI)
