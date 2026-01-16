@@ -279,20 +279,8 @@ export function renderDirPicker(
   const inputPadded = inputLine.padEnd(boxWidth - 2)
   lines.push(box.v + inputPadded + box.v)
 
-  // Branch line for selected item (or empty if no branch)
-  if (selectedBranch) {
-    const branchDisplay = ansiDim + "  @ " + selectedBranch + ansiReset
-    // Pad to boxWidth-2, accounting for ANSI codes not taking visual space
-    const visibleLen = 4 + selectedBranch.length  // "  @ " + branch
-    const padding = boxWidth - 2 - visibleLen
-    const branchLine = branchDisplay + " ".repeat(Math.max(0, padding))
-    lines.push(box.v + branchLine + box.v)
-  } else {
-    lines.push(box.v + " ".repeat(boxWidth - 2) + box.v)
-  }
-
   // Directory listing
-  const listHeight = boxHeight - 4  // Account for borders, input, branch line
+  const listHeight = boxHeight - 3  // Account for borders and input line
 
   // Calculate scroll offset to keep selected item visible
   let scrollOffset = 0
@@ -309,11 +297,22 @@ export function renderDirPicker(
       const prefix = isSelected ? "\u2192 " : "  "
       // Show dot indicator for directories that already have windows
       const suffix = hasWindow ? " \u00b7" : ""
-      const maxNameLen = boxWidth - 4 - prefix.length - suffix.length
+
+      // For selected item, append branch as dim ghost text
+      let branchSuffix = ""
+      let branchVisualLen = 0
+      if (isSelected && selectedBranch) {
+        branchSuffix = ansiDim + " @ " + selectedBranch + ansiReset
+        branchVisualLen = 3 + selectedBranch.length  // " @ " + branch
+      }
+
+      const maxNameLen = boxWidth - 4 - prefix.length - suffix.length - branchVisualLen
       let displayName = name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + "\u2026" : name
-      const line = prefix + displayName + suffix
-      const padded = line.padEnd(boxWidth - 2)
-      lines.push(box.v + padded + box.v)
+      const visibleLine = prefix + displayName + suffix
+      const visibleLen = visibleLine.length + branchVisualLen
+      const padding = boxWidth - 2 - visibleLen
+      const line = visibleLine + branchSuffix + " ".repeat(Math.max(0, padding))
+      lines.push(box.v + line + box.v)
     } else {
       // Empty row
       lines.push(box.v + " ".repeat(boxWidth - 2) + box.v)
@@ -364,17 +363,8 @@ export function renderDirPickerLines(
   const inputPadded = inputLine.padEnd(boxWidth - 2)
   lines.push(box.v + inputPadded + box.v)
 
-  // Branch line for selected item (or empty if no branch)
-  if (selectedBranch) {
-    const branchDisplay = "  @ " + selectedBranch
-    const branchLine = branchDisplay.padEnd(boxWidth - 2)
-    lines.push(box.v + branchLine + box.v)
-  } else {
-    lines.push(box.v + " ".repeat(boxWidth - 2) + box.v)
-  }
-
   // Directory listing
-  const listHeight = boxHeight - 4
+  const listHeight = boxHeight - 3  // Account for borders and input line
 
   let scrollOffset = 0
   if (selectedIndex >= listHeight) {
@@ -390,9 +380,16 @@ export function renderDirPickerLines(
       const prefix = isSelected ? "\u2192 " : "  "
       // Show dot indicator for directories that already have windows
       const suffix = hasWindow ? " \u00b7" : ""
-      const maxNameLen = boxWidth - 4 - prefix.length - suffix.length
+
+      // For selected item, append branch as ghost text (no ANSI for test version)
+      let branchSuffix = ""
+      if (isSelected && selectedBranch) {
+        branchSuffix = " @ " + selectedBranch
+      }
+
+      const maxNameLen = boxWidth - 4 - prefix.length - suffix.length - branchSuffix.length
       let displayName = name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + "\u2026" : name
-      const line = prefix + displayName + suffix
+      const line = prefix + displayName + suffix + branchSuffix
       const padded = line.padEnd(boxWidth - 2)
       lines.push(box.v + padded + box.v)
     } else {
