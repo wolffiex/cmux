@@ -67,22 +67,21 @@ export function centerDistance(pane: Pane, slot: Slot): number {
  * Strategy:
  * - If there's overlap, use overlap area as score (larger = better)
  * - If no overlap, use negative distance (closer = less negative = better)
- * - Add a top-bias proportional to slot area so existing panes prefer top slots
- *   when overlaps are similar (this ensures new panes appear at the bottom)
+ * - Multiply by a top-bias factor so existing panes prefer top slots
+ *   when a pane spans multiple vertically-stacked slots
+ *   (this ensures new panes appear at the bottom)
  */
-function calculateMatchScore(pane: Pane, slot: Slot, topBiasMultiplier: number = 0): number {
+function calculateMatchScore(pane: Pane, slot: Slot, topBiasMultiplier: number = 1): number {
   const overlap = calculateOverlap(pane, slot);
-  // Top-bias scales with slot area so it can overcome small overlap differences
-  // between vertically stacked slots (caused by separator pixel differences)
-  const slotArea = slot.width * slot.height;
-  const topBias = slotArea * topBiasMultiplier;
 
   if (overlap > 0) {
-    return overlap + topBias;
+    // Multiply overlap by top-bias factor (1.0 to ~1.2 for top slots)
+    return overlap * topBiasMultiplier;
   }
   // No overlap: use negative distance so closer panes score higher
   // Add a small offset to ensure all distance-based scores are negative
-  return -centerDistance(pane, slot) - 1 + topBias;
+  // Apply top-bias as additive bonus (small compared to distance magnitude)
+  return -centerDistance(pane, slot) - 1 + (topBiasMultiplier - 1) * 100;
 }
 
 /**
@@ -96,20 +95,21 @@ export function matchPanesToSlots(panes: Pane[], slots: Slot[]): MatchResult {
   const matchedPaneIds = new Set<string>();
   const matchedSlotIndices = new Set<number>();
 
-  // Calculate max Y to normalize top-bias (slots at top get higher bias)
+  // Calculate max Y to normalize top-bias (slots at top get higher multiplier)
   const maxY = slots.length > 0 ? Math.max(...slots.map(s => s.y)) : 0;
-  // Top-bias multiplier: 10% of slot area is enough to overcome separator
-  // pixel differences (typically 1-2 rows) while not overriding clear
-  // geometric mismatches between columns
-  const TOP_BIAS_PERCENT = 0.1;
+  // Top-bias: 20% bonus for top slots. This multiplicative approach ensures
+  // that when a pane spans multiple vertically-stacked slots (like a full-height
+  // right pane transitioning to top-right + bottom-right), the top slot wins
+  // regardless of small height differences between slots.
+  const TOP_BIAS_BONUS = 0.2;
 
   // Build score matrix
   const scores: Array<{ paneId: string; slotIndex: number; score: number }> = [];
   for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
     const slot = slots[slotIndex];
-    // topBiasMultiplier: higher for slots with smaller Y (closer to top)
-    // Normalized to range [0, TOP_BIAS_PERCENT]
-    const topBiasMultiplier = maxY > 0 ? TOP_BIAS_PERCENT * (1 - slot.y / maxY) : 0;
+    // topBiasMultiplier: 1.0 + bonus for slots with smaller Y (closer to top)
+    // Range: [1.0, 1.0 + TOP_BIAS_BONUS] - bottom slots get 1.0, top slots get 1.2
+    const topBiasMultiplier = 1.0 + (maxY > 0 ? TOP_BIAS_BONUS * (1 - slot.y / maxY) : 0);
     for (const pane of panes) {
       scores.push({
         paneId: pane.id,

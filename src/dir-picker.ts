@@ -3,6 +3,7 @@
  * Designed for testability with pure functions for state handling and rendering.
  */
 
+import { execSync } from "node:child_process"
 import { dirname, join, basename } from "node:path"
 import { readdirSync } from "node:fs"
 import { box } from "./box-chars"
@@ -16,6 +17,8 @@ export interface DirPickerState {
   selectedIndex: number
   parentPath: string  // parent directory path
   currentPath: string  // current pane's working directory
+  windowPaths: Set<string>  // basenames of directories that already have windows
+  selectedBranch: string | null  // git branch of selected item (computed lazily)
 }
 
 export type DirPickerResult =
@@ -26,11 +29,60 @@ export type DirPickerResult =
 // ── Pure Functions ─────────────────────────────────────────────────────────
 
 /**
+ * Get basenames of directories that currently have tmux windows.
+ * These are determined by the pane_current_path of each window.
+ */
+export function getWindowPathBasenames(): Set<string> {
+  const basenames = new Set<string>()
+  try {
+    // Get the current path of the first pane in each window
+    const output = execSync("tmux list-windows -F '#{pane_current_path}'")
+      .toString()
+      .trim()
+    for (const path of output.split("\n")) {
+      if (path) {
+        basenames.add(basename(path))
+      }
+    }
+  } catch {
+    // Ignore errors (e.g., not in tmux)
+  }
+  return basenames
+}
+
+/**
+ * Get git branch for a directory path.
+ * Returns null if not a git repo or on error.
+ */
+export function getGitBranch(dirPath: string): string | null {
+  try {
+    const branch = execSync(`git -C '${dirPath}' rev-parse --abbrev-ref HEAD 2>/dev/null`)
+      .toString()
+      .trim()
+    if (branch === "HEAD") {
+      // Detached HEAD - use short SHA
+      return execSync(`git -C '${dirPath}' rev-parse --short HEAD 2>/dev/null`)
+        .toString()
+        .trim() || null
+    }
+    return branch || null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Initialize directory picker state from a working directory.
  */
 export function initDirPickerState(currentPath: string): DirPickerState {
   const parentPath = dirname(currentPath)
-  const cousins = getCousinDirectories(currentPath)
+  const windowPaths = getWindowPathBasenames()
+  const cousins = getCousinDirectories(currentPath, windowPaths)
+
+  // Get branch for initial selection
+  const selectedBranch = cousins.length > 0
+    ? getGitBranch(join(parentPath, cousins[0]))
+    : null
 
   return {
     input: "",
@@ -39,14 +91,17 @@ export function initDirPickerState(currentPath: string): DirPickerState {
     selectedIndex: 0,
     parentPath,
     currentPath,
+    windowPaths,
+    selectedBranch,
   }
 }
 
 /**
  * Get sibling directories (cousins) of the current directory.
- * The current directory is always returned first, followed by siblings sorted alphabetically.
+ * Ordering: current directory first, then directories without windows (alphabetical),
+ * then directories with windows (alphabetical).
  */
-export function getCousinDirectories(currentPath: string): string[] {
+export function getCousinDirectories(currentPath: string, windowPaths?: Set<string>): string[] {
   const parentPath = dirname(currentPath)
   const currentName = basename(currentPath)
 
@@ -55,9 +110,20 @@ export function getCousinDirectories(currentPath: string): string[] {
     const siblings = entries
       .filter(e => e.isDirectory() && !e.name.startsWith(".") && e.name !== currentName)
       .map(e => e.name)
-      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-    // Current directory first, then sorted siblings
-    return [currentName, ...siblings]
+
+    // Sort: no-window directories first (alphabetical), then with-window directories (alphabetical)
+    if (windowPaths && windowPaths.size > 0) {
+      const noWindow = siblings.filter(name => !windowPaths.has(name))
+      const hasWindow = siblings.filter(name => windowPaths.has(name))
+      noWindow.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+      hasWindow.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+      // Current directory first, then no-window siblings, then with-window siblings
+      return [currentName, ...noWindow, ...hasWindow]
+    } else {
+      // No window info - just sort alphabetically
+      siblings.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+      return [currentName, ...siblings]
+    }
   } catch {
     return [currentName]
   }
@@ -105,18 +171,26 @@ export function handleDirPickerKey(
   // Up arrow or Ctrl+P - move selection up
   if (key === "\x10" || key === "\x1b[A") {
     const newIndex = state.selectedIndex > 0 ? state.selectedIndex - 1 : state.filtered.length - 1
+    const newSelectedName = state.filtered[newIndex]
+    const newBranch = newSelectedName
+      ? getGitBranch(join(state.parentPath, newSelectedName))
+      : null
     return {
       action: "continue",
-      state: { ...state, selectedIndex: newIndex },
+      state: { ...state, selectedIndex: newIndex, selectedBranch: newBranch },
     }
   }
 
   // Down arrow or Ctrl+N - move selection down
   if (key === "\x0e" || key === "\x1b[B") {
     const newIndex = state.selectedIndex < state.filtered.length - 1 ? state.selectedIndex + 1 : 0
+    const newSelectedName = state.filtered[newIndex]
+    const newBranch = newSelectedName
+      ? getGitBranch(join(state.parentPath, newSelectedName))
+      : null
     return {
       action: "continue",
-      state: { ...state, selectedIndex: newIndex },
+      state: { ...state, selectedIndex: newIndex, selectedBranch: newBranch },
     }
   }
 
@@ -127,6 +201,10 @@ export function handleDirPickerKey(
     }
     const newInput = state.input.slice(0, -1)
     const newFiltered = filterCousins(state.cousins, newInput)
+    const newSelectedName = newFiltered.length > 0 ? newFiltered[0] : null
+    const newBranch = newSelectedName
+      ? getGitBranch(join(state.parentPath, newSelectedName))
+      : null
     return {
       action: "continue",
       state: {
@@ -134,6 +212,7 @@ export function handleDirPickerKey(
         input: newInput,
         filtered: newFiltered,
         selectedIndex: 0,
+        selectedBranch: newBranch,
       },
     }
   }
@@ -142,6 +221,10 @@ export function handleDirPickerKey(
   if (key.length === 1 && key >= " " && key <= "~") {
     const newInput = state.input + key
     const newFiltered = filterCousins(state.cousins, newInput)
+    const newSelectedName = newFiltered.length > 0 ? newFiltered[0] : null
+    const newBranch = newSelectedName
+      ? getGitBranch(join(state.parentPath, newSelectedName))
+      : null
     return {
       action: "continue",
       state: {
@@ -149,6 +232,7 @@ export function handleDirPickerKey(
         input: newInput,
         filtered: newFiltered,
         selectedIndex: 0,
+        selectedBranch: newBranch,
       },
     }
   }
@@ -159,6 +243,10 @@ export function handleDirPickerKey(
 
 // ── Rendering ──────────────────────────────────────────────────────────────
 
+// ANSI codes for styling
+const ansiDim = "\x1b[2m"
+const ansiReset = "\x1b[0m"
+
 /**
  * Render the directory picker UI to a string.
  * Pure function: takes state and dimensions, returns string output.
@@ -168,7 +256,7 @@ export function renderDirPicker(
   width: number,
   height: number
 ): string {
-  const { input, filtered, selectedIndex } = state
+  const { input, filtered, selectedIndex, windowPaths, selectedBranch } = state
 
   // Calculate box dimensions
   const boxWidth = Math.min(width - 4, 40)
@@ -184,18 +272,27 @@ export function renderDirPicker(
 
   // Input line with cursor
   const inputLabel = "> "
-  const cursor = "█"
+  const cursor = "\u2588"
   const maxInputLen = boxWidth - 4 - inputLabel.length - cursor.length
   const displayInput = input.length > maxInputLen ? input.slice(-maxInputLen) : input
   const inputLine = inputLabel + displayInput + cursor
   const inputPadded = inputLine.padEnd(boxWidth - 2)
   lines.push(box.v + inputPadded + box.v)
 
-  // Empty line separator
-  lines.push(box.v + " ".repeat(boxWidth - 2) + box.v)
+  // Branch line for selected item (or empty if no branch)
+  if (selectedBranch) {
+    const branchDisplay = ansiDim + "  @ " + selectedBranch + ansiReset
+    // Pad to boxWidth-2, accounting for ANSI codes not taking visual space
+    const visibleLen = 4 + selectedBranch.length  // "  @ " + branch
+    const padding = boxWidth - 2 - visibleLen
+    const branchLine = branchDisplay + " ".repeat(Math.max(0, padding))
+    lines.push(box.v + branchLine + box.v)
+  } else {
+    lines.push(box.v + " ".repeat(boxWidth - 2) + box.v)
+  }
 
   // Directory listing
-  const listHeight = boxHeight - 4  // Account for borders, input, separator
+  const listHeight = boxHeight - 4  // Account for borders, input, branch line
 
   // Calculate scroll offset to keep selected item visible
   let scrollOffset = 0
@@ -208,10 +305,13 @@ export function renderDirPicker(
     if (itemIndex < filtered.length) {
       const name = filtered[itemIndex]
       const isSelected = itemIndex === selectedIndex
-      const prefix = isSelected ? "→ " : "  "
-      const maxNameLen = boxWidth - 4 - prefix.length
-      const displayName = name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + "…" : name
-      const line = prefix + displayName
+      const hasWindow = windowPaths.has(name)
+      const prefix = isSelected ? "\u2192 " : "  "
+      // Show dot indicator for directories that already have windows
+      const suffix = hasWindow ? " \u00b7" : ""
+      const maxNameLen = boxWidth - 4 - prefix.length - suffix.length
+      let displayName = name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + "\u2026" : name
+      const line = prefix + displayName + suffix
       const padded = line.padEnd(boxWidth - 2)
       lines.push(box.v + padded + box.v)
     } else {
@@ -244,7 +344,7 @@ export function renderDirPickerLines(
   width: number,
   height: number
 ): string[] {
-  const { input, filtered, selectedIndex } = state
+  const { input, filtered, selectedIndex, windowPaths, selectedBranch } = state
 
   // Calculate box dimensions
   const boxWidth = Math.min(width - 4, 40)
@@ -257,15 +357,21 @@ export function renderDirPickerLines(
 
   // Input line with cursor
   const inputLabel = "> "
-  const cursor = "█"
+  const cursor = "\u2588"
   const maxInputLen = boxWidth - 4 - inputLabel.length - cursor.length
   const displayInput = input.length > maxInputLen ? input.slice(-maxInputLen) : input
   const inputLine = inputLabel + displayInput + cursor
   const inputPadded = inputLine.padEnd(boxWidth - 2)
   lines.push(box.v + inputPadded + box.v)
 
-  // Empty line separator
-  lines.push(box.v + " ".repeat(boxWidth - 2) + box.v)
+  // Branch line for selected item (or empty if no branch)
+  if (selectedBranch) {
+    const branchDisplay = "  @ " + selectedBranch
+    const branchLine = branchDisplay.padEnd(boxWidth - 2)
+    lines.push(box.v + branchLine + box.v)
+  } else {
+    lines.push(box.v + " ".repeat(boxWidth - 2) + box.v)
+  }
 
   // Directory listing
   const listHeight = boxHeight - 4
@@ -280,10 +386,13 @@ export function renderDirPickerLines(
     if (itemIndex < filtered.length) {
       const name = filtered[itemIndex]
       const isSelected = itemIndex === selectedIndex
-      const prefix = isSelected ? "→ " : "  "
-      const maxNameLen = boxWidth - 4 - prefix.length
-      const displayName = name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + "…" : name
-      const line = prefix + displayName
+      const hasWindow = windowPaths.has(name)
+      const prefix = isSelected ? "\u2192 " : "  "
+      // Show dot indicator for directories that already have windows
+      const suffix = hasWindow ? " \u00b7" : ""
+      const maxNameLen = boxWidth - 4 - prefix.length - suffix.length
+      let displayName = name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + "\u2026" : name
+      const line = prefix + displayName + suffix
       const padded = line.padEnd(boxWidth - 2)
       lines.push(box.v + padded + box.v)
     } else {

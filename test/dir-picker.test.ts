@@ -5,6 +5,7 @@ import {
   renderDirPickerLines,
   filterCousins,
   initDirPickerState,
+  getCousinDirectories,
 } from "../src/dir-picker"
 
 describe("filterCousins", () => {
@@ -34,6 +35,8 @@ describe("handleDirPickerKey", () => {
       selectedIndex: 0,
       parentPath: "/home/user",
       currentPath: "/home/user/current",
+      windowPaths: new Set<string>(),
+      selectedBranch: null,
       ...overrides,
     }
   }
@@ -222,6 +225,8 @@ describe("renderDirPickerLines", () => {
       selectedIndex: 0,
       parentPath: "/home/user",
       currentPath: "/home/user/current",
+      windowPaths: new Set<string>(),
+      selectedBranch: null,
       ...overrides,
     }
   }
@@ -291,6 +296,8 @@ describe("end-to-end typeahead flow", () => {
       selectedIndex: 0,
       parentPath: "/projects",
       currentPath: "/projects/myapp",
+      windowPaths: new Set<string>(),
+      selectedBranch: null,
     }
 
     // Type "f" to filter
@@ -337,6 +344,8 @@ describe("end-to-end typeahead flow", () => {
       selectedIndex: 0,
       parentPath: "/home/user",
       currentPath: "/home/user/myapp",
+      windowPaths: new Set<string>(),
+      selectedBranch: null,
     }
 
     // Type a name that doesn't match any cousin
@@ -359,5 +368,74 @@ describe("end-to-end typeahead flow", () => {
     if (result.action === "select") {
       expect(result.path).toBe("/home/user/myapp/new-feature")
     }
+  })
+})
+
+describe("window path prioritization", () => {
+  test("directories without windows come before directories with windows", () => {
+    // Simulate: "alpha" and "gamma" have windows open, "beta" and "delta" do not
+    const windowPaths = new Set(["alpha", "gamma"])
+
+    // Create a state with the windowPaths
+    const state: DirPickerState = {
+      input: "",
+      cousins: ["current", "alpha", "beta", "delta", "gamma"],  // Pre-sorted by getCousinDirectories
+      filtered: ["current", "alpha", "beta", "delta", "gamma"],
+      selectedIndex: 0,
+      parentPath: "/projects",
+      currentPath: "/projects/current",
+      windowPaths,
+      selectedBranch: null,
+    }
+
+    const lines = renderDirPickerLines(state, 50, 20)
+    const content = lines.join("\n")
+
+    // Directories with windows should show a dot indicator
+    expect(content).toContain("alpha \u00b7")
+    expect(content).toContain("gamma \u00b7")
+    // Directories without windows should NOT have a dot
+    expect(content).toContain("  beta")
+    expect(content).not.toContain("beta \u00b7")
+  })
+})
+
+describe("branch display", () => {
+  test("shows branch for selected item when available", () => {
+    const state: DirPickerState = {
+      input: "",
+      cousins: ["repo-a", "repo-b"],
+      filtered: ["repo-a", "repo-b"],
+      selectedIndex: 0,
+      parentPath: "/projects",
+      currentPath: "/projects/current",
+      windowPaths: new Set<string>(),
+      selectedBranch: "feature-xyz",
+    }
+
+    const lines = renderDirPickerLines(state, 50, 20)
+    const content = lines.join("\n")
+
+    // Should show branch on a separate line
+    expect(content).toContain("@ feature-xyz")
+  })
+
+  test("shows empty line when no branch available", () => {
+    const state: DirPickerState = {
+      input: "",
+      cousins: ["dir-a", "dir-b"],
+      filtered: ["dir-a", "dir-b"],
+      selectedIndex: 0,
+      parentPath: "/projects",
+      currentPath: "/projects/current",
+      windowPaths: new Set<string>(),
+      selectedBranch: null,
+    }
+
+    const lines = renderDirPickerLines(state, 50, 20)
+    const content = lines.join("\n")
+
+    // Should not contain branch indicator
+    expect(content).not.toContain("@")
   })
 })
