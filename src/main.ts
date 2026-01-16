@@ -870,6 +870,7 @@ function handleMainKey(key: string): boolean {
     case "q":
       return false
     case "-":
+    case "x":  // x is a synonym for - (delete)
       // Minus key - trigger delete confirmation (shows inline in current window)
       if (state.confirmingDelete) {
         // Second press - actually delete and exit
