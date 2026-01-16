@@ -372,15 +372,16 @@ describe("end-to-end typeahead flow", () => {
 })
 
 describe("window path prioritization", () => {
-  test("directories without windows come before directories with windows", () => {
+  test("directories with windows show dot indicator", () => {
     // Simulate: "alpha" and "gamma" have windows open, "beta" and "delta" do not
     const windowPaths = new Set(["alpha", "gamma"])
 
-    // Create a state with the windowPaths
+    // Create a state with the correct ordering from getCousinDirectories:
+    // current first, then no-window dirs alphabetically, then has-window dirs alphabetically
     const state: DirPickerState = {
       input: "",
-      cousins: ["current", "alpha", "beta", "delta", "gamma"],  // Pre-sorted by getCousinDirectories
-      filtered: ["current", "alpha", "beta", "delta", "gamma"],
+      cousins: ["current", "beta", "delta", "alpha", "gamma"],
+      filtered: ["current", "beta", "delta", "alpha", "gamma"],
       selectedIndex: 0,
       parentPath: "/projects",
       currentPath: "/projects/current",
@@ -397,6 +398,76 @@ describe("window path prioritization", () => {
     // Directories without windows should NOT have a dot
     expect(content).toContain("  beta")
     expect(content).not.toContain("beta \u00b7")
+  })
+})
+
+describe("getCousinDirectories ordering", () => {
+  test("returns current directory first", () => {
+    // This test requires a real filesystem, so we'll use a temp directory
+    const { mkdirSync, rmSync } = require("fs")
+    const { join } = require("path")
+
+    const testDir = "/tmp/cmux-test-cousins"
+    try { rmSync(testDir, { recursive: true }) } catch {}
+    mkdirSync(testDir)
+    mkdirSync(join(testDir, "current"))
+    mkdirSync(join(testDir, "alpha"))
+    mkdirSync(join(testDir, "beta"))
+
+    try {
+      const result = getCousinDirectories(join(testDir, "current"), new Set())
+      expect(result[0]).toBe("current")
+    } finally {
+      rmSync(testDir, { recursive: true })
+    }
+  })
+
+  test("sorts no-window directories alphabetically before has-window directories", () => {
+    const { mkdirSync, rmSync } = require("fs")
+    const { join } = require("path")
+
+    const testDir = "/tmp/cmux-test-cousins2"
+    try { rmSync(testDir, { recursive: true }) } catch {}
+    mkdirSync(testDir)
+    mkdirSync(join(testDir, "current"))
+    mkdirSync(join(testDir, "alpha"))
+    mkdirSync(join(testDir, "beta"))
+    mkdirSync(join(testDir, "gamma"))
+    mkdirSync(join(testDir, "delta"))
+
+    try {
+      // alpha and gamma have windows
+      const windowPaths = new Set(["alpha", "gamma"])
+      const result = getCousinDirectories(join(testDir, "current"), windowPaths)
+
+      // Expected: current, beta, delta (no window), alpha, gamma (has window)
+      expect(result).toEqual(["current", "beta", "delta", "alpha", "gamma"])
+    } finally {
+      rmSync(testDir, { recursive: true })
+    }
+  })
+
+  test("when current directory has a window, only other dirs with windows go last", () => {
+    const { mkdirSync, rmSync } = require("fs")
+    const { join } = require("path")
+
+    const testDir = "/tmp/cmux-test-cousins3"
+    try { rmSync(testDir, { recursive: true }) } catch {}
+    mkdirSync(testDir)
+    mkdirSync(join(testDir, "current"))
+    mkdirSync(join(testDir, "alpha"))
+    mkdirSync(join(testDir, "beta"))
+
+    try {
+      // current and alpha have windows
+      const windowPaths = new Set(["current", "alpha"])
+      const result = getCousinDirectories(join(testDir, "current"), windowPaths)
+
+      // Expected: current first (always), beta (no window), alpha (has window)
+      expect(result).toEqual(["current", "beta", "alpha"])
+    } finally {
+      rmSync(testDir, { recursive: true })
+    }
   })
 })
 

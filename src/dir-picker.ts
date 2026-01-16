@@ -28,6 +28,14 @@ export type DirPickerResult =
 
 // ── Pure Functions ─────────────────────────────────────────────────────────
 
+// Debug logging helper
+function debugLog(msg: string) {
+  if (process.env.CMUX_DEBUG) {
+    const fs = require("fs")
+    fs.appendFileSync("/tmp/cmux.log", `[dir-picker] ${msg}\n`)
+  }
+}
+
 /**
  * Get basenames of directories that currently have tmux windows.
  * These are determined by the pane_current_path of each window.
@@ -39,12 +47,17 @@ export function getWindowPathBasenames(): Set<string> {
     const output = execSync("tmux list-windows -F '#{pane_current_path}'")
       .toString()
       .trim()
+    debugLog(`list-windows output: ${JSON.stringify(output)}`)
     for (const path of output.split("\n")) {
       if (path) {
-        basenames.add(basename(path))
+        const base = basename(path)
+        debugLog(`  path=${path} -> basename=${base}`)
+        basenames.add(base)
       }
     }
-  } catch {
+    debugLog(`windowPathBasenames: ${JSON.stringify([...basenames])}`)
+  } catch (e) {
+    debugLog(`getWindowPathBasenames error: ${e}`)
     // Ignore errors (e.g., not in tmux)
   }
   return basenames
@@ -105,26 +118,38 @@ export function getCousinDirectories(currentPath: string, windowPaths?: Set<stri
   const parentPath = dirname(currentPath)
   const currentName = basename(currentPath)
 
+  debugLog(`getCousinDirectories: currentPath=${currentPath}, currentName=${currentName}`)
+  debugLog(`  windowPaths provided: ${windowPaths ? JSON.stringify([...windowPaths]) : 'undefined'}`)
+
   try {
     const entries = readdirSync(parentPath, { withFileTypes: true })
     const siblings = entries
       .filter(e => e.isDirectory() && !e.name.startsWith(".") && e.name !== currentName)
       .map(e => e.name)
 
+    debugLog(`  siblings (excluding current): ${JSON.stringify(siblings)}`)
+
     // Sort: no-window directories first (alphabetical), then with-window directories (alphabetical)
     if (windowPaths && windowPaths.size > 0) {
       const noWindow = siblings.filter(name => !windowPaths.has(name))
       const hasWindow = siblings.filter(name => windowPaths.has(name))
+      debugLog(`  noWindow: ${JSON.stringify(noWindow)}`)
+      debugLog(`  hasWindow: ${JSON.stringify(hasWindow)}`)
       noWindow.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
       hasWindow.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
       // Current directory first, then no-window siblings, then with-window siblings
-      return [currentName, ...noWindow, ...hasWindow]
+      const result = [currentName, ...noWindow, ...hasWindow]
+      debugLog(`  final order: ${JSON.stringify(result)}`)
+      return result
     } else {
       // No window info - just sort alphabetically
       siblings.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-      return [currentName, ...siblings]
+      const result = [currentName, ...siblings]
+      debugLog(`  final order (no windowPaths): ${JSON.stringify(result)}`)
+      return result
     }
-  } catch {
+  } catch (e) {
+    debugLog(`  getCousinDirectories error: ${e}`)
     return [currentName]
   }
 }
