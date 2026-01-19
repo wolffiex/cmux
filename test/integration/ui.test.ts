@@ -6,7 +6,7 @@ const PROJECT_DIR = import.meta.dir.replace(/\/test\/integration$/, "")
 
 function tmux(cmd: string): string {
   try {
-    return execSync(`tmux -L ${SOCKET} ${cmd}`, {
+    return execSync(`tmux -L ${SOCKET} -f /dev/null ${cmd}`, {
       encoding: "utf-8",
       cwd: PROJECT_DIR
     })
@@ -71,7 +71,7 @@ describe("cmux UI", () => {
   beforeAll(() => {
     // Create isolated tmux session with known dimensions
     tmux("kill-server 2>/dev/null || true")
-    tmux("new-session -d -s test -x 60 -y 20")
+    tmux("new-session -d -s test -x 120 -y 24")
     // Create a couple test windows
     tmux("new-window -t test")
     tmux("new-window -t test")
