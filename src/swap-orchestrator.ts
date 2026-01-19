@@ -23,11 +23,11 @@ export interface SwapCommand {
  */
 export function computeSwaps(
   currentOrder: string[],
-  desiredOrder: string[]
+  desiredOrder: string[],
 ): SwapCommand[] {
   if (currentOrder.length !== desiredOrder.length) {
     throw new Error(
-      `Order arrays must have same length: current=${currentOrder.length}, desired=${desiredOrder.length}`
+      `Order arrays must have same length: current=${currentOrder.length}, desired=${desiredOrder.length}`,
     );
   }
 
@@ -61,7 +61,7 @@ export function computeSwaps(
 
     if (currentIndex === -1) {
       throw new Error(
-        `Pane ID "${desiredPaneId}" from desired order not found in current order`
+        `Pane ID "${desiredPaneId}" from desired order not found in current order`,
       );
     }
 

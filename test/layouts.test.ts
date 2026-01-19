@@ -1,5 +1,9 @@
-import { describe, test, expect } from "bun:test";
-import { resolveLayout, ALL_LAYOUTS, type LayoutTemplate } from "../src/layouts";
+import { describe, expect, test } from "bun:test";
+import {
+  ALL_LAYOUTS,
+  type LayoutTemplate,
+  resolveLayout,
+} from "../src/layouts";
 
 describe("resolveLayout", () => {
   test("single pane fills entire window", () => {

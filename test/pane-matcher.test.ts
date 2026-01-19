@@ -1,10 +1,10 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   calculateOverlap,
   centerDistance,
   matchPanesToSlots,
-  Pane,
-  Slot,
+  type Pane,
+  type Slot,
 } from "../src/pane-matcher";
 
 describe("calculateOverlap", () => {
@@ -337,7 +337,9 @@ describe("matchPanesToSlots", () => {
     });
 
     test("single pane with no overlap to any slot", () => {
-      const panes: Pane[] = [{ id: "%0", x: 100, y: 100, width: 40, height: 24 }];
+      const panes: Pane[] = [
+        { id: "%0", x: 100, y: 100, width: 40, height: 24 },
+      ];
       const slots: Slot[] = [{ x: 0, y: 0, width: 40, height: 24 }];
 
       const result = matchPanesToSlots(panes, slots);

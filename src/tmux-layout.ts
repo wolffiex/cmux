@@ -48,7 +48,7 @@ function buildLayoutTree(
   x: number,
   y: number,
   width: number,
-  height: number
+  height: number,
 ): LayoutNode {
   if (panes.length === 0) {
     throw new Error("No panes provided");
@@ -78,7 +78,7 @@ function buildLayoutTree(
         if (pane.x >= xPos) colX = xPos;
       }
       if (!columns.has(colX)) columns.set(colX, []);
-      columns.get(colX)!.push(pane);
+      columns.get(colX)?.push(pane);
     }
 
     if (columns.size > 1) {
@@ -111,7 +111,7 @@ function buildLayoutTree(
         if (pane.y >= yPos) rowY = yPos;
       }
       if (!rows.has(rowY)) rows.set(rowY, []);
-      rows.get(rowY)!.push(pane);
+      rows.get(rowY)?.push(pane);
     }
 
     if (rows.size > 1) {
@@ -119,7 +119,8 @@ function buildLayoutTree(
 
       for (const rowY of [...rows.keys()].sort((a, b) => a - b)) {
         const rowPanes = rows.get(rowY)!;
-        const rowHeight = Math.max(...rowPanes.map((p) => p.y + p.height)) - rowY;
+        const rowHeight =
+          Math.max(...rowPanes.map((p) => p.y + p.height)) - rowY;
         const child = buildLayoutTree(rowPanes, x, rowY, width, rowHeight);
         children.push(child);
       }
@@ -174,7 +175,7 @@ function serializeLayoutNode(node: LayoutNode): string {
 export function generateLayoutString(
   panes: LayoutPane[],
   windowWidth: number,
-  windowHeight: number
+  windowHeight: number,
 ): string {
   const tree = buildLayoutTree(panes, 0, 0, windowWidth, windowHeight);
   const layout = serializeLayoutNode(tree);

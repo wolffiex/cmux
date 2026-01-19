@@ -8,7 +8,7 @@
  * @returns String with all ANSI escape codes removed
  */
 export function stripAnsi(str: string): string {
-  return str.replace(/\x1b\[[0-9;]*m/g, '')
+  return str.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
 /**
@@ -17,7 +17,7 @@ export function stripAnsi(str: string): string {
  * @returns Eased progress value
  */
 export function easeOut(t: number): number {
-  return 1 - Math.pow(1 - t, 2)
+  return 1 - (1 - t) ** 2;
 }
 
 /**
@@ -25,8 +25,8 @@ export function easeOut(t: number): number {
  * Used by the display layer for window names.
  */
 export function truncateName(name: string): string {
-  if (name.length <= 15) return name
-  return name.slice(0, 14) + "…"
+  if (name.length <= 15) return name;
+  return `${name.slice(0, 14)}…`;
 }
 
 /**
@@ -34,8 +34,8 @@ export function truncateName(name: string): string {
  * Branch suffixes like "-truncation" are more meaningful than prefixes like "worker-".
  */
 function truncateFromFront(name: string, maxLen = 15): string {
-  if (name.length <= maxLen) return name
-  return "…" + name.slice(-(maxLen - 1))
+  if (name.length <= maxLen) return name;
+  return `…${name.slice(-(maxLen - 1))}`;
 }
 
 /**
@@ -44,13 +44,13 @@ function truncateFromFront(name: string, maxLen = 15): string {
  * Otherwise - put name on line 1, empty line 2
  */
 export function splitWindowName(name: string): [string, string] {
-  const slashIndex = name.indexOf("/")
+  const slashIndex = name.indexOf("/");
   if (slashIndex > 0 && slashIndex < name.length - 1) {
-    const line1 = name.slice(0, slashIndex)
-    const line2 = name.slice(slashIndex + 1)
-    return [truncateName(line1), truncateFromFront(line2)]
+    const line1 = name.slice(0, slashIndex);
+    const line2 = name.slice(slashIndex + 1);
+    return [truncateName(line1), truncateFromFront(line2)];
   }
-  return [truncateName(name), ""]
+  return [truncateName(name), ""];
 }
 
 /**
@@ -60,7 +60,10 @@ export function splitWindowName(name: string): [string, string] {
  * @param summary - Generated window name
  * @param maxLength - Maximum length (default 50, generous to allow display layer to handle truncation)
  */
-export function sanitizeWindowName(summary: string, maxLength: number = 50): string {
+export function sanitizeWindowName(
+  summary: string,
+  maxLength: number = 50,
+): string {
   let name = summary
     .replace(/["'`$\\]/g, "")
     .replace(/[^\x20-\x7E]/g, "")

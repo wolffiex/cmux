@@ -1,6 +1,6 @@
-import type { PaneContext, WindowContext } from "./tmux";
-import { log } from "./logger";
 import { basename } from "node:path";
+import { log } from "./logger";
+import type { PaneContext, WindowContext } from "./tmux";
 
 // Cache layer
 interface CachedSummary {
@@ -20,7 +20,10 @@ const DEFAULT_BRANCHES = ["main", "master", "develop", "dev"];
  * Prefers gitRepoName if available (handles worktrees correctly),
  * otherwise falls back to workdir basename.
  */
-function extractDisplayName(gitRepoName: string | null, workdir: string): string {
+function extractDisplayName(
+  gitRepoName: string | null,
+  workdir: string,
+): string {
   if (gitRepoName) return gitRepoName;
   if (!workdir) return "shell";
   return basename(workdir) || "shell";
@@ -41,7 +44,11 @@ function extractDisplayName(gitRepoName: string | null, workdir: string): string
  * - cwd=/code/api, branch=feature/PROJ-123-desc -> "api/PROJ-123-desc"
  * - cwd=/code/api, branch=user/alice/experiment -> "api/experiment"
  */
-export function getWindowName(cwd: string, branch: string | null, gitRepoName?: string | null): string {
+export function getWindowName(
+  cwd: string,
+  branch: string | null,
+  gitRepoName?: string | null,
+): string {
   const repo = extractDisplayName(gitRepoName ?? null, cwd);
 
   if (!branch || DEFAULT_BRANCHES.includes(branch)) {
@@ -85,7 +92,9 @@ export function generateSummary(context: WindowContext): string {
   }
 
   const name = getWindowName(pane.workdir, pane.gitBranch, pane.gitRepoName);
-  log(`[cmux] Generated name: "${name}" from workdir="${pane.workdir}", branch="${pane.gitBranch}", gitRepoName="${pane.gitRepoName}"`);
+  log(
+    `[cmux] Generated name: "${name}" from workdir="${pane.workdir}", branch="${pane.gitBranch}", gitRepoName="${pane.gitRepoName}"`,
+  );
   return name;
 }
 
@@ -113,7 +122,7 @@ export function getSummary(context: WindowContext): string {
  * Fetch summaries for multiple windows
  */
 export function getSummariesForWindows(
-  contexts: WindowContext[]
+  contexts: WindowContext[],
 ): Map<number, string> {
   const results = new Map<number, string>();
 

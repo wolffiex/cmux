@@ -1,12 +1,12 @@
-import { test, expect, describe } from "bun:test";
-import { generateLayoutString, LayoutPane } from "../src/tmux-layout";
+import { describe, expect, test } from "bun:test";
+import { generateLayoutString, type LayoutPane } from "../src/tmux-layout";
 
 describe("generateLayoutString", () => {
   test("generates valid checksum format", () => {
     const result = generateLayoutString(
       [{ id: "%0", x: 0, y: 0, width: 80, height: 24 }],
       80,
-      24
+      24,
     );
     // Checksum is 4 hex chars followed by comma
     expect(result).toMatch(/^[0-9a-f]{4},/);
@@ -16,7 +16,7 @@ describe("generateLayoutString", () => {
     const result = generateLayoutString(
       [{ id: "%0", x: 0, y: 0, width: 80, height: 24 }],
       80,
-      24
+      24,
     );
     // Format: checksum,WxH,x,y,pane_id
     expect(result).toContain("80x24,0,0,0");
@@ -26,7 +26,7 @@ describe("generateLayoutString", () => {
     const result = generateLayoutString(
       [{ id: "%5", x: 0, y: 0, width: 80, height: 24 }],
       80,
-      24
+      24,
     );
     // Pane ID is serialized without the % prefix
     expect(result).toContain(",5");
@@ -40,7 +40,7 @@ describe("generateLayoutString", () => {
         { id: "%1", x: 40, y: 0, width: 40, height: 24 },
       ],
       80,
-      24
+      24,
     );
     // Horizontal splits use { }
     expect(result).toContain("{");
@@ -57,7 +57,7 @@ describe("generateLayoutString", () => {
         { id: "%1", x: 0, y: 12, width: 80, height: 12 },
       ],
       80,
-      24
+      24,
     );
     // Vertical splits use [ ]
     expect(result).toContain("[");
@@ -76,7 +76,7 @@ describe("generateLayoutString", () => {
         { id: "%3", x: 40, y: 12, width: 40, height: 12 },
       ],
       80,
-      24
+      24,
     );
     // Should have valid checksum
     expect(result).toMatch(/^[0-9a-f]{4},/);
@@ -86,7 +86,7 @@ describe("generateLayoutString", () => {
     expect(result).toContain(",2");
     expect(result).toContain(",3");
     // Should have nested structure (both horizontal and vertical)
-    expect(result).toMatch(/[\[\{]/);
+    expect(result).toMatch(/[[{]/);
   });
 
   test("main pane with sidebar layout", () => {
@@ -97,7 +97,7 @@ describe("generateLayoutString", () => {
         { id: "%1", x: 56, y: 0, width: 24, height: 24 },
       ],
       80,
-      24
+      24,
     );
     // Horizontal split
     expect(result).toContain("{");
@@ -115,7 +115,7 @@ describe("generateLayoutString", () => {
         { id: "%2", x: 53, y: 0, width: 27, height: 24 },
       ],
       80,
-      24
+      24,
     );
     // All three panes in horizontal split
     expect(result).toContain("{");
@@ -132,7 +132,7 @@ describe("generateLayoutString", () => {
         { id: "%2", x: 0, y: 16, width: 80, height: 8 },
       ],
       80,
-      24
+      24,
     );
     // All three panes in vertical split
     expect(result).toContain("[");
@@ -148,7 +148,7 @@ describe("generateLayoutString", () => {
         { id: "%1", x: 40, y: 0, width: 40, height: 24 },
       ],
       80,
-      24
+      24,
     );
     const vertical = generateLayoutString(
       [
@@ -156,7 +156,7 @@ describe("generateLayoutString", () => {
         { id: "%1", x: 0, y: 12, width: 80, height: 12 },
       ],
       80,
-      24
+      24,
     );
     // Different layouts should have different checksums
     const horizontalChecksum = horizontal.substring(0, 4);

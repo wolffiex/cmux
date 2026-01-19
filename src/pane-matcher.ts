@@ -36,11 +36,13 @@ export interface MatchResult {
 export function calculateOverlap(pane: Pane, slot: Slot): number {
   const xOverlap = Math.max(
     0,
-    Math.min(pane.x + pane.width, slot.x + slot.width) - Math.max(pane.x, slot.x)
+    Math.min(pane.x + pane.width, slot.x + slot.width) -
+      Math.max(pane.x, slot.x),
   );
   const yOverlap = Math.max(
     0,
-    Math.min(pane.y + pane.height, slot.y + slot.height) - Math.max(pane.y, slot.y)
+    Math.min(pane.y + pane.height, slot.y + slot.height) -
+      Math.max(pane.y, slot.y),
   );
   return xOverlap * yOverlap;
 }
@@ -71,7 +73,11 @@ export function centerDistance(pane: Pane, slot: Slot): number {
  *   when a pane spans multiple vertically-stacked slots
  *   (this ensures new panes appear at the bottom)
  */
-function calculateMatchScore(pane: Pane, slot: Slot, topBiasMultiplier: number = 1): number {
+function calculateMatchScore(
+  pane: Pane,
+  slot: Slot,
+  topBiasMultiplier: number = 1,
+): number {
   const overlap = calculateOverlap(pane, slot);
 
   if (overlap > 0) {
@@ -91,12 +97,13 @@ function calculateMatchScore(pane: Pane, slot: Slot, topBiasMultiplier: number =
  * Returns matches, plus lists of unmatched slots and panes.
  */
 export function matchPanesToSlots(panes: Pane[], slots: Slot[]): MatchResult {
-  const matches: Array<{ paneId: string; slotIndex: number; score: number }> = [];
+  const matches: Array<{ paneId: string; slotIndex: number; score: number }> =
+    [];
   const matchedPaneIds = new Set<string>();
   const matchedSlotIndices = new Set<number>();
 
   // Calculate max Y to normalize top-bias (slots at top get higher multiplier)
-  const maxY = slots.length > 0 ? Math.max(...slots.map(s => s.y)) : 0;
+  const maxY = slots.length > 0 ? Math.max(...slots.map((s) => s.y)) : 0;
   // Top-bias: 20% bonus for top slots. This multiplicative approach ensures
   // that when a pane spans multiple vertically-stacked slots (like a full-height
   // right pane transitioning to top-right + bottom-right), the top slot wins
@@ -104,12 +111,14 @@ export function matchPanesToSlots(panes: Pane[], slots: Slot[]): MatchResult {
   const TOP_BIAS_BONUS = 0.2;
 
   // Build score matrix
-  const scores: Array<{ paneId: string; slotIndex: number; score: number }> = [];
+  const scores: Array<{ paneId: string; slotIndex: number; score: number }> =
+    [];
   for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
     const slot = slots[slotIndex];
     // topBiasMultiplier: 1.0 + bonus for slots with smaller Y (closer to top)
     // Range: [1.0, 1.0 + TOP_BIAS_BONUS] - bottom slots get 1.0, top slots get 1.2
-    const topBiasMultiplier = 1.0 + (maxY > 0 ? TOP_BIAS_BONUS * (1 - slot.y / maxY) : 0);
+    const topBiasMultiplier =
+      1.0 + (maxY > 0 ? TOP_BIAS_BONUS * (1 - slot.y / maxY) : 0);
     for (const pane of panes) {
       scores.push({
         paneId: pane.id,
@@ -124,7 +133,10 @@ export function matchPanesToSlots(panes: Pane[], slots: Slot[]): MatchResult {
 
   // Greedy matching: take best available matches
   for (const candidate of scores) {
-    if (matchedPaneIds.has(candidate.paneId) || matchedSlotIndices.has(candidate.slotIndex)) {
+    if (
+      matchedPaneIds.has(candidate.paneId) ||
+      matchedSlotIndices.has(candidate.slotIndex)
+    ) {
       continue;
     }
     matches.push(candidate);

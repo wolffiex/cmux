@@ -1,5 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import { computeSwaps, SwapCommand } from "../src/swap-orchestrator";
+import { describe, expect, test } from "bun:test";
+import { computeSwaps, type SwapCommand } from "../src/swap-orchestrator";
 
 /**
  * Helper to apply swaps to an array and verify the result.
@@ -190,25 +190,25 @@ describe("computeSwaps", () => {
   describe("error handling", () => {
     test("throws when arrays have different lengths", () => {
       expect(() => computeSwaps(["%0", "%1"], ["%0"])).toThrow(
-        "Order arrays must have same length"
+        "Order arrays must have same length",
       );
     });
 
     test("throws when desired order has unknown pane ID", () => {
       expect(() => computeSwaps(["%0", "%1"], ["%0", "%2"])).toThrow(
-        'Pane ID "%2" from desired order not found in current order'
+        'Pane ID "%2" from desired order not found in current order',
       );
     });
 
     test("throws when desired order has duplicate pane IDs", () => {
       expect(() => computeSwaps(["%0", "%1"], ["%0", "%0"])).toThrow(
-        "Desired order contains duplicate pane IDs"
+        "Desired order contains duplicate pane IDs",
       );
     });
 
     test("throws when current order has duplicate pane IDs", () => {
       expect(() => computeSwaps(["%0", "%0"], ["%0", "%1"])).toThrow(
-        "Current order contains duplicate pane IDs"
+        "Current order contains duplicate pane IDs",
       );
     });
   });

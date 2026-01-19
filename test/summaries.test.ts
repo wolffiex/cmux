@@ -1,5 +1,10 @@
-import { test, expect, describe } from "bun:test";
-import { getWindowName, generateSummary, getSummary, getSummariesForWindows } from "../src/summaries";
+import { describe, expect, test } from "bun:test";
+import {
+  generateSummary,
+  getSummariesForWindows,
+  getSummary,
+  getWindowName,
+} from "../src/summaries";
 import type { WindowContext } from "../src/tmux";
 
 describe("getWindowName", () => {
@@ -25,16 +30,22 @@ describe("getWindowName", () => {
 
   test("extracts short branch from fix/ prefix", () => {
     // Full name returned - display layer handles truncation
-    expect(getWindowName("/code/claude-code", "fix/npmrc-registry")).toBe("claude-code/npmrc-registry");
+    expect(getWindowName("/code/claude-code", "fix/npmrc-registry")).toBe(
+      "claude-code/npmrc-registry",
+    );
   });
 
   test("extracts short branch from feature/ prefix", () => {
     // Full name returned - display layer handles truncation
-    expect(getWindowName("/code/api", "feature/PROJ-123-desc")).toBe("api/PROJ-123-desc");
+    expect(getWindowName("/code/api", "feature/PROJ-123-desc")).toBe(
+      "api/PROJ-123-desc",
+    );
   });
 
   test("extracts short branch from nested prefix", () => {
-    expect(getWindowName("/code/api", "user/alice/experiment")).toBe("api/experiment");
+    expect(getWindowName("/code/api", "user/alice/experiment")).toBe(
+      "api/experiment",
+    );
   });
 
   test("returns full name without truncation", () => {
@@ -63,8 +74,18 @@ describe("generateSummary", () => {
       windowIndex: 0,
       windowName: "test",
       panes: [
-        { workdir: "/code/repo1", program: "zsh", transcript: "", gitBranch: "main" },
-        { workdir: "/code/repo2", program: "vim", transcript: "", gitBranch: "feature/cool-thing" },
+        {
+          workdir: "/code/repo1",
+          program: "zsh",
+          transcript: "",
+          gitBranch: "main",
+        },
+        {
+          workdir: "/code/repo2",
+          program: "vim",
+          transcript: "",
+          gitBranch: "feature/cool-thing",
+        },
       ],
       activePaneIndex: 1, // Second pane is active
     };
@@ -79,7 +100,12 @@ describe("generateSummary", () => {
       windowIndex: 0,
       windowName: "test",
       panes: [
-        { workdir: "/code/repo1", program: "zsh", transcript: "", gitBranch: "main" },
+        {
+          workdir: "/code/repo1",
+          program: "zsh",
+          transcript: "",
+          gitBranch: "main",
+        },
       ],
       activePaneIndex: 99, // Invalid index
     };
@@ -107,7 +133,12 @@ describe("getSummary with caching", () => {
       windowIndex: 42,
       windowName: "test",
       panes: [
-        { workdir: "/code/myrepo", program: "zsh", transcript: "", gitBranch: "fix/bug" },
+        {
+          workdir: "/code/myrepo",
+          program: "zsh",
+          transcript: "",
+          gitBranch: "fix/bug",
+        },
       ],
       activePaneIndex: 0,
     };
@@ -128,13 +159,27 @@ describe("getSummariesForWindows", () => {
       {
         windowIndex: 0,
         windowName: "w0",
-        panes: [{ workdir: "/code/alpha", program: "zsh", transcript: "", gitBranch: "main" }],
+        panes: [
+          {
+            workdir: "/code/alpha",
+            program: "zsh",
+            transcript: "",
+            gitBranch: "main",
+          },
+        ],
         activePaneIndex: 0,
       },
       {
         windowIndex: 1,
         windowName: "w1",
-        panes: [{ workdir: "/code/beta", program: "vim", transcript: "", gitBranch: "fix/issue" }],
+        panes: [
+          {
+            workdir: "/code/beta",
+            program: "vim",
+            transcript: "",
+            gitBranch: "fix/issue",
+          },
+        ],
         activePaneIndex: 0,
       },
     ];

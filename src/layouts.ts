@@ -134,10 +134,12 @@ export const ALL_LAYOUTS: LayoutTemplate[] = [
 export function resolveLayout(
   template: LayoutTemplate,
   windowWidth: number,
-  windowHeight: number
+  windowHeight: number,
 ): { x: number; y: number; width: number; height: number }[] {
   // First pass: identify unique columns and rows to count separators
-  const xPositions = [...new Set(template.panes.map(p => p.x))].sort((a, b) => a - b);
+  const xPositions = [...new Set(template.panes.map((p) => p.x))].sort(
+    (a, b) => a - b,
+  );
   const numVSeparators = xPositions.length - 1; // vertical separators between columns
   const usableWidth = windowWidth - numVSeparators;
 
@@ -145,7 +147,7 @@ export function resolveLayout(
   const columns = new Map<number, number[]>();
   for (const pane of template.panes) {
     if (!columns.has(pane.x)) columns.set(pane.x, []);
-    columns.get(pane.x)!.push(pane.y);
+    columns.get(pane.x)?.push(pane.y);
   }
 
   return template.panes.map((pane) => {
@@ -164,11 +166,9 @@ export function resolveLayout(
     }
 
     // Get y positions in this column to count horizontal separators
-    const yPositionsInCol = [...new Set(
-      template.panes
-        .filter(p => p.x === pane.x)
-        .map(p => p.y)
-    )].sort((a, b) => a - b);
+    const yPositionsInCol = [
+      ...new Set(template.panes.filter((p) => p.x === pane.x).map((p) => p.y)),
+    ].sort((a, b) => a - b);
     const numHSeparators = yPositionsInCol.length - 1;
     const usableHeight = windowHeight - numHSeparators;
 

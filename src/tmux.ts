@@ -1,4 +1,4 @@
-import { execSync, exec } from "node:child_process";
+import { exec, execSync } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
@@ -29,10 +29,9 @@ export interface TmuxWindow {
 
 export function getWindowInfo(): WindowInfo {
   // Single tmux command to get both window size and pane info
-  const format = "#{window_width}:#{window_height}:#{pane_id}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_title}";
-  const output = execSync(`tmux list-panes -F '${format}'`)
-    .toString()
-    .trim();
+  const format =
+    "#{window_width}:#{window_height}:#{pane_id}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_title}";
+  const output = execSync(`tmux list-panes -F '${format}'`).toString().trim();
 
   const lines = output.split("\n");
   const [width, height] = lines[0].split(":").slice(0, 2).map(Number);
@@ -56,10 +55,9 @@ export function getWindowInfo(): WindowInfo {
  * Get all windows in the current session with their status flags.
  */
 export function getWindows(): TmuxWindow[] {
-  const format = "#{window_index}:#{window_name}:#{window_active}:#{window_bell_flag}:#{window_activity_flag}:#{pane_current_command}";
-  const output = execSync(`tmux list-windows -F '${format}'`)
-    .toString()
-    .trim();
+  const format =
+    "#{window_index}:#{window_name}:#{window_active}:#{window_bell_flag}:#{window_activity_flag}:#{pane_current_command}";
+  const output = execSync(`tmux list-windows -F '${format}'`).toString().trim();
 
   return output.split("\n").map((line) => {
     const [index, name, active, bell, activity, paneCommand] = line.split(":");
@@ -91,7 +89,8 @@ export function getStartupInfo(): StartupInfo {
   // Use \n as section separator and | as field separator within sections
   // Section 1: list-windows output (one line per window)
   // Section 2: list-panes output for current window (just need count)
-  const windowFormat = "#{window_index}|#{window_name}|#{window_active}|#{window_bell_flag}|#{window_activity_flag}|#{pane_current_command}";
+  const windowFormat =
+    "#{window_index}|#{window_name}|#{window_active}|#{window_bell_flag}|#{window_activity_flag}|#{pane_current_command}";
   const paneFormat = "#{pane_id}";
 
   // Chain commands: renumber, then output windows, then separator, then panes
@@ -108,9 +107,10 @@ export function getStartupInfo(): StartupInfo {
   // Parse windows
   const windows: TmuxWindow[] = windowsSection
     .split("\n")
-    .filter(line => line.length > 0)
+    .filter((line) => line.length > 0)
     .map((line) => {
-      const [index, name, active, bell, activity, paneCommand] = line.split("|");
+      const [index, name, active, bell, activity, paneCommand] =
+        line.split("|");
       return {
         index: Number(index),
         name,
@@ -122,10 +122,8 @@ export function getStartupInfo(): StartupInfo {
     });
 
   // Count panes (each line is one pane)
-  const currentWindowPaneCount = panesSection
-    .split("\n")
-    .filter(line => line.length > 0)
-    .length || 1;
+  const currentWindowPaneCount =
+    panesSection.split("\n").filter((line) => line.length > 0).length || 1;
 
   return { windows, currentWindowPaneCount };
 }
@@ -140,7 +138,7 @@ export function getStartupInfo(): StartupInfo {
  */
 export function extractRepoNameFromUrl(url: string): string | null {
   // Remove .git suffix if present
-  let cleanUrl = url.endsWith(".git") ? url.slice(0, -4) : url;
+  const cleanUrl = url.endsWith(".git") ? url.slice(0, -4) : url;
 
   // Find the last path segment
   // For SSH URLs like git@github.com:org/repo, the path starts after ':'
@@ -171,27 +169,36 @@ export interface PaneContext {
   program: string;
   transcript: string;
   gitBranch: string | null;
-  gitRepoName: string | null;  // Actual repo name (handles worktrees correctly)
+  gitRepoName: string | null; // Actual repo name (handles worktrees correctly)
 }
 
 export interface WindowContext {
   windowIndex: number;
   windowName: string;
   panes: PaneContext[];
-  activePaneIndex: number;  // Index of the currently focused pane
+  activePaneIndex: number; // Index of the currently focused pane
 }
 
 /**
  * Get rich context for a specific pane.
  */
-async function getPaneContext(windowTarget: string, paneIndex: number): Promise<PaneContext> {
+async function getPaneContext(
+  windowTarget: string,
+  paneIndex: number,
+): Promise<PaneContext> {
   const target = `${windowTarget}.${paneIndex}`;
 
   // Get workdir and program in parallel
   const [workdirResult, programResult, transcriptResult] = await Promise.all([
-    execAsync(`tmux display-message -p -t '${target}' '#{pane_current_path}'`).catch(() => ({ stdout: "" })),
-    execAsync(`tmux display-message -p -t '${target}' '#{pane_current_command}'`).catch(() => ({ stdout: "" })),
-    execAsync(`tmux capture-pane -p -t '${target}' -S -50`).catch(() => ({ stdout: "" })),
+    execAsync(
+      `tmux display-message -p -t '${target}' '#{pane_current_path}'`,
+    ).catch(() => ({ stdout: "" })),
+    execAsync(
+      `tmux display-message -p -t '${target}' '#{pane_current_command}'`,
+    ).catch(() => ({ stdout: "" })),
+    execAsync(`tmux capture-pane -p -t '${target}' -S -50`).catch(() => ({
+      stdout: "",
+    })),
   ]);
 
   const workdir = workdirResult.stdout.trim();
@@ -205,9 +212,13 @@ async function getPaneContext(windowTarget: string, paneIndex: number): Promise<
     // Get branch and remote URL in parallel, with individual error handling
     // so that a missing remote doesn't prevent us from getting the branch
     const [branchResult, remoteResult] = await Promise.all([
-      execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`).catch(() => ({ stdout: "" })),
+      execAsync(`git -C '${workdir}' branch --show-current 2>/dev/null`).catch(
+        () => ({ stdout: "" }),
+      ),
       // Get remote origin URL to extract repo name (works correctly for worktrees)
-      execAsync(`git -C '${workdir}' remote get-url origin 2>/dev/null`).catch(() => ({ stdout: "" })),
+      execAsync(`git -C '${workdir}' remote get-url origin 2>/dev/null`).catch(
+        () => ({ stdout: "" }),
+      ),
     ]);
     const branch = branchResult.stdout.trim();
     if (branch) {
@@ -237,14 +248,18 @@ async function getPaneContext(windowTarget: string, paneIndex: number): Promise<
 /**
  * Get rich context for all panes in a window.
  */
-export async function getWindowContext(windowIndex: number): Promise<WindowContext> {
+export async function getWindowContext(
+  windowIndex: number,
+): Promise<WindowContext> {
   const windowTarget = `:${windowIndex}`;
 
   // Get window name, pane list, and active pane info
   // #{pane_active} is 1 for the active pane, 0 otherwise
   const [nameResult, panesResult] = await Promise.all([
     execAsync(`tmux display-message -p -t '${windowTarget}' '#{window_name}'`),
-    execAsync(`tmux list-panes -t '${windowTarget}' -F '#{pane_index}:#{pane_active}'`),
+    execAsync(
+      `tmux list-panes -t '${windowTarget}' -F '#{pane_index}:#{pane_active}'`,
+    ),
   ]);
 
   const windowName = nameResult.stdout.trim();
@@ -266,7 +281,7 @@ export async function getWindowContext(windowIndex: number): Promise<WindowConte
 
   // Get context for all panes in parallel
   const panes = await Promise.all(
-    paneIndices.map((paneIndex) => getPaneContext(windowTarget, paneIndex))
+    paneIndices.map((paneIndex) => getPaneContext(windowTarget, paneIndex)),
   );
 
   return {

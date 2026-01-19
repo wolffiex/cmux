@@ -1,21 +1,29 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { extractRepoNameFromUrl } from "../src/tmux";
 
 describe("extractRepoNameFromUrl", () => {
   test("extracts repo name from SSH URL with .git suffix", () => {
-    expect(extractRepoNameFromUrl("git@github.com:anthropic/research-apps.git")).toBe("research-apps");
+    expect(
+      extractRepoNameFromUrl("git@github.com:anthropic/research-apps.git"),
+    ).toBe("research-apps");
   });
 
   test("extracts repo name from SSH URL without .git suffix", () => {
-    expect(extractRepoNameFromUrl("git@github.com:anthropic/research-apps")).toBe("research-apps");
+    expect(
+      extractRepoNameFromUrl("git@github.com:anthropic/research-apps"),
+    ).toBe("research-apps");
   });
 
   test("extracts repo name from HTTPS URL with .git suffix", () => {
-    expect(extractRepoNameFromUrl("https://github.com/anthropic/research-apps.git")).toBe("research-apps");
+    expect(
+      extractRepoNameFromUrl("https://github.com/anthropic/research-apps.git"),
+    ).toBe("research-apps");
   });
 
   test("extracts repo name from HTTPS URL without .git suffix", () => {
-    expect(extractRepoNameFromUrl("https://github.com/anthropic/research-apps")).toBe("research-apps");
+    expect(
+      extractRepoNameFromUrl("https://github.com/anthropic/research-apps"),
+    ).toBe("research-apps");
   });
 
   test("extracts repo name from local path", () => {
@@ -27,16 +35,22 @@ describe("extractRepoNameFromUrl", () => {
   });
 
   test("handles SSH URL with nested org path", () => {
-    expect(extractRepoNameFromUrl("git@gitlab.com:group/subgroup/project.git")).toBe("project");
+    expect(
+      extractRepoNameFromUrl("git@gitlab.com:group/subgroup/project.git"),
+    ).toBe("project");
   });
 
   test("handles HTTPS URL with nested org path", () => {
-    expect(extractRepoNameFromUrl("https://gitlab.com/group/subgroup/project.git")).toBe("project");
+    expect(
+      extractRepoNameFromUrl("https://gitlab.com/group/subgroup/project.git"),
+    ).toBe("project");
   });
 
   test("handles SSH URL with port", () => {
     // SSH URLs with custom ports use ssh:// scheme
-    expect(extractRepoNameFromUrl("ssh://git@github.com:2222/org/repo.git")).toBe("repo");
+    expect(
+      extractRepoNameFromUrl("ssh://git@github.com:2222/org/repo.git"),
+    ).toBe("repo");
   });
 
   test("handles simple repo name with .git suffix", () => {
