@@ -25,7 +25,6 @@ A fast tmux layout manager with a popup UI.
 ## Usage
 
 ```zsh
-```
 alias cmux=bun <path to ./src/main.ts>
 ```
 
