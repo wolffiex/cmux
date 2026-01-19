@@ -1,15 +1,6 @@
 # cmux
 
-A simple tmux layout manager with a popup UI.
-
-## Installation
-
-```bash
-bun install
-bun link
-```
-
-This installs `cmux` globally so you can run it from anywhere.
+tmux UI wrapper
 
 ## Running
 

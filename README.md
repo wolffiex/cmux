@@ -1,26 +1,45 @@
 # cmux
 
-Tmux UI helper
+A fast tmux layout manager with a popup UI.
+
+## Features
+
+- **Window carousel** - Visual horizontal selector for switching, creating, and deleting windows
+- **10 fixed layouts** - Preset layouts for 1-4 panes (full, split, stacked, grid)
+- **Window reordering** - Move windows left/right with Alt+h/l (animated)
+- **Smart pane matching** - Preserves pane positions when changing layouts
+- **Intelligent naming** - Windows auto-named from git repo/branch or directory
+- **Fast startup** - Raw ANSI rendering, ~22ms startup time
+
+### Planned
+
+- **AI summary** - Context-aware summaries for each window
+- **Directory picker** - Create new windows in any directory with typeahead filtering
+
+## Installation
+
+**Requirements:**
+- tmux 3.2+
+- Bun
 
 ## Usage
-# alias in your .zshrc
-cmux = bun <real path to ./src/main.ts>
 
-```bash
-# Outside tmux: starts new session with Alt-Space bound
+```zsh
+```
+alias cmux=bun <path to ./src/main.ts>
+```
+
+```zsh
+# Outside tmux: starts or attaches to "cmux" session with Alt-Space bound
 cmux
 
-# Inside tmux: opens layout UI
-# alias in your .zshrc
+# Inside tmux: opens the layout UI directly
 cmux
 ```
 
-**Automatically bound in cmux session**
-```bash
-bind -n M-Space display-popup -w 80% -h 80% -E 'bun /path/to/cmux/src/main.ts'
-```
+When run outside tmux, cmux creates a session named "cmux" and binds Alt-Space to open the UI as a popup. If the session already exists, it attaches to it.
 
-## UI
+## UI Overview
 
 ```
        ┌───────────────────────────────────────────────────────────────────────────────┐
@@ -60,47 +79,55 @@ bind -n M-Space display-popup -w 80% -h 80% -E 'bun /path/to/cmux/src/main.ts'
        │ tab focus  hjkl nav  ⏎ apply                                                  │
        └───────────────────────────────────────────────────────────────────────────────┘
 ```
+## Key Bindings
 
-### Controls
+### Window Carousel (top)
 
-**Window bar (top):**
-- `h/l` - Select [−], window name, or [+]
-- `j/k` - Open window list (when on name)
-- `Enter` - Remove window ([−]) or create new ([+])
+| Key | Action |
+|-----|--------|
+| `h` / `l` | Move selection left/right |
+| `j` | Move focus to layout area |
+| `Enter` | Switch to window, or activate `[-]`/`[+]` button |
+| `1`-`9` | Quick select window by number |
+| `-` or `x` | Delete current window (with confirmation) |
+| `+` or `=` | Create new window |
+| `Alt+h` / `Alt+l` | Reorder: move current window left/right |
 
-**Layout area:**
-- `h/l/j/k` - Cycle through fixed layouts
+### Layout Area (bottom)
 
-**General:**
-- `Tab` - Switch focus between window bar and layout
-- `Enter` - Apply selected layout
-- `Escape` / `q` - Quit
+| Key | Action |
+|-----|--------|
+| `h` / `l` | Cycle through layouts (with slide animation) |
+| `k` | Move focus to window carousel |
+| `Enter` | Apply layout and exit |
+
+### General
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch focus between carousel and layout |
+| `Escape` / `q` | Quit (or cancel delete confirmation) |
+| Arrow keys | Same as `hjkl` |
 
 ## Layouts
 
-10 fixed layouts for 1-4 panes:
-- 1 pane: full
-- 2 panes: 50/50 vertical
-- 3 panes: 4 variants (main left/right with stacked)
-- 4 panes: 4 variants (grid, stacked combinations)
+Fxed layouts organized by pane count.
 
-Panes are numbered largest-to-smallest.
+Data-driven layouts; intended for customization
 
-## Installation
+Panes are numbered largest-to-smallest by area.
 
-```bash
-bun install
-bun src/main.ts
-```
+## Environment Variables
 
-**Requirements:**
-- tmux 3.2+
-- Bun
+| Variable | Description |
+|----------|-------------|
+| `CMUX_DEBUG=1` | Enable debug logging to `/tmp/cmux.log` |
+| `CMUX_BENCHMARK=1` | Headless mode for benchmarking |
 
 ## Development
 
 ```bash
-bun test                    # Run tests
-bun src/main.ts             # Run directly
-bun src/layout-preview.ts   # Preview layouts in terminal
+bun test              # Run tests
+bun src/main.ts       # Run directly
 ```
+
