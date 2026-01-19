@@ -21,6 +21,7 @@ import {
 } from "./tmux";
 import { generateLayoutString } from "./tmux-layout";
 import { easeOut, splitWindowName, stripAnsi, wordWrap } from "./utils";
+import { getWindowSummary } from "./window-summary";
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
 const SELF_PATH = import.meta.path;
@@ -52,6 +53,10 @@ interface State {
   confirmingDelete: boolean;
   // Directory picker state
   dirPicker: DirPickerState | null;
+  // Summary cache: windowIndex -> summary text (or "loading..." while fetching)
+  summaryCache: Map<number, string>;
+  // Track which summaries are being fetched
+  summaryFetching: Set<number>;
 }
 
 /**
@@ -135,6 +140,9 @@ function initState(): State {
     confirmingDelete: false,
     // Directory picker state
     dirPicker: null,
+    // Summary cache
+    summaryCache: new Map(),
+    summaryFetching: new Set(),
   };
 }
 
@@ -192,6 +200,30 @@ function stopPolling(): void {
     clearInterval(pollInterval);
     pollInterval = null;
   }
+}
+
+// ── Summary fetching ────────────────────────────────────────────────────────
+function fetchSummaryForWindow(windowIndex: number): void {
+  // Already have it cached or fetching
+  if (state.summaryCache.has(windowIndex) || state.summaryFetching.has(windowIndex)) {
+    return;
+  }
+
+  state.summaryFetching.add(windowIndex);
+  state.summaryCache.set(windowIndex, "Loading summary...");
+
+  // Use window index as tmux target (`:N` format)
+  getWindowSummary(`:${windowIndex}`)
+    .then((summary) => {
+      state.summaryCache.set(windowIndex, summary);
+      state.summaryFetching.delete(windowIndex);
+      render();
+    })
+    .catch(() => {
+      state.summaryCache.set(windowIndex, "Unable to load summary");
+      state.summaryFetching.delete(windowIndex);
+      render();
+    });
 }
 
 // ── ANSI helpers ───────────────────────────────────────────────────────────
@@ -775,9 +807,18 @@ function render(): void {
   const summaryX = previewX + previewW + 4; // Right of layout preview with gap
   const summaryWidth = contentMargin + contentWidth - summaryX - 2;
 
+  // Get selected window (if carousel is on a window, not +/- buttons)
+  const selectedWindowIdx = state.carouselIndex - 1; // Convert carousel index to window array index
+  const selectedWindow =
+    selectedWindowIdx >= 0 && selectedWindowIdx < state.windows.length
+      ? state.windows[selectedWindowIdx]
+      : null;
+
   // Window title in large font (centered in right column)
-  const dummyTitle = "incidents";
-  const titleLines = titleFont.render(dummyTitle);
+  // Use repo name (first part of window name) as title
+  const [repoName] = selectedWindow ? splitWindowName(selectedWindow.name) : [""];
+  const titleText = repoName || "cmux";
+  const titleLines = titleFont.render(titleText);
   const titleWidth = titleLines.reduce((max, line) => Math.max(max, line.length), 0);
   const titleX = summaryX + Math.floor((summaryWidth - titleWidth) / 2);
   for (let i = 0; i < titleLines.length; i++) {
@@ -787,9 +828,13 @@ function render(): void {
 
   // AI summary (below title, word-wrapped)
   const summaryY = previewY + titleLines.length + 1;
-  const dummySummary =
-    "Server + simulator running, 5 uncommitted changes. Adding SSE support for real-time metrics.";
-  const summaryLines = wordWrap(dummySummary, summaryWidth);
+  let summaryText = "";
+  if (selectedWindow) {
+    // Trigger fetch if not cached
+    fetchSummaryForWindow(selectedWindow.index);
+    summaryText = state.summaryCache.get(selectedWindow.index) || "Loading summary...";
+  }
+  const summaryLines = wordWrap(summaryText, summaryWidth);
   for (let i = 0; i < summaryLines.length && summaryY + i < previewY + previewH; i++) {
     out += ansi.moveTo(summaryX, summaryY + i);
     out += ansi.dim + summaryLines[i] + ansi.reset;
