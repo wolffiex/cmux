@@ -11,7 +11,6 @@ import { splitWindowName, stripAnsi, easeOut } from "./utils"
 import { box } from "./box-chars"
 import {
   type DirPickerState,
-  type DirPickerResult,
   initDirPickerState,
   handleDirPickerKey,
   renderDirPicker,
