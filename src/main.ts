@@ -1,6 +1,7 @@
 import { execSync, spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { box } from "./box-chars";
+import { Font } from "./fonts";
 import {
   type DirPickerState,
   handleDirPickerKey,
@@ -214,6 +215,9 @@ const ansi = {
 
 // Superscript digits for window numbering
 const superscript = ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"];
+
+// Font for window titles
+const titleFont = new Font("mini");
 
 // ── Layout rendering ───────────────────────────────────────────────────────
 function drawLayoutPreview(
@@ -767,14 +771,27 @@ function render(): void {
   out += ` ${counter} `;
   out += ansi.reset;
 
-  // AI summary (right column, word-wrapped)
+  // Right column: title + AI summary
   const summaryX = previewX + previewW + 4; // Right of layout preview with gap
   const summaryWidth = contentMargin + contentWidth - summaryX - 2;
+
+  // Window title in large font (centered in right column)
+  const dummyTitle = "incidents";
+  const titleLines = titleFont.render(dummyTitle);
+  const titleWidth = titleLines.reduce((max, line) => Math.max(max, line.length), 0);
+  const titleX = summaryX + Math.floor((summaryWidth - titleWidth) / 2);
+  for (let i = 0; i < titleLines.length; i++) {
+    out += ansi.moveTo(titleX, previewY + i);
+    out += titleLines[i];
+  }
+
+  // AI summary (below title, word-wrapped)
+  const summaryY = previewY + titleLines.length + 1;
   const dummySummary =
     "Server + simulator running, 5 uncommitted changes. Adding SSE support for real-time metrics.";
   const summaryLines = wordWrap(dummySummary, summaryWidth);
-  for (let i = 0; i < summaryLines.length && i < previewH - 2; i++) {
-    out += ansi.moveTo(summaryX, previewY + 2 + i);
+  for (let i = 0; i < summaryLines.length && summaryY + i < previewY + previewH; i++) {
+    out += ansi.moveTo(summaryX, summaryY + i);
     out += ansi.dim + summaryLines[i] + ansi.reset;
   }
 
