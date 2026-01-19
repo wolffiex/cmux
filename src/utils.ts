@@ -60,6 +60,33 @@ export function splitWindowName(name: string): [string, string] {
  * @param summary - Generated window name
  * @param maxLength - Maximum length (default 50, generous to allow display layer to handle truncation)
  */
+/**
+ * Word wrap text to fit within a given width.
+ * Returns an array of lines.
+ */
+export function wordWrap(text: string, width: number): string[] {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (!currentLine) {
+      currentLine = word;
+    } else if (currentLine.length + 1 + word.length <= width) {
+      currentLine += " " + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines;
+}
+
 export function sanitizeWindowName(
   summary: string,
   maxLength: number = 50,

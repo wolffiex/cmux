@@ -19,7 +19,7 @@ import {
   type TmuxWindow,
 } from "./tmux";
 import { generateLayoutString } from "./tmux-layout";
-import { easeOut, splitWindowName, stripAnsi } from "./utils";
+import { easeOut, splitWindowName, stripAnsi, wordWrap } from "./utils";
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
 const SELF_PATH = import.meta.path;
@@ -743,25 +743,33 @@ function render(): void {
   // Separator (moved down to row 6)
   out += ansi.moveTo(0, 6) + box.h.repeat(width);
 
-  // Layout preview (center area, below carousel box)
+  // Layout preview (right-justified, below carousel box)
   const layout = ALL_LAYOUTS[state.layoutIndex];
-  const previewW = Math.min(width - 4, 40);
-  const previewH = Math.min(height - 11, 12); // Adjusted for taller 6-row carousel
-  const previewX = Math.floor((width - previewW) / 2);
+  const previewW = Math.min(30, Math.floor(width / 2));
+  const previewH = Math.min(height - 11, 8);
+  const previewX = width - previewW - 2; // Right-justified with margin
   const previewY = 8; // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
   out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
 
-  // Layout name and counter
+  // Layout counter (below preview, right-aligned)
   const paneCount = layout.panes.length;
   const layoutFocused = state.focus === "layout";
   const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
-  out += ansi.moveTo(
-    Math.floor((width - counter.length - 2) / 2),
-    previewY + previewH,
-  );
+  const counterX = previewX + Math.floor((previewW - counter.length) / 2);
+  out += ansi.moveTo(counterX, previewY + previewH);
   if (layoutFocused) out += ansi.inverse;
   out += ` ${counter} `;
   out += ansi.reset;
+
+  // AI summary (left column, word-wrapped)
+  const summaryWidth = previewX - 4; // Left of layout preview with gap
+  const dummySummary =
+    "Server + simulator running, 5 uncommitted changes. Adding SSE support for real-time metrics.";
+  const summaryLines = wordWrap(dummySummary, summaryWidth);
+  for (let i = 0; i < summaryLines.length && i < previewH; i++) {
+    out += ansi.moveTo(2, previewY + i);
+    out += ansi.dim + summaryLines[i] + ansi.reset;
+  }
 
   // Separator
   out += ansi.moveTo(0, height - 2) + box.h.repeat(width);
