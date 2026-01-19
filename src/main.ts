@@ -348,19 +348,22 @@ function startAnimation(direction: AnimationDirection): void {
 
   const width = process.stdout.columns || 80;
   const height = process.stdout.rows || 24;
-  const previewW = Math.min(width - 4, 40);
-  const previewH = Math.min(height - 11, 12); // Adjusted for taller 6-row carousel
-  const previewX = Math.floor((width - previewW) / 2);
+
+  // Use same positioning as render() - left side of content area
+  const maxContentWidth = 100;
+  const contentWidth = Math.min(width, maxContentWidth);
+  const contentMargin = Math.floor((width - contentWidth) / 2);
+  const previewW = Math.min(40, Math.floor(contentWidth / 2));
+  const previewH = Math.min(height - 11, 12);
+  const previewX = contentMargin + 2;
   const previewY = 8; // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
 
   // Update the counter immediately (shows new layout info)
   const paneCount = nextLayout.panes.length;
   const layoutFocused = state.focus === "layout";
   const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
-  let counterOut = ansi.moveTo(
-    Math.floor((width - counter.length - 2) / 2),
-    previewY + previewH,
-  );
+  const counterX = previewX + Math.floor((previewW - counter.length) / 2);
+  let counterOut = ansi.moveTo(counterX, previewY + previewH);
   if (layoutFocused) counterOut += ansi.inverse;
   counterOut += ` ${counter} `;
   counterOut += ansi.reset;
@@ -787,8 +790,8 @@ function render(): void {
 
   // Layout preview (left side of content area)
   const layout = ALL_LAYOUTS[state.layoutIndex];
-  const previewW = Math.min(30, Math.floor(contentWidth / 2));
-  const previewH = Math.min(height - 11, 8);
+  const previewW = Math.min(40, Math.floor(contentWidth / 2));
+  const previewH = Math.min(height - 11, 12);
   const previewX = contentMargin + 2;
   const previewY = 8; // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
   out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
