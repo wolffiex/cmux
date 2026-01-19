@@ -223,8 +223,8 @@ function fetchSummaryForWindow(windowIndex: number): void {
   state.summaryFetching.add(windowIndex);
   state.summaryCache.set(windowIndex, "Loading summary...");
 
-  // Use window index as tmux target (`:N` format)
-  getWindowSummary(`:${windowIndex}`)
+  // Use full session:window target format for popup context
+  getWindowSummary(`${SESSION_NAME}:${windowIndex}`)
     .then((summary) => {
       state.summaryCache.set(windowIndex, summary);
       state.summaryFetching.delete(windowIndex);

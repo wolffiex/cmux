@@ -31,14 +31,14 @@ function run(cmd: string): string {
   }
 }
 
-function gatherWindowContext(windowId: string): WindowContext {
+function gatherWindowContext(windowTarget: string): WindowContext {
   const windowName = run(
-    `tmux display-message -t ${windowId} -p '#{window_name}'`
+    `tmux display-message -t ${windowTarget} -p '#{window_name}'`
   );
 
   // Get pane info
   const paneData = run(
-    `tmux list-panes -t ${windowId} -F '#{pane_index}\t#{pane_current_command}\t#{pane_current_path}'`
+    `tmux list-panes -t ${windowTarget} -F '#{pane_index}\t#{pane_current_command}\t#{pane_current_path}'`
   );
 
   const panes: PaneInfo[] = paneData
@@ -47,7 +47,7 @@ function gatherWindowContext(windowId: string): WindowContext {
     .map((line) => {
       const [index, command, cwd] = line.split("\t");
       const content = run(
-        `tmux capture-pane -t ${windowId}.${index} -p | tail -30`
+        `tmux capture-pane -t ${windowTarget}.${index} -p | tail -30`
       );
       return { index: parseInt(index), command, cwd, content };
     });
@@ -65,20 +65,19 @@ function gatherWindowContext(windowId: string): WindowContext {
 
 const SYSTEM_PROMPT = `You summarize tmux windows in exactly 3 sentences.
 
-Sentence 1: System state - what's actively running.
-Sentence 2: Git status - branch and uncommitted changes.
-Sentence 3: What the user is working on - infer from git changes and pane activity.
+Sentence 1: What the project is - infer from repo name, directory, and code context.
+Sentence 2: System state - what's actively running (server, tests, build) or "idle" if nothing.
+Sentence 3: Current work - infer from git changes and recent activity.
 
 Example outputs:
-- "Server + simulator running. 5 uncommitted changes on feature-branch. Adding SSE support for real-time metrics."
-- "Tests failing (3 errors). Clean on main. Fixing date parsing in the API response handler."
-- "Idle. 2 modified files on feature-branch. Refactoring authentication middleware."
-- "Build running. Clean on main. Setting up CI pipeline for the new monorepo."
+- "React e-commerce app with Stripe integration. Dev server running. Adding product search filters."
+- "CLI tool for managing tmux sessions. Idle. Fixing window summary API targets."
+- "Python ML pipeline for sentiment analysis. Training job running (epoch 5/10). Tuning hyperparameters."
+- "Go microservice for user auth. Tests failing (3 errors). Refactoring JWT validation."
 
 Rules:
 - Be concise. Use active voice. No fluff.
 - Skip port numbers unless relevant.
-- "Idle" means no server/build/test actively running.
 - Reply with only the 3 sentences, nothing else.`;
 
 function buildUserPrompt(ctx: WindowContext): string {
