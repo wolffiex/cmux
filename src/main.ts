@@ -743,15 +743,21 @@ function render(): void {
   // Separator (moved down to row 6)
   out += ansi.moveTo(0, 6) + box.h.repeat(width);
 
-  // Layout preview (right-justified, below carousel box)
+  // Middle section: AI summary (left) + layout preview (right)
+  // Constrain to 100 chars max width, centered if terminal is wider
+  const maxContentWidth = 100;
+  const contentWidth = Math.min(width, maxContentWidth);
+  const contentMargin = Math.floor((width - contentWidth) / 2);
+
+  // Layout preview (right side of content area)
   const layout = ALL_LAYOUTS[state.layoutIndex];
-  const previewW = Math.min(30, Math.floor(width / 2));
+  const previewW = Math.min(30, Math.floor(contentWidth / 2));
   const previewH = Math.min(height - 11, 8);
-  const previewX = width - previewW - 2; // Right-justified with margin
+  const previewX = contentMargin + contentWidth - previewW - 2;
   const previewY = 8; // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
   out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
 
-  // Layout counter (below preview, right-aligned)
+  // Layout counter (below preview, centered under it)
   const paneCount = layout.panes.length;
   const layoutFocused = state.focus === "layout";
   const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
@@ -762,12 +768,13 @@ function render(): void {
   out += ansi.reset;
 
   // AI summary (left column, word-wrapped)
-  const summaryWidth = previewX - 4; // Left of layout preview with gap
+  const summaryX = contentMargin + 2;
+  const summaryWidth = previewX - summaryX - 2; // Left of layout preview with gap
   const dummySummary =
     "Server + simulator running, 5 uncommitted changes. Adding SSE support for real-time metrics.";
   const summaryLines = wordWrap(dummySummary, summaryWidth);
-  for (let i = 0; i < summaryLines.length && i < previewH; i++) {
-    out += ansi.moveTo(2, previewY + i);
+  for (let i = 0; i < summaryLines.length && i < previewH - 2; i++) {
+    out += ansi.moveTo(summaryX, previewY + 2 + i);
     out += ansi.dim + summaryLines[i] + ansi.reset;
   }
 
