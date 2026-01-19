@@ -1052,38 +1052,8 @@ function openDirPicker(): void {
 
 function createNewWindowAtPath(targetPath: string): void {
   try {
-    const pathArg = `-c "${targetPath}"`;
-
-    // Create the new window at the target path
-    execSync(`tmux new-window ${pathArg}`);
-
-    const layout = ALL_LAYOUTS[state.layoutIndex];
-    const paneCount = layout.panes.length;
-
-    // New window starts with 1 pane, add more if needed
-    for (let i = 1; i < paneCount; i++) {
-      execSync(`tmux split-window ${pathArg}`);
-    }
-
-    // Get updated window info for layout application
-    const windowInfo = getWindowInfo();
-
-    // Resolve layout to absolute coords
-    const resolved = resolveLayout(layout, windowInfo.width, windowInfo.height);
-
-    // Generate tmux layout string
-    const panes = resolved.map((r, i) => ({
-      id: windowInfo.panes[i]?.id || `%${i}`,
-      ...r,
-    }));
-    const layoutString = generateLayoutString(
-      panes,
-      windowInfo.width,
-      windowInfo.height,
-    );
-
-    // Apply the layout
-    execSync(`tmux select-layout '${layoutString}'`);
+    // Create the new window at the target path (always starts with 1 pane)
+    execSync(`tmux new-window -c "${targetPath}"`);
   } catch (_e) {
     // Ignore errors (e.g., not in tmux)
   }
@@ -1099,36 +1069,8 @@ function createNewWindow(): void {
       .trim();
     const pathArg = currentPath ? `-c "${currentPath}"` : "";
 
-    // Create the new window and switch to it (preserving working directory)
+    // Create the new window (always starts with 1 pane, preserving working directory)
     execSync(`tmux new-window ${pathArg}`);
-
-    const layout = ALL_LAYOUTS[state.layoutIndex];
-    const paneCount = layout.panes.length;
-
-    // New window starts with 1 pane, add more if needed (preserving working directory)
-    for (let i = 1; i < paneCount; i++) {
-      execSync(`tmux split-window ${pathArg}`);
-    }
-
-    // Get updated window info for layout application
-    const windowInfo = getWindowInfo();
-
-    // Resolve layout to absolute coords
-    const resolved = resolveLayout(layout, windowInfo.width, windowInfo.height);
-
-    // Generate tmux layout string
-    const panes = resolved.map((r, i) => ({
-      id: windowInfo.panes[i]?.id || `%${i}`,
-      ...r,
-    }));
-    const layoutString = generateLayoutString(
-      panes,
-      windowInfo.width,
-      windowInfo.height,
-    );
-
-    // Apply the layout
-    execSync(`tmux select-layout '${layoutString}'`);
   } catch (_e) {
     // Ignore errors (e.g., not in tmux)
   }
