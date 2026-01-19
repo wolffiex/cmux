@@ -743,17 +743,17 @@ function render(): void {
   // Separator (moved down to row 6)
   out += ansi.moveTo(0, 6) + box.h.repeat(width);
 
-  // Middle section: AI summary (left) + layout preview (right)
+  // Middle section: layout preview (left) + AI summary (right)
   // Constrain to 100 chars max width, centered if terminal is wider
   const maxContentWidth = 100;
   const contentWidth = Math.min(width, maxContentWidth);
   const contentMargin = Math.floor((width - contentWidth) / 2);
 
-  // Layout preview (right side of content area)
+  // Layout preview (left side of content area)
   const layout = ALL_LAYOUTS[state.layoutIndex];
   const previewW = Math.min(30, Math.floor(contentWidth / 2));
   const previewH = Math.min(height - 11, 8);
-  const previewX = contentMargin + contentWidth - previewW - 2;
+  const previewX = contentMargin + 2;
   const previewY = 8; // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
   out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
 
@@ -767,9 +767,9 @@ function render(): void {
   out += ` ${counter} `;
   out += ansi.reset;
 
-  // AI summary (left column, word-wrapped)
-  const summaryX = contentMargin + 2;
-  const summaryWidth = previewX - summaryX - 2; // Left of layout preview with gap
+  // AI summary (right column, word-wrapped)
+  const summaryX = previewX + previewW + 4; // Right of layout preview with gap
+  const summaryWidth = contentMargin + contentWidth - summaryX - 2;
   const dummySummary =
     "Server + simulator running, 5 uncommitted changes. Adding SSE support for real-time metrics.";
   const summaryLines = wordWrap(dummySummary, summaryWidth);
