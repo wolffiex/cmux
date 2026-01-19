@@ -1,4 +1,4 @@
-import { execSync, spawn } from "node:child_process"
+import { execSync, spawn, spawnSync } from "node:child_process"
 import { join } from "node:path"
 import { ALL_LAYOUTS, resolveLayout, type LayoutTemplate } from "./layouts"
 import { renderLayoutPreview } from "./layout-preview"
