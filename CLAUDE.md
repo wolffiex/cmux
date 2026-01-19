@@ -2,18 +2,29 @@
 
 A simple tmux layout manager with a popup UI.
 
+## Installation
+
+```bash
+bun install
+bun link
+```
+
+This installs `cmux` globally so you can run it from anywhere.
+
 ## Running
 
 ```bash
-# Outside tmux: starts new session with Alt-Space bound
-bun src/main.ts
+# Outside tmux: starts or attaches to "cmux" session with Alt-Space bound
+cmux
 
 # Inside tmux: runs UI directly
-bun src/main.ts
+cmux
 
 # Or via tmux popup (80% of terminal)
-tmux display-popup -w 80% -h 80% -E 'bun /path/to/cmux/src/main.ts'
+tmux display-popup -w 80% -h 80% -E cmux
 ```
+
+When run outside tmux, cmux creates a session named "cmux". If that session already exists, it attaches to it instead of creating a new one.
 
 ## Environment Variables
 
@@ -108,6 +119,3 @@ Unit tests don't catch all UI bugs. Before declaring a fix complete:
 2. Test the specific behavior that was changed
 3. Verify related functionality still works
 
-## Branch
-
-Currently on `v2-rewrite` branch - complete rewrite from the original 3-binary architecture.

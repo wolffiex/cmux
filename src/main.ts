@@ -1159,14 +1159,32 @@ function isInsideTmux(): boolean {
   return !!process.env.TMUX
 }
 
+const SESSION_NAME = "cmux"
+
+function sessionExists(): boolean {
+  const result = spawnSync("tmux", ["has-session", "-t", SESSION_NAME], { stdio: "ignore" })
+  return result.status === 0
+}
+
 function startTmuxSession(): void {
+  // If session already exists, just attach to it
+  if (sessionExists()) {
+    const tmux = spawn("tmux", ["attach", "-t", SESSION_NAME], {
+      stdio: "inherit",
+    })
+    tmux.on("close", (code) => {
+      process.exit(code ?? 0)
+    })
+    return
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY
     || process.env.TEST_ANTHROPIC_API_KEY
     || process.env.DEMO_ANTHROPIC_API_KEY;
 
   const tmuxArgs = [
     "-f", CONFIG_PATH,
-    "new-session",
+    "new-session", "-s", SESSION_NAME,
     ";",
     "bind", "-n", "M-Space", "display-popup", "-w", "80%", "-h", "80%", "-E", `bun ${SELF_PATH}`
   ];
