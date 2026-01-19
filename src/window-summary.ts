@@ -2,7 +2,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { execSync } from "child_process";
 import { Cache } from "./cache";
 
-const client = new Anthropic();
+// API key is passed via environment (inline in popup command, not stored)
+const client = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
 const summaryCache = new Cache<string>("window-summaries");
 
 interface PaneInfo {
@@ -60,22 +63,23 @@ function gatherWindowContext(windowId: string): WindowContext {
   return { windowName, panes, gitBranch, gitStatus, gitDiff };
 }
 
-const SYSTEM_PROMPT = `You summarize tmux windows in exactly 2 sentences.
+const SYSTEM_PROMPT = `You summarize tmux windows in exactly 3 sentences.
 
-Sentence 1: System state - what's actively running and git status.
-Sentence 2: What the user is working on - infer from git changes and pane activity.
+Sentence 1: System state - what's actively running.
+Sentence 2: Git status - branch and uncommitted changes.
+Sentence 3: What the user is working on - infer from git changes and pane activity.
 
 Example outputs:
-- "Server + simulator running, 5 uncommitted changes. Adding SSE support for real-time metrics."
-- "Tests failing (3 errors), clean on main. Fixing date parsing in the API response handler."
-- "Idle, 2 modified files on feature-branch. Refactoring authentication middleware."
-- "Build running, clean on main. Setting up CI pipeline for the new monorepo."
+- "Server + simulator running. 5 uncommitted changes on feature-branch. Adding SSE support for real-time metrics."
+- "Tests failing (3 errors). Clean on main. Fixing date parsing in the API response handler."
+- "Idle. 2 modified files on feature-branch. Refactoring authentication middleware."
+- "Build running. Clean on main. Setting up CI pipeline for the new monorepo."
 
 Rules:
 - Be concise. Use active voice. No fluff.
 - Skip port numbers unless relevant.
 - "Idle" means no server/build/test actively running.
-- Reply with only the 2 sentences, nothing else.`;
+- Reply with only the 3 sentences, nothing else.`;
 
 function buildUserPrompt(ctx: WindowContext): string {
   const panes = ctx.panes
@@ -104,6 +108,10 @@ ${panes}
 }
 
 export async function getWindowSummary(windowId: string): Promise<string> {
+  if (!client) {
+    throw new Error("No API key available");
+  }
+
   return summaryCache.get(windowId, async () => {
     const ctx = gatherWindowContext(windowId);
 
@@ -118,7 +126,8 @@ export async function getWindowSummary(windowId: string): Promise<string> {
     if (content.type === "text") {
       return content.text;
     }
-    return "Unable to generate summary";
+    // Throw instead of returning error string - prevents caching errors
+    throw new Error("API returned non-text response");
   });
 }
 

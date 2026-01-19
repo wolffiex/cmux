@@ -1351,6 +1351,11 @@ function startTmuxSession(): void {
     process.env.TEST_ANTHROPIC_API_KEY ||
     process.env.DEMO_ANTHROPIC_API_KEY;
 
+  // Build popup command - pass API key inline if available (memory only, not stored)
+  const popupCmd = apiKey
+    ? `ANTHROPIC_API_KEY='${apiKey}' bun ${SELF_PATH}`
+    : `bun ${SELF_PATH}`;
+
   const tmuxArgs = [
     "-f",
     CONFIG_PATH,
@@ -1367,13 +1372,8 @@ function startTmuxSession(): void {
     "-h",
     "80%",
     "-E",
-    `bun ${SELF_PATH}`,
+    popupCmd,
   ];
-
-  // Save API key to tmux hidden environment for popup runs
-  if (apiKey) {
-    tmuxArgs.push(";", "set-environment", "-gh", "ANTHROPIC_API_KEY", apiKey);
-  }
 
   const tmux = spawn("tmux", tmuxArgs, {
     stdio: "inherit",

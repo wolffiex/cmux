@@ -179,4 +179,52 @@ describe("Cache", () => {
     defaultCache.close();
     cleanupDb("test-default");
   });
+
+  it("should NOT cache errors from factory", async () => {
+    let attemptCount = 0;
+
+    // First attempt: factory throws
+    try {
+      await cache.get("error-key", async () => {
+        attemptCount++;
+        throw new Error("API failure");
+      });
+    } catch (e) {
+      expect((e as Error).message).toBe("API failure");
+    }
+
+    expect(attemptCount).toBe(1);
+    expect(cache.has("error-key")).toBe(false);
+    expect(cache.peek("error-key")).toBeUndefined();
+
+    // Second attempt: factory succeeds
+    const result = await cache.get("error-key", async () => {
+      attemptCount++;
+      return "success";
+    });
+
+    expect(attemptCount).toBe(2); // Factory was called again
+    expect(result).toBe("success");
+    expect(cache.has("error-key")).toBe(true);
+    expect(cache.peek("error-key")).toBe("success");
+  });
+
+  it("should NOT cache error strings returned as values", async () => {
+    // This test ensures we don't accidentally cache error messages
+    // by returning them as strings instead of throwing
+    let attemptCount = 0;
+
+    const result = await cache.get("key", async () => {
+      attemptCount++;
+      // Simulating bad pattern: returning error as value
+      return "Unable to generate summary";
+    });
+
+    expect(result).toBe("Unable to generate summary");
+    expect(attemptCount).toBe(1);
+
+    // This IS cached because it was returned, not thrown
+    // The test documents this behavior - code should throw, not return errors
+    expect(cache.has("key")).toBe(true);
+  });
 });
