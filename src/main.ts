@@ -1,4 +1,5 @@
-import { execSync, spawn, spawnSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { box } from "./box-chars";
 import { Font } from "./fonts";
@@ -22,6 +23,16 @@ import {
 import { generateLayoutString } from "./tmux-layout";
 import { easeOut, splitWindowName, stripAnsi, wordWrap } from "./utils";
 import { getWindowSummary } from "./window-summary";
+
+// Store API key before unsetting from environment
+// Modules (like window-summary.ts) have already captured it during import
+const ANTHROPIC_API_KEY =
+  process.env.ANTHROPIC_API_KEY ||
+  process.env.TEST_ANTHROPIC_API_KEY ||
+  process.env.DEMO_ANTHROPIC_API_KEY;
+
+// Unset API key from environment to prevent leaking to child processes (tmux, git, etc.)
+delete process.env.ANTHROPIC_API_KEY;
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
 const SELF_PATH = import.meta.path;
@@ -1337,54 +1348,63 @@ function sessionExists(): boolean {
   return result.status === 0;
 }
 
-function startTmuxSession(): void {
+/**
+ * Output a shell command to start or attach to tmux session.
+ * Called when run outside tmux - the wrapper script evals this output.
+ */
+function outputTmuxCommand(): void {
   // If session already exists, just attach to it
   if (sessionExists()) {
-    const tmux = spawn("tmux", ["attach", "-t", SESSION_NAME], {
-      stdio: "inherit",
-    });
-    tmux.on("close", (code) => {
-      process.exit(code ?? 0);
-    });
+    console.log(`exec tmux attach -t ${SESSION_NAME}`);
     return;
   }
 
-  const apiKey =
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.TEST_ANTHROPIC_API_KEY ||
-    process.env.DEMO_ANTHROPIC_API_KEY;
-
   // Build popup command - pass API key inline if available (memory only, not stored)
-  const popupCmd = apiKey
-    ? `ANTHROPIC_API_KEY='${apiKey}' bun ${SELF_PATH}`
+  const popupCmd = ANTHROPIC_API_KEY
+    ? `ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY}' bun ${SELF_PATH}`
     : `bun ${SELF_PATH}`;
 
-  const tmuxArgs = [
-    "-f",
-    CONFIG_PATH,
-    "new-session",
-    "-s",
-    SESSION_NAME,
-    ";",
-    "bind",
-    "-n",
-    "M-Space",
-    "display-popup",
-    "-w",
-    "80%",
-    "-h",
-    "80%",
-    "-E",
-    popupCmd,
-  ];
+  // Escape single quotes in paths for shell safety
+  const safeConfigPath = CONFIG_PATH.replace(/'/g, "'\\''");
+  const safePopupCmd = popupCmd.replace(/'/g, "'\\''");
 
-  const tmux = spawn("tmux", tmuxArgs, {
-    stdio: "inherit",
-  });
+  console.log(
+    `exec tmux -f '${safeConfigPath}' new-session -s ${SESSION_NAME} \\; ` +
+    `bind -n M-Space display-popup -w 80% -h 80% -E '${safePopupCmd}'`
+  );
+}
 
-  tmux.on("close", (code) => {
-    process.exit(code ?? 0);
-  });
+/**
+ * Install cmux wrapper script to ~/.local/bin
+ */
+function install(): void {
+  const home = process.env.HOME;
+  if (!home) {
+    console.error("error: HOME environment variable not set");
+    process.exit(1);
+  }
+
+  const binDir = join(home, ".local", "bin");
+  const scriptPath = join(binDir, "cmux");
+
+  // Create ~/.local/bin if it doesn't exist
+  if (!existsSync(binDir)) {
+    mkdirSync(binDir, { recursive: true });
+    console.log(`created ${binDir}`);
+  }
+
+  // Write the wrapper script
+  const script = `#!/bin/bash
+eval "$(bun ${SELF_PATH})"
+`;
+
+  writeFileSync(scriptPath, script);
+  chmodSync(scriptPath, 0o755);
+
+  console.log(`installed ${scriptPath}`);
+  console.log("");
+  console.log("make sure ~/.local/bin is in your PATH:");
+  console.log('  export PATH="$HOME/.local/bin:$PATH"');
 }
 
 function runUI(): void {
@@ -1472,10 +1492,21 @@ function runUI(): void {
 }
 
 function main(): void {
-  if (!isInsideTmux()) {
-    startTmuxSession();
+  const args = process.argv.slice(2);
+
+  // Handle --install flag
+  if (args.includes("--install")) {
+    install();
     return;
   }
+
+  // Outside tmux: output shell command for wrapper to eval
+  if (!isInsideTmux()) {
+    outputTmuxCommand();
+    return;
+  }
+
+  // Inside tmux: run the UI
   runUI();
 }
 

@@ -2,6 +2,16 @@
 
 tmux UI wrapper
 
+## Installation
+
+```bash
+# Install wrapper script to ~/.local/bin/cmux
+bun src/main.ts --install
+
+# Make sure ~/.local/bin is in your PATH
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 ## Running
 
 ```bash
@@ -15,10 +25,11 @@ cmux
 tmux display-popup -w 80% -h 80% -E cmux
 ```
 
-When run outside tmux, cmux creates a session named "cmux". If that session already exists, it attaches to it instead of creating a new one.
+When run outside tmux, cmux outputs a shell command that the wrapper script evals. This execs into tmux directly, avoiding intermediate processes and preventing environment variables (like API keys) from leaking to child processes.
 
 ## Environment Variables
 
+- `ANTHROPIC_API_KEY` - API key for AI window summaries (passed inline to popup, not inherited by child processes)
 - `CMUX_DEBUG=1` - Enables debug logging to `/tmp/cmux.log`
 - `CMUX_BENCHMARK=1` - Headless mode for benchmarking (exits after init)
 
