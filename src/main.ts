@@ -1364,11 +1364,13 @@ function openRepoPicker(): void {
 }
 
 function createNewWindowAtPath(targetPath: string): void {
+  log("createNewWindowAtPath called with:", targetPath);
   try {
     // Create the new window at the target path (always starts with 1 pane)
     execSync(`tmux new-window -c "${targetPath}"`);
-  } catch (_e) {
-    // Ignore errors (e.g., not in tmux)
+    log("tmux new-window succeeded");
+  } catch (e) {
+    log("tmux new-window failed:", e);
   }
 }
 
