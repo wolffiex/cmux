@@ -53,6 +53,45 @@ describe("filterItems", () => {
   test("returns empty when no match", () => {
     expect(filterItems(testItems, "xyz")).toEqual([]);
   });
+
+  test("matches across path segments (fuzzy path match)", () => {
+    const pathItems: TypeaheadItem[] = [
+      { id: "1", label: "~/code/beatzero" },
+      { id: "2", label: "~/code/cmux" },
+      { id: "3", label: "~/projects/webapp" },
+    ];
+    // "codebeat" should match "~/code/beatzero" because:
+    // "code" matches the "code" segment, "beat" matches start of "beatzero"
+    const filtered = filterItems(pathItems, "codebeat");
+    expect(filtered.length).toBe(1);
+    expect(filtered[0].id).toBe("1");
+  });
+
+  test("fuzzy path match is case insensitive", () => {
+    const pathItems: TypeaheadItem[] = [
+      { id: "1", label: "~/Code/BeatZero" },
+    ];
+    expect(filterItems(pathItems, "codebeat").length).toBe(1);
+  });
+
+  test("fuzzy match works with multiple segments", () => {
+    const pathItems: TypeaheadItem[] = [
+      { id: "1", label: "~/projects/web/app" },
+      { id: "2", label: "~/work/backend" },
+    ];
+    // "projwebapp" should match "~/projects/web/app"
+    expect(filterItems(pathItems, "projwebapp").map(i => i.id)).toEqual(["1"]);
+  });
+
+  test("fuzzy match allows partial segment matches across multiple segments", () => {
+    const pathItems: TypeaheadItem[] = [
+      { id: "1", label: "~/code/beatzero/examples" },
+      { id: "2", label: "~/code/other" },
+    ];
+    // "codebex" should match "~/code/beatzero/examples" because:
+    // "code" matches "code", "be" matches "beatzero" prefix, "x" matches "examples" substring
+    expect(filterItems(pathItems, "codebex").map(i => i.id)).toEqual(["1"]);
+  });
 });
 
 describe("handleTypeaheadKey", () => {

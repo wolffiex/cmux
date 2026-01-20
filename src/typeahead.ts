@@ -12,6 +12,7 @@ export interface TypeaheadItem {
   label: string;        // display text (used for filtering)
   hint?: string;        // secondary text shown dimmed (e.g., branch name)
   marker?: string;      // indicator shown after label (e.g., "·" for existing)
+  icon?: string;        // icon shown after arrow when selected (e.g., "📦")
 }
 
 export interface TypeaheadState {
@@ -47,7 +48,55 @@ export function initTypeahead(
 }
 
 /**
- * Filter items based on input (case-insensitive substring match).
+ * Check if input matches label using fuzzy path matching.
+ * Matches input as consecutive substrings across path segments.
+ * E.g., "codebex" matches "~/code/beatzero/examples" because:
+ *   - "code" matches segment "code"
+ *   - "be" matches prefix of segment "beatzero"
+ *   - "x" matches substring in segment "examples"
+ */
+function matchesFuzzyPath(label: string, input: string): boolean {
+  const segments = label.toLowerCase().split("/");
+  const lowerInput = input.toLowerCase();
+
+  let inputPos = 0;
+
+  for (const segment of segments) {
+    if (inputPos >= lowerInput.length) break;
+
+    // Find where remaining input starts matching in this segment
+    const remaining = lowerInput.slice(inputPos);
+    let segStart = 0;
+
+    // Look for the first character of remaining input in segment
+    while (segStart < segment.length) {
+      if (segment[segStart] === remaining[0]) {
+        // Found start, try to match as many consecutive chars as possible
+        let matchLen = 0;
+        while (
+          matchLen < segment.length - segStart &&
+          matchLen < remaining.length &&
+          segment[segStart + matchLen] === remaining[matchLen]
+        ) {
+          matchLen++;
+        }
+
+        if (matchLen > 0) {
+          inputPos += matchLen;
+          break;
+        }
+      }
+      segStart++;
+    }
+  }
+
+  return inputPos === lowerInput.length;
+}
+
+/**
+ * Filter items based on input.
+ * Uses fuzzy path matching (matches across path segments) with
+ * fallback to simple substring match.
  */
 export function filterItems(
   items: TypeaheadItem[],
@@ -55,7 +104,11 @@ export function filterItems(
 ): TypeaheadItem[] {
   if (!input) return items;
   const lower = input.toLowerCase();
-  return items.filter((item) => item.label.toLowerCase().includes(lower));
+  return items.filter(
+    (item) =>
+      matchesFuzzyPath(item.label, input) ||
+      item.label.toLowerCase().includes(lower)
+  );
 }
 
 /**
@@ -231,7 +284,8 @@ export function renderTypeaheadLines(
     if (itemIndex < filtered.length) {
       const item = filtered[itemIndex];
       const isSelected = itemIndex === selectedIndex;
-      const prefix = isSelected ? "\u2192 " : "  ";
+      const icon = isSelected && item.icon ? `${item.icon} ` : "";
+      const prefix = isSelected ? `\u2192 ${icon}` : "  ";
       const marker = item.marker ? ` ${item.marker}` : "";
 
       // Calculate available space for label and hint

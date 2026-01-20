@@ -1,10 +1,10 @@
 /**
  * Repo picker - typeahead showing repos first, then directories.
+ * Uses progressive directory search with caching.
  */
 
-import { execSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   initTypeahead,
   handleTypeaheadKey,
@@ -13,13 +13,20 @@ import {
   type TypeaheadState,
 } from "./typeahead";
 import { getKnownRepos, getRemoteUrl, type RepoInfo } from "./repo-store";
+import {
+  initDirSearch,
+  getDirsForFilter,
+  matchesFilter,
+  type DirSearchState,
+} from "./dir-search";
 
-// ── Types ───────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface RepoPickerState {
   typeahead: TypeaheadState;
   repos: RepoInfo[];
-  currentPath: string;  // for directory listing
+  dirSearch: DirSearchState;
+  lastFilter: string;
 }
 
 export type RepoPickerResult =
@@ -28,77 +35,12 @@ export type RepoPickerResult =
   | { action: "select"; repo: RepoInfo }
   | { action: "directory"; path: string };
 
-// ── State Management ────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
-/**
- * Convert repos to typeahead items.
- */
-function reposToItems(repos: RepoInfo[]): TypeaheadItem[] {
-  return repos.map((repo) => ({
-    id: `repo:${repo.remoteUrl}`,
-    label: repo.name,
-    hint: repo.path.replace(/^\/home\/[^/]+\//, "~/"),
-  }));
-}
+const DIR_SEARCH_LIMIT = 100;
+const DIR_SEARCH_MAX_DEPTH = 4;
 
-/**
- * Walk a directory tree, collecting all directories up to maxDepth.
- * Returns paths sorted by depth (shallower first), then alphabetically.
- */
-function walkDirs(root: string, maxDepth: number): string[] {
-  const results: { path: string; depth: number }[] = [];
-
-  function walk(dir: string, depth: number): void {
-    if (depth > maxDepth) return;
-
-    try {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-
-        const fullPath = join(dir, entry.name);
-        results.push({ path: fullPath, depth });
-
-        // Recurse into subdirectories
-        walk(fullPath, depth + 1);
-      }
-    } catch {
-      // Permission denied or other error - skip
-    }
-  }
-
-  walk(root, 1);
-
-  // Sort by depth first, then alphabetically
-  return results
-    .sort((a, b) => a.depth - b.depth || a.path.localeCompare(b.path))
-    .map((r) => r.path);
-}
-
-/**
- * Get all directories for the picker.
- * Searches ~, /var, /etc in order, preferring shallower directories.
- */
-function getAllDirs(): string[] {
-  const home = process.env.HOME || "/home";
-  const maxDepth = 4;
-  const maxTotal = 500;
-
-  const dirs: string[] = [];
-
-  // Home directory first (most important)
-  dirs.push(...walkDirs(home, maxDepth));
-
-  // Then /var and /etc (limited depth)
-  if (dirs.length < maxTotal) {
-    dirs.push(...walkDirs("/var", 2));
-  }
-  if (dirs.length < maxTotal) {
-    dirs.push(...walkDirs("/etc", 2));
-  }
-
-  return dirs.slice(0, maxTotal);
-}
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Format a path with ~ substitution for home directory.
@@ -115,46 +57,104 @@ function formatPath(path: string): string {
 }
 
 /**
+ * Convert repos to typeahead items.
+ */
+function reposToItems(repos: RepoInfo[]): TypeaheadItem[] {
+  return repos.map((repo) => ({
+    id: `repo:${repo.remoteUrl}`,
+    label: repo.name,
+    hint: repo.path.replace(/^\/home\/[^/]+\//, "~/"),
+    icon: "📦",
+  }));
+}
+
+/**
  * Convert directories to typeahead items.
  */
 function dirsToItems(dirs: string[]): TypeaheadItem[] {
   return dirs.map((path) => ({
     id: `dir:${path}`,
     label: formatPath(path),
-    marker: "📁",
+    icon: "📁",
   }));
 }
 
 /**
- * Get current pane path.
+ * Build combined items list from repos and directories.
  */
-function getCurrentPath(): string {
-  try {
-    return execSync("tmux display-message -p '#{pane_current_path}'", {
-      encoding: "utf-8",
-      timeout: 5000,
-    }).trim();
-  } catch {
-    return process.env.HOME || "/";
-  }
+function buildItems(
+  repos: RepoInfo[],
+  dirs: string[],
+  filter: string,
+): TypeaheadItem[] {
+  // Filter repos by the search filter
+  const filteredRepos = filter
+    ? repos.filter((r) => matchesFilter(r.name, filter) || matchesFilter(r.path, filter))
+    : repos;
+
+  const repoItems = reposToItems(filteredRepos);
+  const dirItems = dirsToItems(dirs);
+
+  return [...repoItems, ...dirItems];
 }
+
+// ── State Management ─────────────────────────────────────────────────────────
 
 /**
  * Initialize repo picker state.
  */
 export function initRepoPicker(): RepoPickerState {
   const repos = getKnownRepos();
-  const currentPath = getCurrentPath();
+  const home = process.env.HOME || "/home";
 
-  // Combine repos + all directories
-  const repoItems = reposToItems(repos);
-  const dirItems = dirsToItems(getAllDirs());
-  const items = [...repoItems, ...dirItems];
+  // Initialize directory search
+  const dirSearch = initDirSearch({
+    roots: [home, "/var", "/etc"],
+    maxDepth: DIR_SEARCH_MAX_DEPTH,
+    limit: DIR_SEARCH_LIMIT,
+  });
+
+  // Get initial directories (no filter)
+  const { dirs, state: newDirSearch } = getDirsForFilter(dirSearch, "");
+
+  // Build initial items
+  const items = buildItems(repos, dirs, "");
 
   return {
-    typeahead: initTypeahead(items, "Choose repo or directory"),
+    typeahead: initTypeahead(items),
     repos,
-    currentPath,
+    dirSearch: newDirSearch,
+    lastFilter: "",
+  };
+}
+
+/**
+ * Update items based on current filter.
+ */
+function updateItemsForFilter(state: RepoPickerState, filter: string): RepoPickerState {
+  if (filter === state.lastFilter) {
+    return state;
+  }
+
+  // Search for directories matching the new filter
+  const { dirs, state: newDirSearch } = getDirsForFilter(state.dirSearch, filter);
+
+  // Build new items
+  const items = buildItems(state.repos, dirs, filter);
+
+  // Update typeahead with new items (preserving input and selection where possible)
+  const newTypeahead: TypeaheadState = {
+    ...state.typeahead,
+    items,
+    filtered: items, // Will be re-filtered by typeahead
+    selectedIndex: 0,
+  };
+
+  return {
+    ...state,
+    typeahead: newTypeahead,
+    dirSearch: newDirSearch,
+    lastFilter: filter,
   };
 }
 
@@ -168,11 +168,26 @@ export function handleRepoPickerKey(
   const result = handleTypeaheadKey(state.typeahead, key);
 
   switch (result.action) {
-    case "continue":
-      return {
-        action: "continue",
-        state: { ...state, typeahead: result.state },
-      };
+    case "continue": {
+      let newState = { ...state, typeahead: result.state };
+
+      // If input changed, update items with new filter
+      const newFilter = result.state.input;
+      if (newFilter !== state.lastFilter) {
+        newState = updateItemsForFilter(newState, newFilter);
+        // Re-apply the typeahead state with updated items
+        newState.typeahead = {
+          ...newState.typeahead,
+          input: newFilter,
+          filtered: newState.typeahead.items.filter((item) =>
+            matchesFilter(item.label, newFilter)
+          ),
+          selectedIndex: 0,
+        };
+      }
+
+      return { action: "continue", state: newState };
+    }
 
     case "cancel":
       return { action: "cancel" };
@@ -232,7 +247,7 @@ export function handleRepoPickerKey(
   }
 }
 
-// ── Rendering ───────────────────────────────────────────────────────────────
+// ── Rendering ────────────────────────────────────────────────────────────────
 
 /**
  * Render repo picker.
