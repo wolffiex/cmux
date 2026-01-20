@@ -17,7 +17,7 @@ function getApiKey(): string | null {
 
 const apiKey = getApiKey();
 const client = apiKey ? new Anthropic({ apiKey }) : null;
-const summaryCache = new Cache<string>("window-summaries");
+const summaryCache = new Cache<string>("window-summaries", 60 * 1000); // 1 minute TTL
 
 interface PaneInfo {
   index: number;
