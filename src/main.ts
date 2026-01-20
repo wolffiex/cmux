@@ -23,6 +23,13 @@ import {
 import { generateLayoutString } from "./tmux-layout";
 import { easeOut, splitWindowName, stripAnsi, wordWrap } from "./utils";
 import { getWindowSummary } from "./window-summary";
+import {
+  type RepoPickerState,
+  initRepoPicker,
+  handleRepoPickerKey,
+  renderRepoPicker,
+} from "./repo-picker";
+import { collectReposFromWindows, trackRepo } from "./repo-store";
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
 const SELF_PATH = import.meta.path;
@@ -30,7 +37,7 @@ const SELF_PATH = import.meta.path;
 // ── State ──────────────────────────────────────────────────────────────────
 type Focus = "window" | "layout";
 type AnimationDirection = "left" | "right" | null;
-type Mode = "main" | "dirPicker";
+type Mode = "main" | "dirPicker" | "repoPicker";
 
 interface State {
   windows: TmuxWindow[];
@@ -54,6 +61,8 @@ interface State {
   confirmingDelete: boolean;
   // Directory picker state
   dirPicker: DirPickerState | null;
+  // Repo picker state
+  repoPicker: RepoPickerState | null;
   // Summary cache: windowIndex -> summary text (or "loading..." while fetching)
   summaryCache: Map<number, string>;
   // Track which summaries are being fetched
@@ -141,6 +150,8 @@ function initState(): State {
     confirmingDelete: false,
     // Directory picker state
     dirPicker: null,
+    // Repo picker state
+    repoPicker: null,
     // Summary cache
     summaryCache: new Map(),
     summaryFetching: new Set(),
@@ -867,6 +878,11 @@ function render(): void {
     out += renderDirPicker(state.dirPicker, width, height);
   }
 
+  // Repo picker overlay (if active)
+  if (state.mode === "repoPicker" && state.repoPicker) {
+    out += renderRepoPicker(state.repoPicker, width, height);
+  }
+
   process.stdout.write(out);
 }
 
@@ -895,6 +911,9 @@ function handleKey(key: string): boolean {
   if (state.mode === "dirPicker") {
     return handleDirPickerMode(key);
   }
+  if (state.mode === "repoPicker") {
+    return handleRepoPickerMode(key);
+  }
   return handleMainKey(key);
 }
 
@@ -917,6 +936,42 @@ function handleDirPickerMode(key: string): boolean {
     case "select":
       createNewWindowAtPath(result.path);
       return false; // Exit UI after creating window
+  }
+
+  return true;
+}
+
+function handleRepoPickerMode(key: string): boolean {
+  if (!state.repoPicker) {
+    state.mode = "main";
+    return true;
+  }
+
+  const result = handleRepoPickerKey(state.repoPicker, key);
+
+  switch (result.action) {
+    case "continue":
+      state.repoPicker = result.state;
+      break;
+    case "cancel":
+      state.mode = "main";
+      state.repoPicker = null;
+      break;
+    case "select":
+      // TODO: Open branch picker for this repo
+      // For now, just open a window at the repo path
+      createNewWindowAtPath(result.repo.path);
+      return false;
+    case "path":
+      // Fall back to dir picker with the typed path
+      state.repoPicker = null;
+      try {
+        state.dirPicker = initDirPickerState(result.path);
+        state.mode = "dirPicker";
+      } catch {
+        state.mode = "main";
+      }
+      break;
   }
 
   return true;
@@ -1022,8 +1077,8 @@ function handleMainKey(key: string): boolean {
             state.confirmingDelete = true;
           }
         } else if (state.carouselIndex === maxCarouselIndex) {
-          // Plus button - open directory picker
-          openDirPicker();
+          // Plus button - open repo picker
+          openRepoPicker();
         } else {
           // Window selected - switch to that window and exit
           const windowIndex = state.carouselIndex - 1;
@@ -1137,6 +1192,11 @@ function openDirPicker(): void {
     // Fallback if tmux command fails
     createNewWindow();
   }
+}
+
+function openRepoPicker(): void {
+  state.repoPicker = initRepoPicker();
+  state.mode = "repoPicker";
 }
 
 function createNewWindowAtPath(targetPath: string): void {
@@ -1447,6 +1507,9 @@ function runUI(): void {
 
   // Rename windows immediately on startup (async, doesn't block UI)
   renameWindowsOnStartup();
+
+  // Collect repos from current windows (for repo picker)
+  collectReposFromWindows();
 
   process.stdin.on("data", (data) => {
     const input = data.toString();
