@@ -1,16 +1,17 @@
 /**
  * Repo picker - typeahead showing repos first, then directories.
- * Uses progressive directory search with caching.
+ * Uses resumable filter for progressive directory search.
  */
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  type DirSearchState,
-  getDirsForFilter,
-  initDirSearch,
+  createFilter,
+  getResults,
   matchesFilter,
-} from "./dir-search";
+  type ResumableFilter,
+  updateFilter,
+} from "./resumable-filter";
 import { getKnownRepos, getRemoteUrl, type RepoInfo } from "./repo-store";
 import {
   handleTypeaheadKey,
@@ -25,8 +26,7 @@ import {
 export interface RepoPickerState {
   typeahead: TypeaheadState;
   repos: RepoInfo[];
-  dirSearch: DirSearchState;
-  lastFilter: string;
+  dirFilter: ResumableFilter;
 }
 
 export type RepoPickerResult =
@@ -109,25 +109,25 @@ export function initRepoPicker(): RepoPickerState {
   const repos = getKnownRepos();
   const home = process.env.HOME || "/home";
 
-  // Initialize directory search
-  const dirSearch = initDirSearch({
-    roots: [home, "/var", "/etc"],
-    maxDepth: DIR_SEARCH_MAX_DEPTH,
-    limit: DIR_SEARCH_LIMIT,
-  });
-
-  // Get initial directories (no filter)
-  const { dirs, state: newDirSearch } = getDirsForFilter(dirSearch, "");
+  // Initialize directory filter
+  const dirFilter = createFilter(
+    {
+      roots: [home, "/var", "/etc"],
+      maxDepth: DIR_SEARCH_MAX_DEPTH,
+      limit: DIR_SEARCH_LIMIT,
+    },
+    "",
+  );
 
   // Build initial items
+  const dirs = getResults(dirFilter);
   const items = buildItems(repos, dirs, "");
 
   const typeahead = initTypeahead(items);
   return {
     typeahead: withDynamicTitle(typeahead),
     repos,
-    dirSearch: newDirSearch,
-    lastFilter: "",
+    dirFilter,
   };
 }
 
@@ -138,15 +138,13 @@ function updateItemsForFilter(
   state: RepoPickerState,
   filter: string,
 ): RepoPickerState {
-  if (filter === state.lastFilter) {
+  if (filter === state.dirFilter.needle) {
     return state;
   }
 
-  // Search for directories matching the new filter
-  const { dirs, state: newDirSearch } = getDirsForFilter(
-    state.dirSearch,
-    filter,
-  );
+  // Update filter with new needle
+  const newDirFilter = updateFilter(state.dirFilter, filter);
+  const dirs = getResults(newDirFilter);
 
   // Build new items
   const items = buildItems(state.repos, dirs, filter);
@@ -162,8 +160,7 @@ function updateItemsForFilter(
   return {
     ...state,
     typeahead: newTypeahead,
-    dirSearch: newDirSearch,
-    lastFilter: filter,
+    dirFilter: newDirFilter,
   };
 }
 
@@ -200,7 +197,7 @@ export function handleRepoPickerKey(
 
       // If input changed, update items with new filter
       const newFilter = result.state.input;
-      if (newFilter !== state.lastFilter) {
+      if (newFilter !== state.dirFilter.needle) {
         newState = updateItemsForFilter(newState, newFilter);
         // Re-apply the typeahead state with updated items
         newState.typeahead = {
