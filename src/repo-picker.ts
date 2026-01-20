@@ -5,6 +5,7 @@
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { getKnownRepos, getRemoteUrl, type RepoInfo } from "./repo-store";
 import {
   createFilter,
   getResults,
@@ -12,7 +13,6 @@ import {
   type ResumableFilter,
   updateFilter,
 } from "./resumable-filter";
-import { getKnownRepos, getRemoteUrl, type RepoInfo } from "./repo-store";
 import {
   handleTypeaheadKey,
   initTypeahead,

@@ -6,7 +6,7 @@
  * This guarantees at most N-1 swaps for N panes.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 export interface SwapCommand {
   fromIndex: number;
@@ -95,6 +95,6 @@ export function executeSwaps(windowTarget: string, swaps: SwapCommand[]): void {
     const sourcePane = `${windowTarget}.${swap.fromIndex}`;
     const targetPane = `${windowTarget}.${swap.toIndex}`;
 
-    execSync(`tmux swap-pane -s '${sourcePane}' -t '${targetPane}'`);
+    execFileSync("tmux", ["swap-pane", "-s", sourcePane, "-t", targetPane]);
   }
 }

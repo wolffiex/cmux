@@ -1,5 +1,6 @@
 const _startTime = performance.now();
-import { execSync, spawnSync } from "node:child_process";
+
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { box } from "./box-chars";
@@ -76,7 +77,7 @@ interface State {
  */
 function renumberWindows(): void {
   try {
-    execSync("tmux move-window -r", { stdio: "ignore" });
+    execFileSync("tmux", ["move-window", "-r"], { stdio: "ignore" });
   } catch (_e) {
     // Ignore errors (e.g., not in tmux)
   }
@@ -290,7 +291,13 @@ const titleFont = new Font("mini");
 function findBestMatchingLayout(
   windowWidth: number,
   windowHeight: number,
-  panes: Array<{ id: string; left: number; top: number; width: number; height: number }>,
+  panes: Array<{
+    id: string;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  }>,
 ): number {
   const currentPanes: Pane[] = panes.map((p) => ({
     id: p.id,
@@ -533,9 +540,14 @@ function startWindowSwapAnimation(
       const fromWindow = state.windows[fromIndex];
       const toWindow = state.windows[toIndex];
       try {
-        execSync(
-          `tmux swap-window -d -s :${fromWindow.index} -t :${toWindow.index}`,
-        );
+        execFileSync("tmux", [
+          "swap-window",
+          "-d",
+          "-s",
+          `:${fromWindow.index}`,
+          "-t",
+          `:${toWindow.index}`,
+        ]);
         // Renumber windows to eliminate gaps after swap
         renumberWindows();
         // Refresh window list
@@ -1097,16 +1109,18 @@ function handleBranchPickerMode(key: string): boolean {
       state.branchPicker = null;
       state.mode = "main";
       try {
-        execSync(
-          `git -C '${repoPath}' worktree add '${result.path}' -b '${result.branch}'`,
+        execFileSync(
+          "git",
+          ["-C", repoPath, "worktree", "add", result.path, "-b", result.branch],
           { timeout: 10000 },
         );
         createNewWindowAtPath(result.path);
       } catch {
         // If branch exists, try without -b
         try {
-          execSync(
-            `git -C '${repoPath}' worktree add '${result.path}' '${result.branch}'`,
+          execFileSync(
+            "git",
+            ["-C", repoPath, "worktree", "add", result.path, result.branch],
             { timeout: 10000 },
           );
           createNewWindowAtPath(result.path);
@@ -1121,11 +1135,15 @@ function handleBranchPickerMode(key: string): boolean {
       const repoPath = state.branchPicker.repoPath;
       try {
         if (result.type === "worktree") {
-          execSync(`git -C '${repoPath}' worktree remove '${result.path}'`, {
-            timeout: 10000,
-          });
+          execFileSync(
+            "git",
+            ["-C", repoPath, "worktree", "remove", result.path],
+            {
+              timeout: 10000,
+            },
+          );
         } else {
-          execSync(`git -C '${repoPath}' branch -d '${result.branch}'`, {
+          execFileSync("git", ["-C", repoPath, "branch", "-d", result.branch], {
             timeout: 10000,
           });
         }
@@ -1133,14 +1151,19 @@ function handleBranchPickerMode(key: string): boolean {
         // Force delete if normal delete fails
         try {
           if (result.type === "worktree") {
-            execSync(
-              `git -C '${repoPath}' worktree remove --force '${result.path}'`,
+            execFileSync(
+              "git",
+              ["-C", repoPath, "worktree", "remove", "--force", result.path],
               { timeout: 10000 },
             );
           } else {
-            execSync(`git -C '${repoPath}' branch -D '${result.branch}'`, {
-              timeout: 10000,
-            });
+            execFileSync(
+              "git",
+              ["-C", repoPath, "branch", "-D", result.branch],
+              {
+                timeout: 10000,
+              },
+            );
           }
         } catch {
           // Failed to delete
@@ -1269,7 +1292,11 @@ function handleMainKey(key: string): boolean {
           const selectedWindow = state.windows[windowIndex];
           if (selectedWindow && windowIndex !== state.currentWindowIndex) {
             try {
-              execSync(`tmux select-window -t :${selectedWindow.index}`);
+              execFileSync("tmux", [
+                "select-window",
+                "-t",
+                `:${selectedWindow.index}`,
+              ]);
             } catch {
               // Ignore errors
             }
@@ -1324,7 +1351,11 @@ function handleMainKey(key: string): boolean {
       if (windowIndex < state.windows.length) {
         const selectedWindow = state.windows[windowIndex];
         try {
-          execSync(`tmux select-window -t :${selectedWindow.index}`);
+          execFileSync("tmux", [
+            "select-window",
+            "-t",
+            `:${selectedWindow.index}`,
+          ]);
         } catch {
           // Ignore errors
         }
@@ -1367,7 +1398,7 @@ function createNewWindowAtPath(targetPath: string): void {
   log("createNewWindowAtPath called with:", targetPath);
   try {
     // Create the new window at the target path (always starts with 1 pane)
-    execSync(`tmux new-window -c "${targetPath}"`);
+    execFileSync("tmux", ["new-window", "-c", targetPath]);
     log("tmux new-window succeeded");
   } catch (e) {
     log("tmux new-window failed:", e);
@@ -1378,7 +1409,7 @@ function removeCurrentWindow(): void {
   if (state.windows.length <= 1) return; // Don't remove last window
   try {
     const windowToDelete = state.windows[state.currentWindowIndex];
-    execSync(`tmux kill-window -t :${windowToDelete.index}`);
+    execFileSync("tmux", ["kill-window", "-t", `:${windowToDelete.index}`]);
     // Renumber windows to eliminate gaps after deletion
     renumberWindows();
   } catch (_e) {
@@ -1392,16 +1423,17 @@ function applyAndExit(): void {
 
   try {
     // Get current pane's working directory for new splits
-    const currentPath = execSync(
-      "tmux display-message -p '#{pane_current_path}'",
-    )
+    const currentPath = execFileSync("tmux", [
+      "display-message",
+      "-p",
+      "#{pane_current_path}",
+    ])
       .toString()
       .trim();
-    const pathArg = currentPath ? `-c "${currentPath}"` : "";
 
     // Switch to target window if different
     if (!targetWindow.active) {
-      execSync(`tmux select-window -t :${targetWindow.index}`);
+      execFileSync("tmux", ["select-window", "-t", `:${targetWindow.index}`]);
     }
 
     // 1. Get current window info
@@ -1455,7 +1487,11 @@ function applyAndExit(): void {
 
     // 4. Create new panes for unmatched slots (need more panes)
     for (const _slotIndex of unmatchedSlots) {
-      execSync(`tmux split-window ${pathArg}`);
+      const args = ["split-window"];
+      if (currentPath) {
+        args.push("-c", currentPath);
+      }
+      execFileSync("tmux", args);
     }
 
     // 5. Compute and execute swap sequence to reorder panes
@@ -1511,7 +1547,7 @@ function applyAndExit(): void {
 
     // 6. Kill unmatched panes AFTER swaps (excess panes)
     for (const paneId of unmatchedPanes) {
-      execSync(`tmux kill-pane -t '${paneId}'`);
+      execFileSync("tmux", ["kill-pane", "-t", paneId]);
     }
 
     // 7. Re-fetch pane info and apply final layout geometry
@@ -1534,7 +1570,7 @@ function applyAndExit(): void {
     );
 
     // Apply the layout
-    execSync(`tmux select-layout '${layoutString}'`);
+    execFileSync("tmux", ["select-layout", layoutString]);
     log(`[layout] Applied layout successfully`);
   } catch (e) {
     log(`[layout] Error applying layout:`, e);
@@ -1629,7 +1665,9 @@ eval "$(bun ${SELF_PATH})"
 
 function runUI(): void {
   if (BENCHMARK_MODE) {
-    console.error(`module load: ${(performance.now() - _startTime).toFixed(1)}ms`);
+    console.error(
+      `module load: ${(performance.now() - _startTime).toFixed(1)}ms`,
+    );
   }
 
   if (!BENCHMARK_MODE && !process.stdin.isTTY) {

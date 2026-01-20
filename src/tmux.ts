@@ -1,4 +1,4 @@
-import { exec, execSync } from "node:child_process";
+import { exec, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
@@ -38,10 +38,12 @@ export function getWindowInfoForWindow(windowIndex?: number): WindowInfo {
   // Single tmux command to get both window size and pane info
   const format =
     "#{window_width}:#{window_height}:#{pane_id}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_title}";
-  const target = windowIndex !== undefined ? `-t :${windowIndex}` : "";
-  const output = execSync(`tmux list-panes ${target} -F '${format}'`)
-    .toString()
-    .trim();
+  const args = ["list-panes"];
+  if (windowIndex !== undefined) {
+    args.push("-t", `:${windowIndex}`);
+  }
+  args.push("-F", format);
+  const output = execFileSync("tmux", args).toString().trim();
 
   const lines = output.split("\n");
   const [width, height] = lines[0].split(":").slice(0, 2).map(Number);
@@ -67,7 +69,9 @@ export function getWindowInfoForWindow(windowIndex?: number): WindowInfo {
 export function getWindows(): TmuxWindow[] {
   const format =
     "#{window_index}:#{window_name}:#{window_active}:#{window_bell_flag}:#{window_activity_flag}:#{pane_current_command}";
-  const output = execSync(`tmux list-windows -F '${format}'`).toString().trim();
+  const output = execFileSync("tmux", ["list-windows", "-F", format])
+    .toString()
+    .trim();
 
   return output.split("\n").map((line) => {
     const [index, name, active, bell, activity, paneCommand] = line.split(":");
@@ -105,10 +109,25 @@ export function getStartupInfo(): StartupInfo {
     "#{window_width}|#{window_height}|#{pane_id}|#{pane_width}|#{pane_height}|#{pane_left}|#{pane_top}|#{pane_title}";
 
   // Chain commands: renumber, then output windows, then separator, then panes
-  // Using \; to chain tmux commands
-  const cmd = `tmux move-window -r \\; list-windows -F '${windowFormat}' \\; display-message -p 'SECTION_SEP' \\; list-panes -F '${paneFormat}'`;
-
-  const output = execSync(cmd).toString().trim();
+  // Using ; to chain tmux commands (no escaping needed with execFileSync)
+  const output = execFileSync("tmux", [
+    "move-window",
+    "-r",
+    ";",
+    "list-windows",
+    "-F",
+    windowFormat,
+    ";",
+    "display-message",
+    "-p",
+    "SECTION_SEP",
+    ";",
+    "list-panes",
+    "-F",
+    paneFormat,
+  ])
+    .toString()
+    .trim();
 
   // Split by the separator
   const sections = output.split("SECTION_SEP\n");

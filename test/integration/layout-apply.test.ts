@@ -1,22 +1,22 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const SOCKET = `cmux_layout_test_${process.pid}`;
 const PROJECT_DIR = import.meta.dir.replace(/\/test\/integration$/, "");
 
-function tmux(cmd: string): string {
+function tmux(...args: string[]): string {
   try {
-    return execSync(`tmux -L ${SOCKET} -f /dev/null ${cmd}`, {
+    return execFileSync("tmux", ["-L", SOCKET, "-f", "/dev/null", ...args], {
       encoding: "utf-8",
       cwd: PROJECT_DIR,
     });
-  } catch (e: any) {
-    return e.stdout || "";
+  } catch (e: unknown) {
+    return (e as { stdout?: string })?.stdout || "";
   }
 }
 
 function getPaneIds(): string[] {
-  const output = tmux("list-panes -t test:0 -F '#{pane_id}'");
+  const output = tmux("list-panes", "-t", "test:0", "-F", "#{pane_id}");
   return output.trim().split("\n").filter(Boolean);
 }
 
@@ -28,7 +28,11 @@ function getPaneInfo(): Array<{
   h: number;
 }> {
   const output = tmux(
-    "list-panes -t test:0 -F '#{pane_id}:#{pane_left}:#{pane_top}:#{pane_width}:#{pane_height}'",
+    "list-panes",
+    "-t",
+    "test:0",
+    "-F",
+    "#{pane_id}:#{pane_left}:#{pane_top}:#{pane_width}:#{pane_height}",
   );
   return output
     .trim()
@@ -41,18 +45,18 @@ function getPaneInfo(): Array<{
 }
 
 function _sendKeys(keys: string): void {
-  tmux(`send-keys -t test:0 "${keys}"`);
+  tmux("send-keys", "-t", "test:0", keys);
   Bun.sleepSync(150);
 }
 
 function sendKey(key: string): void {
-  tmux(`send-keys -t test:0 ${key}`);
+  tmux("send-keys", "-t", "test:0", key);
   Bun.sleepSync(150);
 }
 
 function waitForUI(): void {
   for (let i = 0; i < 20; i++) {
-    const output = tmux("capture-pane -t test:0 -p");
+    const output = tmux("capture-pane", "-t", "test:0", "-p");
     if (output.includes("pane") && output.includes("hjkl")) {
       return;
     }
@@ -62,24 +66,34 @@ function waitForUI(): void {
 }
 
 function startCmux(): void {
-  tmux(`send-keys -t test:0 "clear && bun src/main.ts 2>/dev/null" Enter`);
+  tmux(
+    "send-keys",
+    "-t",
+    "test:0",
+    "clear && bun src/main.ts 2>/dev/null",
+    "Enter",
+  );
   waitForUI();
 }
 
 function _quitCmux(): void {
-  tmux(`send-keys -t test:0 Escape`);
+  tmux("send-keys", "-t", "test:0", "Escape");
   Bun.sleepSync(50);
-  tmux(`send-keys -t test:0 q`);
+  tmux("send-keys", "-t", "test:0", "q");
   Bun.sleepSync(100);
-  tmux(`send-keys -t test:0 C-c`);
+  tmux("send-keys", "-t", "test:0", "C-c");
   Bun.sleepSync(50);
 }
 
 describe("layout application with position-based matching", () => {
   beforeAll(() => {
     // Create isolated tmux session with known dimensions
-    tmux("kill-server 2>/dev/null || true");
-    tmux("new-session -d -s test -x 120 -y 36");
+    try {
+      tmux("kill-server");
+    } catch {
+      /* ignore */
+    }
+    tmux("new-session", "-d", "-s", "test", "-x", "120", "-y", "36");
   });
 
   afterAll(() => {
@@ -129,11 +143,11 @@ describe("layout application with position-based matching", () => {
 
   test("position-based matching preserves pane in closest slot", () => {
     // Reset to single pane
-    tmux("kill-pane -a -t test:0");
+    tmux("kill-pane", "-a", "-t", "test:0");
     Bun.sleepSync(100);
 
     // Create a 2-pane horizontal split manually
-    tmux("split-window -h -t test:0");
+    tmux("split-window", "-h", "-t", "test:0");
     Bun.sleepSync(100);
 
     const beforeInfo = getPaneInfo();
@@ -149,7 +163,7 @@ describe("layout application with position-based matching", () => {
     sendKey("Tab");
     // Find a 2-pane layout (cycle until we see "2 panes")
     for (let i = 0; i < 10; i++) {
-      const output = tmux("capture-pane -t test:0 -p");
+      const output = tmux("capture-pane", "-t", "test:0", "-p");
       if (output.includes("2 panes")) break;
       sendKey("l");
       Bun.sleepSync(100);
@@ -168,7 +182,7 @@ describe("layout application with position-based matching", () => {
 
   test("adding panes creates new ones without churning existing", () => {
     // Reset to single pane
-    tmux("kill-pane -a -t test:0");
+    tmux("kill-pane", "-a", "-t", "test:0");
     Bun.sleepSync(100);
 
     const initialPanes = getPaneIds();
@@ -180,7 +194,7 @@ describe("layout application with position-based matching", () => {
     sendKey("Tab");
     // Cycle until we find a 3-pane layout
     for (let i = 0; i < 20; i++) {
-      const output = tmux("capture-pane -t test:0 -p");
+      const output = tmux("capture-pane", "-t", "test:0", "-p");
       if (output.includes("3 panes")) break;
       sendKey("l");
       Bun.sleepSync(100);
@@ -197,9 +211,9 @@ describe("layout application with position-based matching", () => {
 
   test("reducing panes kills extras without churning retained ones", () => {
     // Reset and create 3 panes
-    tmux("kill-pane -a -t test:0");
-    tmux("split-window -h -t test:0");
-    tmux("split-window -v -t test:0");
+    tmux("kill-pane", "-a", "-t", "test:0");
+    tmux("split-window", "-h", "-t", "test:0");
+    tmux("split-window", "-v", "-t", "test:0");
     Bun.sleepSync(100);
 
     const initialPanes = getPaneIds();
@@ -210,7 +224,7 @@ describe("layout application with position-based matching", () => {
     sendKey("Tab");
     // Cycle until we find a 2-pane layout
     for (let i = 0; i < 20; i++) {
-      const output = tmux("capture-pane -t test:0 -p");
+      const output = tmux("capture-pane", "-t", "test:0", "-p");
       if (output.includes("2 panes")) break;
       sendKey("l");
       Bun.sleepSync(100);

@@ -235,11 +235,15 @@ describe("getRepoFromPath with worktrees", () => {
     // Create main git repo
     fs.mkdirSync(mainRepoPath, { recursive: true });
     execFileSync("git", ["init", "-b", "main"], { cwd: mainRepoPath });
-    execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: mainRepoPath });
+    execFileSync("git", ["config", "user.email", "test@test.com"], {
+      cwd: mainRepoPath,
+    });
     execFileSync("git", ["config", "user.name", "Test"], { cwd: mainRepoPath });
     fs.writeFileSync(path.join(mainRepoPath, "README.md"), "# Test");
     execFileSync("git", ["add", "."], { cwd: mainRepoPath });
-    execFileSync("git", ["commit", "-m", "Initial commit"], { cwd: mainRepoPath });
+    execFileSync("git", ["commit", "-m", "Initial commit"], {
+      cwd: mainRepoPath,
+    });
 
     // Create worktree with branch name matching directory name
     execFileSync("git", ["worktree", "add", worktreePath, "-b", branchName], {
@@ -269,20 +273,28 @@ describe("getRepoFromPath with worktrees", () => {
     // Create worktree with pattern "main-repo-branchname"
     const testBranch = "my-feature";
     const patternWorktreePath = path.join(tempDir, `main-repo-${testBranch}`);
-    execFileSync("git", ["worktree", "add", patternWorktreePath, "-b", testBranch], {
-      cwd: mainRepoPath,
-    });
+    execFileSync(
+      "git",
+      ["worktree", "add", patternWorktreePath, "-b", testBranch],
+      {
+        cwd: mainRepoPath,
+      },
+    );
 
     try {
       const result = getRepoFromPath(patternWorktreePath);
       expect(result).not.toBeNull();
-      expect(result!.branch).toBe(testBranch);
+      expect(result?.branch).toBe(testBranch);
       // Worktree "main-repo-my-feature" with branch "my-feature" -> repo "main-repo"
-      expect(result!.repo).toBe("main-repo");
+      expect(result?.repo).toBe("main-repo");
     } finally {
-      execFileSync("git", ["worktree", "remove", patternWorktreePath, "--force"], {
-        cwd: mainRepoPath,
-      });
+      execFileSync(
+        "git",
+        ["worktree", "remove", patternWorktreePath, "--force"],
+        {
+          cwd: mainRepoPath,
+        },
+      );
     }
   });
 
@@ -290,28 +302,36 @@ describe("getRepoFromPath with worktrees", () => {
     // Worktree named just "feature-xyz" (same as branch) doesn't match "main-repo-feature-xyz"
     const result = getRepoFromPath(worktreePath);
     expect(result).not.toBeNull();
-    expect(result!.branch).toBe(branchName);
+    expect(result?.branch).toBe(branchName);
     // Worktree "feature-xyz" != "main-repo-feature-xyz", so return worktree name
-    expect(result!.repo).toBe(branchName);
+    expect(result?.repo).toBe(branchName);
   });
 
   test("returns worktree name when worktree has different prefix than repo", () => {
     // Create worktree with a different prefix
     const otherWorktreePath = path.join(tempDir, "other-prefix-some-branch");
-    execFileSync("git", ["worktree", "add", otherWorktreePath, "-b", "some-branch"], {
-      cwd: mainRepoPath,
-    });
+    execFileSync(
+      "git",
+      ["worktree", "add", otherWorktreePath, "-b", "some-branch"],
+      {
+        cwd: mainRepoPath,
+      },
+    );
 
     try {
       const result = getRepoFromPath(otherWorktreePath);
       expect(result).not.toBeNull();
-      expect(result!.branch).toBe("some-branch");
+      expect(result?.branch).toBe("some-branch");
       // "other-prefix-some-branch" != "main-repo-some-branch", so return worktree name
-      expect(result!.repo).toBe("other-prefix-some-branch");
+      expect(result?.repo).toBe("other-prefix-some-branch");
     } finally {
-      execFileSync("git", ["worktree", "remove", otherWorktreePath, "--force"], {
-        cwd: mainRepoPath,
-      });
+      execFileSync(
+        "git",
+        ["worktree", "remove", otherWorktreePath, "--force"],
+        {
+          cwd: mainRepoPath,
+        },
+      );
     }
   });
 
@@ -321,6 +341,6 @@ describe("getRepoFromPath with worktrees", () => {
     const result = getRepoFromPath(mainRepoPath);
     expect(result).not.toBeNull();
     // Main repo should return its directory name
-    expect(result!.repo).toBe("main-repo");
+    expect(result?.repo).toBe("main-repo");
   });
 });

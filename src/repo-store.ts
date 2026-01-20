@@ -4,7 +4,7 @@
  */
 
 import { Database } from "bun:sqlite";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -56,9 +56,10 @@ function getDb(): Database {
 export function getRemoteUrl(path: string): string | null {
   try {
     return (
-      execSync(`git -C '${path}' remote get-url origin 2>/dev/null`, {
+      execFileSync("git", ["-C", path, "remote", "get-url", "origin"], {
         encoding: "utf-8",
         timeout: 5000,
+        stdio: ["pipe", "pipe", "ignore"],
       }).trim() || null
     );
   } catch {
@@ -72,9 +73,10 @@ export function getRemoteUrl(path: string): string | null {
 export function getLastActivity(path: string): number {
   try {
     // Get the most recent commit across all branches
-    const timestamp = execSync(
-      `git -C '${path}' log --all --format='%ct' -1 2>/dev/null`,
-      { encoding: "utf-8", timeout: 5000 },
+    const timestamp = execFileSync(
+      "git",
+      ["-C", path, "log", "--all", "--format=%ct", "-1"],
+      { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "ignore"] },
     ).trim();
     return timestamp ? parseInt(timestamp, 10) * 1000 : 0;
   } catch {
@@ -193,10 +195,14 @@ export function getKnownRepos(): RepoInfo[] {
  */
 export function collectReposFromWindows(): void {
   try {
-    const output = execSync("tmux list-windows -F '#{pane_current_path}'", {
-      encoding: "utf-8",
-      timeout: 5000,
-    }).trim();
+    const output = execFileSync(
+      "tmux",
+      ["list-windows", "-F", "#{pane_current_path}"],
+      {
+        encoding: "utf-8",
+        timeout: 5000,
+      },
+    ).trim();
 
     for (const path of output.split("\n")) {
       if (path) {

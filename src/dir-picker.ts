@@ -3,7 +3,7 @@
  * Designed for testability with pure functions for state handling and rendering.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { box } from "./box-chars";
@@ -44,7 +44,11 @@ export function getWindowPathBasenames(): Set<string> {
   const basenames = new Set<string>();
   try {
     // Get the current path of the first pane in each window
-    const output = execSync("tmux list-windows -F '#{pane_current_path}'")
+    const output = execFileSync("tmux", [
+      "list-windows",
+      "-F",
+      "#{pane_current_path}",
+    ])
       .toString()
       .trim();
     debugLog(`list-windows output: ${JSON.stringify(output)}`);
@@ -69,15 +73,21 @@ export function getWindowPathBasenames(): Set<string> {
  */
 export function getGitBranch(dirPath: string): string | null {
   try {
-    const branch = execSync(
-      `git -C '${dirPath}' rev-parse --abbrev-ref HEAD 2>/dev/null`,
+    const branch = execFileSync(
+      "git",
+      ["-C", dirPath, "rev-parse", "--abbrev-ref", "HEAD"],
+      {
+        stdio: ["pipe", "pipe", "ignore"],
+      },
     )
       .toString()
       .trim();
     if (branch === "HEAD") {
       // Detached HEAD - use short SHA
       return (
-        execSync(`git -C '${dirPath}' rev-parse --short HEAD 2>/dev/null`)
+        execFileSync("git", ["-C", dirPath, "rev-parse", "--short", "HEAD"], {
+          stdio: ["pipe", "pipe", "ignore"],
+        })
           .toString()
           .trim() || null
       );

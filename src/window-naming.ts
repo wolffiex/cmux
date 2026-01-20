@@ -4,7 +4,7 @@
  * Display truncation is handled by the UI layer.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { basename } from "node:path";
 import { log } from "./logger";
 import { getWindows } from "./tmux";
@@ -69,8 +69,10 @@ export function getRepoFromPath(
 
   try {
     // Get git root directory
-    const gitRoot = execSync(
-      `git -C '${panePath}' rev-parse --show-toplevel 2>/dev/null`,
+    const gitRoot = execFileSync(
+      "git",
+      ["-C", panePath, "rev-parse", "--show-toplevel"],
+      { stdio: ["pipe", "pipe", "ignore"] },
     )
       .toString()
       .trim();
@@ -85,16 +87,20 @@ export function getRepoFromPath(
     // Get current branch
     let branch: string;
     try {
-      branch = execSync(
-        `git -C '${panePath}' rev-parse --abbrev-ref HEAD 2>/dev/null`,
+      branch = execFileSync(
+        "git",
+        ["-C", panePath, "rev-parse", "--abbrev-ref", "HEAD"],
+        { stdio: ["pipe", "pipe", "ignore"] },
       )
         .toString()
         .trim();
 
       // Handle detached HEAD - use short SHA
       if (branch === "HEAD") {
-        branch = execSync(
-          `git -C '${panePath}' rev-parse --short HEAD 2>/dev/null`,
+        branch = execFileSync(
+          "git",
+          ["-C", panePath, "rev-parse", "--short", "HEAD"],
+          { stdio: ["pipe", "pipe", "ignore"] },
         )
           .toString()
           .trim();
@@ -106,8 +112,10 @@ export function getRepoFromPath(
     // Special case: if worktree name is exactly {repo}-{branch}, use the repo name
     // e.g., worktree "cmux-layout-picker" with branch "layout-picker" and repo "cmux"
     try {
-      const commonDir = execSync(
-        `git -C '${panePath}' rev-parse --git-common-dir 2>/dev/null`,
+      const commonDir = execFileSync(
+        "git",
+        ["-C", panePath, "rev-parse", "--git-common-dir"],
+        { stdio: ["pipe", "pipe", "ignore"] },
       )
         .toString()
         .trim();
@@ -212,9 +220,13 @@ export function generateWindowName(
 function getActivePanePath(windowIndex: number): string {
   try {
     // Get the active pane's current path
-    const path = execSync(
-      `tmux display-message -p -t :${windowIndex} '#{pane_current_path}'`,
-    )
+    const path = execFileSync("tmux", [
+      "display-message",
+      "-p",
+      "-t",
+      `:${windowIndex}`,
+      "#{pane_current_path}",
+    ])
       .toString()
       .trim();
     return path;
@@ -228,9 +240,13 @@ function getActivePanePath(windowIndex: number): string {
  */
 function getPaneCommand(windowIndex: number): string {
   try {
-    const cmd = execSync(
-      `tmux display-message -p -t :${windowIndex} '#{pane_current_command}'`,
-    )
+    const cmd = execFileSync("tmux", [
+      "display-message",
+      "-p",
+      "-t",
+      `:${windowIndex}`,
+      "#{pane_current_command}",
+    ])
       .toString()
       .trim();
     return cmd || "zsh";
@@ -262,7 +278,12 @@ export async function renameAllWindows(): Promise<number> {
     // Only rename if we got a valid name
     if (newName && newName.length > 0) {
       try {
-        execSync(`tmux rename-window -t :${window.index} "${newName}"`);
+        execFileSync("tmux", [
+          "rename-window",
+          "-t",
+          `:${window.index}`,
+          newName,
+        ]);
         log(`[window-naming] Renamed window ${window.index} to "${newName}"`);
         renamedCount++;
       } catch (e) {

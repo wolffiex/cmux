@@ -258,10 +258,7 @@ describe("progressive typing", () => {
 
   test("home directory is first when no filter", () => {
     const home = process.env.HOME || "/home";
-    const filter = createFilter(
-      { roots: [home], maxDepth: 1, limit: 10 },
-      "",
-    );
+    const filter = createFilter({ roots: [home], maxDepth: 1, limit: 10 }, "");
 
     const results = getResults(filter);
     expect(results[0]).toBe(home);

@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "node:child_process",
+            "importNames": ["execSync"],
+            "message": "Use execFileSync with args array to avoid shell injection"
+          }
+        ]
+      }
+    ]
+  }
+}

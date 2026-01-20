@@ -41,7 +41,8 @@ test("renders 3-pane layout with horizontal and vertical splits", () => {
 });
 
 test("renders 4-pane layout", () => {
-  const layout = ALL_LAYOUTS.find((l) => l.panes.length === 4)!;
+  const layout = ALL_LAYOUTS.find((l) => l.panes.length === 4);
+  if (!layout) throw new Error("No 4-pane layout found");
   const lines = renderLayoutPreview(layout, 20, 8);
 
   const allText = lines.join("");

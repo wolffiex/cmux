@@ -2,6 +2,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
+
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -47,7 +48,9 @@ async function run(cmd: string): Promise<string> {
   }
 }
 
-async function gatherWindowContext(windowTarget: string): Promise<WindowContext> {
+async function gatherWindowContext(
+  windowTarget: string,
+): Promise<WindowContext> {
   const windowName = await run(
     `tmux display-message -t ${windowTarget} -p '#{window_name}'`,
   );

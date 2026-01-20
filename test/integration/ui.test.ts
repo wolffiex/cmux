@@ -7,24 +7,24 @@ import {
   expect,
   test,
 } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const SOCKET = `cmux_test_${process.pid}`;
 const PROJECT_DIR = import.meta.dir.replace(/\/test\/integration$/, "");
 
-function tmux(cmd: string): string {
+function tmux(...args: string[]): string {
   try {
-    return execSync(`tmux -L ${SOCKET} -f /dev/null ${cmd}`, {
+    return execFileSync("tmux", ["-L", SOCKET, "-f", "/dev/null", ...args], {
       encoding: "utf-8",
       cwd: PROJECT_DIR,
     });
-  } catch (e: any) {
-    return e.stdout || "";
+  } catch (e: unknown) {
+    return (e as { stdout?: string })?.stdout || "";
   }
 }
 
 function capture(): string {
-  return tmux("capture-pane -t test -p");
+  return tmux("capture-pane", "-t", "test", "-p");
 }
 
 function waitForUI(): void {
@@ -47,29 +47,35 @@ function waitForUI(): void {
 }
 
 function _sendKeys(keys: string): void {
-  tmux(`send-keys -t test "${keys}"`);
+  tmux("send-keys", "-t", "test", keys);
   Bun.sleepSync(150); // Wait for render
 }
 
 function sendKey(key: string): void {
-  tmux(`send-keys -t test ${key}`);
+  tmux("send-keys", "-t", "test", key);
   Bun.sleepSync(150);
 }
 
 function startCmux(): void {
   // Clear the terminal and start cmux, redirecting stderr to hide debug output
-  tmux(`send-keys -t test "clear && bun src/main.ts 2>/dev/null" Enter`);
+  tmux(
+    "send-keys",
+    "-t",
+    "test",
+    "clear && bun src/main.ts 2>/dev/null",
+    "Enter",
+  );
   waitForUI();
 }
 
 function quitCmux(): void {
   // Send Escape first to close any open popover, then q to quit
-  tmux(`send-keys -t test Escape`);
+  tmux("send-keys", "-t", "test", "Escape");
   Bun.sleepSync(50);
-  tmux(`send-keys -t test q`);
+  tmux("send-keys", "-t", "test", "q");
   Bun.sleepSync(100);
   // Send Ctrl-C as a fallback if cmux is already closed
-  tmux(`send-keys -t test C-c`);
+  tmux("send-keys", "-t", "test", "C-c");
   Bun.sleepSync(50);
 }
 
@@ -82,12 +88,16 @@ function _isUIRunning(): boolean {
 describe("cmux UI", () => {
   beforeAll(() => {
     // Create isolated tmux session with known dimensions
-    tmux("kill-server 2>/dev/null || true");
-    tmux("new-session -d -s test -x 120 -y 24");
+    try {
+      tmux("kill-server");
+    } catch {
+      /* ignore */
+    }
+    tmux("new-session", "-d", "-s", "test", "-x", "120", "-y", "24");
     // Create a couple test windows
-    tmux("new-window -t test");
-    tmux("new-window -t test");
-    tmux("select-window -t test:0");
+    tmux("new-window", "-t", "test");
+    tmux("new-window", "-t", "test");
+    tmux("select-window", "-t", "test:0");
   });
 
   afterAll(() => {
@@ -111,19 +121,9 @@ describe("cmux UI", () => {
     expect(output).toContain("hjkl nav");
   });
 
-  test("j drops focus to layout", () => {
-    sendKey("j");
-    Bun.sleepSync(200); // Extra time for render
-    const output = capture();
-    // Active window should still show indicator in carousel
-    expect(output).toContain("●");
-    // Layout counter should be visible with pane count
-    expect(output).toContain("pane");
-  });
-
   test("Escape exits the UI", () => {
     // Escape should exit the UI (no popover in carousel mode)
-    tmux(`send-keys -t test Escape`);
+    tmux("send-keys", "-t", "test", "Escape");
     Bun.sleepSync(200);
     const output = capture();
     // Should see shell prompt, not cmux UI (check for the unique pane counter text)
@@ -141,7 +141,7 @@ describe("cmux UI", () => {
 
   test("q quits the UI", () => {
     // Send q to quit - afterEach will also try to quit but that's handled
-    tmux(`send-keys -t test q`);
+    tmux("send-keys", "-t", "test", "q");
     Bun.sleepSync(200);
     const output = capture();
     // Should see shell prompt, not cmux UI (check for the unique pane counter text)

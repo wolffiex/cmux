@@ -3,7 +3,7 @@
  * Allows selecting existing worktrees/branches or creating new ones.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import {
   handleTypeaheadKey,
@@ -42,7 +42,7 @@ export type BranchPickerResult =
  */
 function getWorktrees(repoPath: string): Worktree[] {
   try {
-    const output = execSync("git worktree list --porcelain", {
+    const output = execFileSync("git", ["worktree", "list", "--porcelain"], {
       cwd: repoPath,
       encoding: "utf-8",
       timeout: 5000,
@@ -85,11 +85,15 @@ function getBranchesWithoutWorktree(
   worktrees: Worktree[],
 ): string[] {
   try {
-    const output = execSync("git branch --format='%(refname:short)'", {
-      cwd: repoPath,
-      encoding: "utf-8",
-      timeout: 5000,
-    });
+    const output = execFileSync(
+      "git",
+      ["branch", "--format=%(refname:short)"],
+      {
+        cwd: repoPath,
+        encoding: "utf-8",
+        timeout: 5000,
+      },
+    );
 
     const worktreeBranches = new Set(worktrees.map((w) => w.branch));
     return output
@@ -107,14 +111,14 @@ function getBranchesWithoutWorktree(
 function getMainWorktreePath(repoPath: string): string {
   try {
     // Get the root of the git repo
-    const root = execSync("git rev-parse --show-toplevel", {
+    const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
       cwd: repoPath,
       encoding: "utf-8",
       timeout: 5000,
     }).trim();
 
     // Check if this is a worktree or the main repo
-    const gitDir = execSync("git rev-parse --git-dir", {
+    const gitDir = execFileSync("git", ["rev-parse", "--git-dir"], {
       cwd: repoPath,
       encoding: "utf-8",
       timeout: 5000,
