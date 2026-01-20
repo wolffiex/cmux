@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync, existsSync } from "fs";
+import { mkdirSync, existsSync, chmodSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
@@ -25,7 +25,9 @@ export class Cache<T> {
       mkdirSync(cacheDir, { recursive: true });
     }
 
-    this.db = new Database(join(cacheDir, `${name}.sqlite`), { create: true });
+    const dbPath = join(cacheDir, `${name}.sqlite`);
+    this.db = new Database(dbPath, { create: true });
+    chmodSync(dbPath, 0o600); // Restrict access to owner only
     this.ttlMs = ttlMs;
 
     // Enable WAL mode for better performance

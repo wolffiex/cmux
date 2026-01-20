@@ -27,9 +27,13 @@ tmux display-popup -w 80% -h 80% -E cmux
 
 When run outside tmux, cmux outputs a shell command that the wrapper script evals. This execs into tmux directly, avoiding intermediate processes and preventing environment variables (like API keys) from leaking to child processes.
 
+## Configuration
+
+- `~/.config/cmux/api-key` - Anthropic API key for AI window summaries (0600 perms). Created automatically by `--install` if `ANTHROPIC_API_KEY` is set.
+
 ## Environment Variables
 
-- `ANTHROPIC_API_KEY` - API key for AI window summaries (passed inline to popup, not inherited by child processes)
+- `ANTHROPIC_API_KEY` - Fallback for API key (used during development if config file doesn't exist)
 - `CMUX_DEBUG=1` - Enables debug logging to `/tmp/cmux.log`
 - `CMUX_BENCHMARK=1` - Headless mode for benchmarking (exits after init)
 
