@@ -10,10 +10,7 @@ A fast tmux layout manager with a popup UI.
 - **Smart pane matching** - Preserves pane positions when changing layouts
 - **Intelligent naming** - Windows auto-named from git repo/branch or directory
 - **Fast startup** - Raw ANSI rendering, ~22ms startup time
-
-### Planned
-
-- **AI summary** - Context-aware summaries for each window
+- **AI summaries** - Context-aware summaries for each window (requires Anthropic API key)
 - **Directory picker** - Create new windows in any directory with typeahead filtering
 
 ## Installation
@@ -50,9 +47,9 @@ When run outside tmux, cmux creates a session named "cmux" and binds Alt-Space t
        │ └───────────────────────────────────────────────────────────────────────────┘ │
        │───────────────────────────────────────────────────────────────────────────────│
        │                                                                               │
-       │                                   ┌───────────────────┬──────────────────┐    │  
+       │                                   ┌───────────────────┬──────────────────┐    │
        │          AI Summary               │                   │                  │    │
-       │          (Planned)                │                   │                  │    │
+       │                                   │                   │                  │    │
        │                                   │                   │         2        │    │
        │                                   │                   │                  │    │
        │                                   │                   │                  │    │
@@ -116,10 +113,17 @@ Data-driven layouts; intended for customization
 
 Panes are numbered largest-to-smallest by area.
 
+## Configuration
+
+| File | Description |
+|------|-------------|
+| `~/.config/cmux/api-key` | Anthropic API key for AI summaries (created by `--install` if `ANTHROPIC_API_KEY` is set) |
+
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
+| `ANTHROPIC_API_KEY` | Fallback API key (used if config file doesn't exist) |
 | `CMUX_DEBUG=1` | Enable debug logging to `/tmp/cmux.log` |
 | `CMUX_BENCHMARK=1` | Headless mode for benchmarking |
 
