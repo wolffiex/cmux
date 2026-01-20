@@ -1,9 +1,10 @@
 /**
- * Repo picker - typeahead for known repos, falls back to path on miss.
+ * Repo picker - typeahead showing repos first, then directories.
  */
 
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { execSync } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import {
   initTypeahead,
   handleTypeaheadKey,
@@ -18,13 +19,14 @@ import { getKnownRepos, getRemoteUrl, type RepoInfo } from "./repo-store";
 export interface RepoPickerState {
   typeahead: TypeaheadState;
   repos: RepoInfo[];
+  currentPath: string;  // for directory listing
 }
 
 export type RepoPickerResult =
   | { action: "continue"; state: RepoPickerState }
   | { action: "cancel" }
   | { action: "select"; repo: RepoInfo }
-  | { action: "path"; path: string };  // fall back to path (for dir picker or validation)
+  | { action: "directory"; path: string };
 
 // ── State Management ────────────────────────────────────────────────────────
 
@@ -33,10 +35,108 @@ export type RepoPickerResult =
  */
 function reposToItems(repos: RepoInfo[]): TypeaheadItem[] {
   return repos.map((repo) => ({
-    id: repo.remoteUrl,
+    id: `repo:${repo.remoteUrl}`,
     label: repo.name,
     hint: repo.path.replace(/^\/home\/[^/]+\//, "~/"),
   }));
+}
+
+/**
+ * Walk a directory tree, collecting all directories up to maxDepth.
+ * Returns paths sorted by depth (shallower first), then alphabetically.
+ */
+function walkDirs(root: string, maxDepth: number): string[] {
+  const results: { path: string; depth: number }[] = [];
+
+  function walk(dir: string, depth: number): void {
+    if (depth > maxDepth) return;
+
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+
+        const fullPath = join(dir, entry.name);
+        results.push({ path: fullPath, depth });
+
+        // Recurse into subdirectories
+        walk(fullPath, depth + 1);
+      }
+    } catch {
+      // Permission denied or other error - skip
+    }
+  }
+
+  walk(root, 1);
+
+  // Sort by depth first, then alphabetically
+  return results
+    .sort((a, b) => a.depth - b.depth || a.path.localeCompare(b.path))
+    .map((r) => r.path);
+}
+
+/**
+ * Get all directories for the picker.
+ * Searches ~, /var, /etc in order, preferring shallower directories.
+ */
+function getAllDirs(): string[] {
+  const home = process.env.HOME || "/home";
+  const maxDepth = 4;
+  const maxTotal = 500;
+
+  const dirs: string[] = [];
+
+  // Home directory first (most important)
+  dirs.push(...walkDirs(home, maxDepth));
+
+  // Then /var and /etc (limited depth)
+  if (dirs.length < maxTotal) {
+    dirs.push(...walkDirs("/var", 2));
+  }
+  if (dirs.length < maxTotal) {
+    dirs.push(...walkDirs("/etc", 2));
+  }
+
+  return dirs.slice(0, maxTotal);
+}
+
+/**
+ * Format a path with ~ substitution for home directory.
+ */
+function formatPath(path: string): string {
+  const home = process.env.HOME || "/home";
+  if (path.startsWith(home + "/")) {
+    return "~" + path.slice(home.length);
+  }
+  if (path === home) {
+    return "~";
+  }
+  return path;
+}
+
+/**
+ * Convert directories to typeahead items.
+ */
+function dirsToItems(dirs: string[]): TypeaheadItem[] {
+  return dirs.map((path) => ({
+    id: `dir:${path}`,
+    label: formatPath(path),
+    marker: "📁",
+  }));
+}
+
+/**
+ * Get current pane path.
+ */
+function getCurrentPath(): string {
+  try {
+    return execSync("tmux display-message -p '#{pane_current_path}'", {
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+  } catch {
+    return process.env.HOME || "/";
+  }
 }
 
 /**
@@ -44,11 +144,17 @@ function reposToItems(repos: RepoInfo[]): TypeaheadItem[] {
  */
 export function initRepoPicker(): RepoPickerState {
   const repos = getKnownRepos();
-  const items = reposToItems(repos);
+  const currentPath = getCurrentPath();
+
+  // Combine repos + all directories
+  const repoItems = reposToItems(repos);
+  const dirItems = dirsToItems(getAllDirs());
+  const items = [...repoItems, ...dirItems];
 
   return {
-    typeahead: initTypeahead(items, "Choose repo"),
+    typeahead: initTypeahead(items, "Choose repo or directory"),
     repos,
+    currentPath,
   };
 }
 
@@ -72,11 +178,23 @@ export function handleRepoPickerKey(
       return { action: "cancel" };
 
     case "select": {
-      // Find the repo by remote URL
-      const repo = state.repos.find((r) => r.remoteUrl === result.item.id);
-      if (repo) {
-        return { action: "select", repo };
+      const itemId = result.item.id;
+
+      // Check if it's a repo or directory based on id prefix
+      if (itemId.startsWith("repo:")) {
+        const remoteUrl = itemId.slice(5); // Remove "repo:" prefix
+        const repo = state.repos.find((r) => r.remoteUrl === remoteUrl);
+        if (repo) {
+          return { action: "select", repo };
+        }
+        return { action: "cancel" };
       }
+
+      if (itemId.startsWith("dir:")) {
+        const path = itemId.slice(4); // Remove "dir:" prefix
+        return { action: "directory", path };
+      }
+
       return { action: "cancel" };
     }
 
@@ -108,8 +226,8 @@ export function handleRepoPickerKey(
         }
       }
 
-      // Not a known repo, not a valid git repo - pass to path handler
-      return { action: "path", path };
+      // Not a known repo, not a valid git repo - pass to directory handler
+      return { action: "directory", path };
     }
   }
 }

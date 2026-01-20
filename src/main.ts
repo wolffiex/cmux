@@ -29,7 +29,7 @@ import {
   handleRepoPickerKey,
   renderRepoPicker,
 } from "./repo-picker";
-import { collectReposFromWindows, trackRepo } from "./repo-store";
+import { collectReposFromWindows } from "./repo-store";
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
 const SELF_PATH = import.meta.path;
@@ -962,8 +962,8 @@ function handleRepoPickerMode(key: string): boolean {
       // For now, just open a window at the repo path
       createNewWindowAtPath(result.repo.path);
       return false;
-    case "path":
-      // Fall back to dir picker with the typed path
+    case "directory":
+      // Fall back to dir picker with the selected/typed path
       state.repoPicker = null;
       try {
         state.dirPicker = initDirPickerState(result.path);
@@ -1123,8 +1123,8 @@ function handleMainKey(key: string): boolean {
       break;
     case "+":
     case "=": // Support both + and = (unshifted +) for convenience
-      // Plus key - open directory picker (same as pressing Enter on plus button)
-      openDirPicker();
+      // Plus key - open repo picker (same as pressing Enter on plus button)
+      openRepoPicker();
       break;
     case "1":
     case "2":
@@ -1174,26 +1174,6 @@ function handleMainKey(key: string): boolean {
   return true;
 }
 
-function openDirPicker(): void {
-  try {
-    const currentPath = execSync(
-      "tmux display-message -p '#{pane_current_path}'",
-    )
-      .toString()
-      .trim();
-    if (currentPath) {
-      state.dirPicker = initDirPickerState(currentPath);
-      state.mode = "dirPicker";
-    } else {
-      // Fallback: create window in current dir if we can't get path
-      createNewWindow();
-    }
-  } catch {
-    // Fallback if tmux command fails
-    createNewWindow();
-  }
-}
-
 function openRepoPicker(): void {
   state.repoPicker = initRepoPicker();
   state.mode = "repoPicker";
@@ -1203,23 +1183,6 @@ function createNewWindowAtPath(targetPath: string): void {
   try {
     // Create the new window at the target path (always starts with 1 pane)
     execSync(`tmux new-window -c "${targetPath}"`);
-  } catch (_e) {
-    // Ignore errors (e.g., not in tmux)
-  }
-}
-
-function createNewWindow(): void {
-  try {
-    // Get current pane's working directory before creating new window
-    const currentPath = execSync(
-      "tmux display-message -p '#{pane_current_path}'",
-    )
-      .toString()
-      .trim();
-    const pathArg = currentPath ? `-c "${currentPath}"` : "";
-
-    // Create the new window (always starts with 1 pane, preserving working directory)
-    execSync(`tmux new-window ${pathArg}`);
   } catch (_e) {
     // Ignore errors (e.g., not in tmux)
   }
