@@ -11,8 +11,7 @@ import { join } from "node:path";
 
 export interface RepoInfo {
   name: string; // short name (e.g., "cmux")
-  path: string; // primary path (e.g., "/home/user/code/cmux")
-  remoteUrl: string; // canonical identifier
+  path: string; // canonical repo path (main checkout, not worktrees)
   lastSeen: number; // timestamp when we last saw this repo
 }
 
@@ -36,14 +35,27 @@ function getDb(): Database {
     chmodSync(dbPath, 0o600);
 
     db.run("PRAGMA journal_mode = WAL");
-    db.run(`
-      CREATE TABLE IF NOT EXISTS repos (
-        remote_url TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        path TEXT NOT NULL,
-        last_seen INTEGER NOT NULL
-      )
-    `);
+
+    // Check schema - blow away if it doesn't match
+    const tableInfo = db.query("PRAGMA table_info(repos)").all() as {
+      name: string;
+    }[];
+    const columns = new Set(tableInfo.map((col) => col.name));
+    const expectedColumns = new Set(["path", "name", "last_seen"]);
+    const schemaMatches =
+      columns.size === expectedColumns.size &&
+      [...expectedColumns].every((col) => columns.has(col));
+
+    if (!schemaMatches) {
+      db.run("DROP TABLE IF EXISTS repos");
+      db.run(`
+        CREATE TABLE repos (
+          path TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          last_seen INTEGER NOT NULL
+        )
+      `);
+    }
   }
   return db;
 }
@@ -51,17 +63,51 @@ function getDb(): Database {
 // ── Git Helpers ─────────────────────────────────────────────────────────────
 
 /**
- * Get git remote URL for a path (returns null if not a git repo).
+ * Check if a path is a git repository.
  */
-export function getRemoteUrl(path: string): string | null {
+export function isGitRepo(path: string): boolean {
   try {
-    return (
-      execFileSync("git", ["-C", path, "remote", "get-url", "origin"], {
+    execFileSync("git", ["-C", path, "rev-parse", "--git-dir"], {
+      encoding: "utf-8",
+      timeout: 5000,
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve a path to the main repo path (handles worktrees).
+ * Returns the canonical absolute path to the main checkout.
+ */
+export function resolveRepoPath(path: string): string | null {
+  try {
+    // Get the common git dir (same for main repo and worktrees)
+    const gitCommonDir = execFileSync(
+      "git",
+      ["-C", path, "rev-parse", "--git-common-dir"],
+      {
         encoding: "utf-8",
         timeout: 5000,
         stdio: ["pipe", "pipe", "ignore"],
-      }).trim() || null
-    );
+      },
+    ).trim();
+
+    // For main repo: returns ".git" or absolute path to .git
+    // For worktree: returns "/path/to/main/repo/.git"
+    if (gitCommonDir === ".git") {
+      // We're in the main repo, resolve to absolute path
+      return execFileSync("git", ["-C", path, "rev-parse", "--show-toplevel"], {
+        encoding: "utf-8",
+        timeout: 5000,
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
+    }
+
+    // Worktree: strip the .git suffix to get main repo path
+    return gitCommonDir.replace(/\/\.git$/, "");
   } catch {
     return null;
   }
@@ -84,40 +130,28 @@ export function getLastActivity(path: string): number {
   }
 }
 
-/**
- * Get repo name from remote URL.
- */
-export function getRepoName(remoteUrl: string): string {
-  // Handle various URL formats:
-  // git@github.com:user/repo.git -> repo
-  // https://github.com/user/repo.git -> repo
-  const cleaned = remoteUrl.replace(/\.git$/, "");
-  const lastSlash = cleaned.lastIndexOf("/");
-  const lastColon = cleaned.lastIndexOf(":");
-  const lastSep = Math.max(lastSlash, lastColon);
-  return lastSep >= 0 ? cleaned.slice(lastSep + 1) : cleaned;
-}
-
 // ── Store Operations ────────────────────────────────────────────────────────
 
 /**
  * Track a repo (insert or update).
+ * Resolves worktrees to their main repo path.
  */
 export function trackRepo(path: string): RepoInfo | null {
-  const remoteUrl = getRemoteUrl(path);
-  if (!remoteUrl) return null;
+  const repoPath = resolveRepoPath(path);
+  if (!repoPath) return null;
+
+  const name = repoPath.split("/").pop() || "repo";
 
   const info: RepoInfo = {
-    name: getRepoName(remoteUrl),
-    path,
-    remoteUrl,
+    name,
+    path: repoPath,
     lastSeen: Date.now(),
   };
 
   const database = getDb();
   database.run(
-    `INSERT OR REPLACE INTO repos (remote_url, name, path, last_seen) VALUES (?, ?, ?, ?)`,
-    [info.remoteUrl, info.name, info.path, info.lastSeen],
+    `INSERT OR REPLACE INTO repos (path, name, last_seen) VALUES (?, ?, ?)`,
+    [info.path, info.name, info.lastSeen],
   );
 
   return info;
@@ -133,8 +167,8 @@ const ACTIVITY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 /**
  * Get cached activity timestamp for a repo, refreshing if stale.
  */
-function getCachedActivity(path: string, remoteUrl: string): number {
-  const cached = activityCache.get(remoteUrl);
+function getCachedActivity(path: string): number {
+  const cached = activityCache.get(path);
   const now = Date.now();
 
   if (cached && now - cached.cachedAt < ACTIVITY_CACHE_TTL) {
@@ -142,7 +176,7 @@ function getCachedActivity(path: string, remoteUrl: string): number {
   }
 
   const timestamp = getLastActivity(path);
-  activityCache.set(remoteUrl, { timestamp, cachedAt: now });
+  activityCache.set(path, { timestamp, cachedAt: now });
   return timestamp;
 }
 
@@ -153,11 +187,10 @@ function getCachedActivity(path: string, remoteUrl: string): number {
 export function getKnownRepos(): RepoInfo[] {
   const database = getDb();
   const rows = database
-    .query("SELECT remote_url, name, path, last_seen FROM repos")
+    .query("SELECT path, name, last_seen FROM repos")
     .all() as {
-    remote_url: string;
-    name: string;
     path: string;
+    name: string;
     last_seen: number;
   }[];
 
@@ -167,25 +200,24 @@ export function getKnownRepos(): RepoInfo[] {
   for (const row of rows) {
     if (existsSync(row.path)) {
       repos.push({
-        remoteUrl: row.remote_url,
-        name: row.name,
         path: row.path,
+        name: row.name,
         lastSeen: row.last_seen,
       });
     } else {
-      toDelete.push(row.remote_url);
+      toDelete.push(row.path);
     }
   }
 
   // Clean up stale entries
-  for (const url of toDelete) {
-    database.run("DELETE FROM repos WHERE remote_url = ?", [url]);
+  for (const path of toDelete) {
+    database.run("DELETE FROM repos WHERE path = ?", [path]);
   }
 
   // Sort by activity (most recent first)
   return repos.sort((a, b) => {
-    const activityA = getCachedActivity(a.path, a.remoteUrl);
-    const activityB = getCachedActivity(b.path, b.remoteUrl);
+    const activityA = getCachedActivity(a.path);
+    const activityB = getCachedActivity(b.path);
     return activityB - activityA;
   });
 }

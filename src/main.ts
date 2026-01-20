@@ -19,7 +19,7 @@ import {
   initRepoPicker,
   type RepoPickerState,
 } from "./repo-picker";
-import { collectReposFromWindows } from "./repo-store";
+import { collectReposFromWindows, trackRepo } from "./repo-store";
 import { computeSwaps, executeSwaps } from "./swap-orchestrator";
 import {
   getStartupInfo,
@@ -1400,6 +1400,14 @@ function createNewWindowAtPath(targetPath: string): void {
     // Create the new window at the target path (always starts with 1 pane)
     execFileSync("tmux", ["new-window", "-c", targetPath]);
     log("tmux new-window succeeded");
+
+    // Track the repo if it's a git repository
+    const tracked = trackRepo(targetPath);
+    if (tracked) {
+      log("trackRepo added:", tracked.name, "at", tracked.path);
+    } else {
+      log("trackRepo: not a git repo or no remote");
+    }
   } catch (e) {
     log("tmux new-window failed:", e);
   }

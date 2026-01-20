@@ -5,7 +5,7 @@
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { getKnownRepos, getRemoteUrl, type RepoInfo } from "./repo-store";
+import { getKnownRepos, isGitRepo, type RepoInfo } from "./repo-store";
 import {
   createFilter,
   getResults,
@@ -61,7 +61,7 @@ function formatPath(path: string): string {
  */
 function reposToItems(repos: RepoInfo[]): TypeaheadItem[] {
   return repos.map((repo) => ({
-    id: `repo:${repo.remoteUrl}`,
+    id: `repo:${repo.path}`,
     label: repo.name,
     hint: repo.path.replace(/^\/home\/[^/]+\//, "~/"),
     icon: "📦",
@@ -224,8 +224,8 @@ export function handleRepoPickerKey(
 
       // Check if it's a repo or directory based on id prefix
       if (itemId.startsWith("repo:")) {
-        const remoteUrl = itemId.slice(5); // Remove "repo:" prefix
-        const repo = state.repos.find((r) => r.remoteUrl === remoteUrl);
+        const repoPath = itemId.slice(5); // Remove "repo:" prefix
+        const repo = state.repos.find((r) => r.path === repoPath);
         if (repo) {
           return { action: "select", repo };
         }
@@ -252,23 +252,17 @@ export function handleRepoPickerKey(
       // Resolve to absolute path
       const path = resolve(expanded);
 
-      // Check if it's a valid directory
-      if (existsSync(path)) {
-        // Check if it's a git repo
-        const remoteUrl = getRemoteUrl(path);
-        if (remoteUrl) {
-          // It's a repo - return it directly
-          const repo: RepoInfo = {
-            name: path.split("/").pop() || "repo",
-            path,
-            remoteUrl,
-            lastSeen: Date.now(),
-          };
-          return { action: "select", repo };
-        }
+      // Check if it's a valid git repo
+      if (existsSync(path) && isGitRepo(path)) {
+        const repo: RepoInfo = {
+          name: path.split("/").pop() || "repo",
+          path,
+          lastSeen: Date.now(),
+        };
+        return { action: "select", repo };
       }
 
-      // Not a known repo, not a valid git repo - pass to directory handler
+      // Not a git repo - pass to directory handler
       return { action: "directory", path };
     }
   }
