@@ -32,6 +32,7 @@ import { generateLayoutString } from "./tmux-layout";
 import { renderTypeaheadLines } from "./typeahead";
 import { easeOut, splitWindowName, stripAnsi, wordWrap } from "./utils";
 import { getWindowSummary } from "./window-summary";
+import { deleteWorktree } from "./worktree-utils";
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
 const SELF_PATH = import.meta.path;
@@ -1135,38 +1136,25 @@ function handleBranchPickerMode(key: string): boolean {
       const repoPath = state.branchPicker.repoPath;
       try {
         if (result.type === "worktree") {
-          execFileSync(
-            "git",
-            ["-C", repoPath, "worktree", "remove", result.path],
-            {
-              timeout: 10000,
-            },
-          );
+          // Deletes worktree and branch if they share the same name
+          deleteWorktree(repoPath, result.path);
         } else {
           execFileSync("git", ["-C", repoPath, "branch", "-d", result.branch], {
             timeout: 10000,
           });
         }
       } catch {
-        // Force delete if normal delete fails
-        try {
-          if (result.type === "worktree") {
-            execFileSync(
-              "git",
-              ["-C", repoPath, "worktree", "remove", "--force", result.path],
-              { timeout: 10000 },
-            );
-          } else {
+        // Force delete branch if normal delete fails
+        if (result.type !== "worktree") {
+          try {
             execFileSync(
               "git",
               ["-C", repoPath, "branch", "-D", result.branch],
-              {
-                timeout: 10000,
-              },
+              { timeout: 10000 },
             );
+          } catch {
+            // Failed to delete
           }
-        } catch {
-          // Failed to delete
         }
       }
       // Refresh the branch picker
