@@ -1,4 +1,7 @@
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -35,50 +38,53 @@ interface WindowContext {
   gitDiff: string | null;
 }
 
-function run(cmd: string): string {
+async function run(cmd: string): Promise<string> {
   try {
-    return execSync(cmd, { encoding: "utf-8", timeout: 5000 }).trim();
+    const { stdout } = await execAsync(cmd, { timeout: 5000 });
+    return stdout.trim();
   } catch {
     return "";
   }
 }
 
-function gatherWindowContext(windowTarget: string): WindowContext {
-  const windowName = run(
+async function gatherWindowContext(windowTarget: string): Promise<WindowContext> {
+  const windowName = await run(
     `tmux display-message -t ${windowTarget} -p '#{window_name}'`,
   );
 
   // Get pane info including active status
-  const paneData = run(
+  const paneData = await run(
     `tmux list-panes -t ${windowTarget} -F '#{pane_index}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_active}'`,
   );
 
-  const panes: PaneInfo[] = paneData
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [index, command, cwd, active] = line.split("\t");
-      const content = run(
-        `tmux capture-pane -t ${windowTarget}.${index} -p | tail -30`,
-      );
-      return {
-        index: parseInt(index, 10),
-        command,
-        cwd,
-        content,
-        active: active === "1",
-      };
-    })
-    // Sort active pane first
-    .sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
+  const panes: PaneInfo[] = await Promise.all(
+    paneData
+      .split("\n")
+      .filter(Boolean)
+      .map(async (line) => {
+        const [index, command, cwd, active] = line.split("\t");
+        const content = await run(
+          `tmux capture-pane -t ${windowTarget}.${index} -p | tail -30`,
+        );
+        return {
+          index: parseInt(index, 10),
+          command,
+          cwd,
+          content,
+          active: active === "1",
+        };
+      }),
+  );
+  // Sort active pane first
+  panes.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
 
   // Get git info from first pane's cwd
   const primaryCwd = panes[0]?.cwd || "";
-  const gitBranch = run(`git -C "${primaryCwd}" branch --show-current`);
-  const gitStatus = run(`git -C "${primaryCwd}" status --short`);
-  const gitDiff = run(
-    `git -C "${primaryCwd}" diff --stat HEAD 2>/dev/null | tail -20`,
-  );
+  const [gitBranch, gitStatus, gitDiff] = await Promise.all([
+    run(`git -C "${primaryCwd}" branch --show-current`),
+    run(`git -C "${primaryCwd}" status --short`),
+    run(`git -C "${primaryCwd}" diff --stat HEAD 2>/dev/null | tail -20`),
+  ]);
 
   return { windowName, panes, gitBranch, gitStatus, gitDiff };
 }
@@ -135,7 +141,7 @@ export async function getWindowSummary(windowId: string): Promise<string> {
   }
 
   return summaryCache.get(windowId, async () => {
-    const ctx = gatherWindowContext(windowId);
+    const ctx = await gatherWindowContext(windowId);
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-20250514",
@@ -159,12 +165,12 @@ if (import.meta.main) {
   const debug = args.includes("--debug");
   const windowId =
     args.find((a) => !a.startsWith("-")) ||
-    run("tmux display-message -p '#{window_id}'");
+    (await run("tmux display-message -p '#{window_id}'"));
 
   console.log(`Window: ${windowId}\n`);
 
   if (debug) {
-    const ctx = gatherWindowContext(windowId);
+    const ctx = await gatherWindowContext(windowId);
     console.log("=== SYSTEM PROMPT ===\n");
     console.log(SYSTEM_PROMPT);
     console.log("\n=== USER PROMPT ===\n");

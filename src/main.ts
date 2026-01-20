@@ -1,3 +1,4 @@
+const _startTime = performance.now();
 import { execSync, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -81,6 +82,18 @@ function renumberWindows(): void {
   }
 }
 
+// ── Benchmark mode ─────────────────────────────────────────────────────────
+const BENCHMARK_MODE = !!process.env.CMUX_BENCHMARK;
+
+// Profiling helper for benchmark mode
+const profile = BENCHMARK_MODE
+  ? (label: string, fn: () => void) => {
+      const start = performance.now();
+      fn();
+      console.error(`${label}: ${(performance.now() - start).toFixed(1)}ms`);
+    }
+  : (_label: string, fn: () => void) => fn();
+
 function initState(): State {
   let windows: TmuxWindow[] = [];
   let currentWindowIndex = 0;
@@ -88,17 +101,22 @@ function initState(): State {
 
   try {
     // Single batched tmux command for startup (combines renumber + list-windows + list-panes)
-    const startupInfo = getStartupInfo();
+    let startupInfo!: ReturnType<typeof getStartupInfo>;
+    profile("getStartupInfo", () => {
+      startupInfo = getStartupInfo();
+    });
     windows = startupInfo.windows;
     currentWindowIndex = windows.findIndex((w) => w.active);
     if (currentWindowIndex < 0) currentWindowIndex = 0;
 
     // Find best matching layout for current window (uses pane info from startup query)
-    layoutIndex = findBestMatchingLayout(
-      startupInfo.currentWindowInfo.width,
-      startupInfo.currentWindowInfo.height,
-      startupInfo.currentWindowInfo.panes,
-    );
+    profile("findBestMatchingLayout", () => {
+      layoutIndex = findBestMatchingLayout(
+        startupInfo.currentWindowInfo.width,
+        startupInfo.currentWindowInfo.height,
+        startupInfo.currentWindowInfo.panes,
+      );
+    });
   } catch (_e) {
     // Not in tmux - use dummy data for testing
     windows = [
@@ -161,9 +179,6 @@ function initState(): State {
 
 // State is initialized lazily in runUI() after alt-screen switch for faster visual feedback
 let state: State;
-
-// ── Benchmark mode ─────────────────────────────────────────────────────────
-const BENCHMARK_MODE = !!process.env.CMUX_BENCHMARK;
 
 // ── Polling ────────────────────────────────────────────────────────────────
 let pollInterval: Timer | null = null;
@@ -228,7 +243,7 @@ function fetchSummaryForWindow(windowIndex: number): void {
   state.summaryFetching.add(windowIndex);
   state.summaryCache.set(windowIndex, "Loading summary...");
 
-  // Use full session:window target format for popup context
+  // Fully async - gatherWindowContext now uses async exec
   getWindowSummary(`${SESSION_NAME}:${windowIndex}`)
     .then((summary) => {
       state.summaryCache.set(windowIndex, summary);
@@ -956,7 +971,7 @@ function render(): void {
     const summaryY = previewY + titleLines.length + 1;
     let summaryText = "";
     if (selectedWindow) {
-      // Trigger fetch if not cached
+      // Trigger async fetch if not cached (uses dynamic import, doesn't block render)
       fetchSummaryForWindow(selectedWindow.index);
       summaryText =
         state.summaryCache.get(selectedWindow.index) || "Loading summary...";
@@ -1606,6 +1621,10 @@ eval "$(bun ${SELF_PATH})"
 }
 
 function runUI(): void {
+  if (BENCHMARK_MODE) {
+    console.error(`module load: ${(performance.now() - _startTime).toFixed(1)}ms`);
+  }
+
   if (!BENCHMARK_MODE && !process.stdin.isTTY) {
     console.error("Not a TTY");
     process.exit(1);
@@ -1619,15 +1638,20 @@ function runUI(): void {
   }
 
   // Initialize state after alt-screen switch (includes tmux queries)
-  state = initState();
+  profile("initState", () => {
+    state = initState();
+  });
 
   initLog();
   log("[cmux] runUI starting");
 
-  render();
+  profile("render", () => {
+    render();
+  });
 
   // Benchmark mode: exit immediately after first render
   if (BENCHMARK_MODE) {
+    console.error(`total: ${(performance.now() - _startTime).toFixed(1)}ms`);
     process.exit(0);
   }
 
