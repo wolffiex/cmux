@@ -22,6 +22,7 @@ import { computeSwaps, executeSwaps } from "./swap-orchestrator";
 import {
   getStartupInfo,
   getWindowInfo,
+  getWindowInfoForWindow,
   getWindows,
   type TmuxWindow,
 } from "./tmux";
@@ -92,11 +93,13 @@ function initState(): State {
     currentWindowIndex = windows.findIndex((w) => w.active);
     if (currentWindowIndex < 0) currentWindowIndex = 0;
 
-    // Find first layout with matching pane count
-    layoutIndex = ALL_LAYOUTS.findIndex(
-      (l) => l.panes.length === startupInfo.currentWindowPaneCount,
+    // Find best matching layout for current window
+    const windowInfo = getWindowInfo();
+    layoutIndex = findBestMatchingLayout(
+      windowInfo.width,
+      windowInfo.height,
+      windowInfo.panes,
     );
-    if (layoutIndex < 0) layoutIndex = 0;
   } catch (_e) {
     // Not in tmux - use dummy data for testing
     windows = [
@@ -264,6 +267,80 @@ const superscript = ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸",
 
 // Font for window titles
 const titleFont = new Font("mini");
+
+// ── Layout matching ─────────────────────────────────────────────────────────
+/**
+ * Find the layout that best matches the given window's pane arrangement.
+ * Returns the index in ALL_LAYOUTS of the best matching layout.
+ */
+function findBestMatchingLayout(
+  windowWidth: number,
+  windowHeight: number,
+  panes: Array<{ id: string; left: number; top: number; width: number; height: number }>,
+): number {
+  const currentPanes: Pane[] = panes.map((p) => ({
+    id: p.id,
+    x: p.left,
+    y: p.top,
+    width: p.width,
+    height: p.height,
+  }));
+
+  let bestIndex = 0;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (let i = 0; i < ALL_LAYOUTS.length; i++) {
+    const layout = ALL_LAYOUTS[i];
+
+    // Only consider layouts with matching pane count
+    if (layout.panes.length !== panes.length) continue;
+
+    // Resolve layout to absolute coordinates
+    const resolved = resolveLayout(layout, windowWidth, windowHeight);
+    const slots: Slot[] = resolved.map((r) => ({
+      x: r.x,
+      y: r.y,
+      width: r.width,
+      height: r.height,
+    }));
+
+    // Score the match
+    const { matches } = matchPanesToSlots(currentPanes, slots);
+    const totalScore = matches.reduce((sum, m) => sum + m.score, 0);
+
+    if (totalScore > bestScore) {
+      bestScore = totalScore;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
+}
+
+/**
+ * Update the layout picker to match the currently selected window's layout.
+ * Called when carousel selection changes to a window.
+ */
+function updateLayoutForSelectedWindow(): void {
+  // Only update if carousel is on a window (not +/- buttons)
+  const windowIndex = state.carouselIndex - 1;
+  if (windowIndex < 0 || windowIndex >= state.windows.length) return;
+
+  const selectedWindow = state.windows[windowIndex];
+  try {
+    const windowInfo = getWindowInfoForWindow(selectedWindow.index);
+    const bestLayout = findBestMatchingLayout(
+      windowInfo.width,
+      windowInfo.height,
+      windowInfo.panes,
+    );
+    if (bestLayout !== state.layoutIndex) {
+      state.layoutIndex = bestLayout;
+    }
+  } catch {
+    // Ignore errors (e.g., window no longer exists)
+  }
+}
 
 // ── Layout rendering ───────────────────────────────────────────────────────
 function drawLayoutPreview(
@@ -1125,6 +1202,7 @@ function handleMainKey(key: string): boolean {
         if (state.carouselIndex > 0) {
           state.carouselIndex--;
           state.confirmingDelete = false; // Cancel confirmation when navigating
+          updateLayoutForSelectedWindow();
         }
       } else {
         state.previousLayoutIndex = state.layoutIndex;
@@ -1140,6 +1218,7 @@ function handleMainKey(key: string): boolean {
         if (state.carouselIndex < maxCarouselIndex) {
           state.carouselIndex++;
           state.confirmingDelete = false; // Cancel confirmation when navigating
+          updateLayoutForSelectedWindow();
         }
       } else {
         state.previousLayoutIndex = state.layoutIndex;
