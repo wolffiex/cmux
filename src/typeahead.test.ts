@@ -6,6 +6,19 @@ import {
   renderTypeaheadLines,
   type TypeaheadItem,
 } from "./typeahead";
+import {
+  Keys,
+  type,
+  simulate,
+  selected,
+  filteredLabels,
+  renderedItems,
+  assertSelect,
+  assertCreate,
+  assertContinue,
+} from "./typeahead-test-utils";
+
+// ── Test Fixtures ───────────────────────────────────────────────────────────
 
 const testItems: TypeaheadItem[] = [
   { id: "cmux", label: "cmux", hint: "main" },
@@ -125,5 +138,111 @@ describe("renderTypeaheadLines", () => {
     const lines = renderTypeaheadLines(state, 60, 20);
     const clardioLine = lines.find((l) => l.includes("clardio"));
     expect(clardioLine).toContain("·");
+  });
+});
+
+// ── Integration Tests Using Helpers ─────────────────────────────────────────
+
+describe("typeahead scenarios", () => {
+  test("type and select", () => {
+    const state = initTypeahead(testItems);
+    const afterTyping = type(state, "cl");
+
+    expect(afterTyping.input).toBe("cl");
+    expect(filteredLabels(afterTyping)).toEqual(["clardio"]);
+    expect(selected(afterTyping)?.id).toBe("clardio");
+
+    const result = handleTypeaheadKey(afterTyping, Keys.ENTER);
+    assertSelect(result, "clardio");
+  });
+
+  test("navigate then select", () => {
+    const state = initTypeahead(testItems);
+    const result = simulate(state, Keys.DOWN, Keys.DOWN, Keys.ENTER);
+    assertSelect(result, "shellbot");
+  });
+
+  test("type non-matching creates new", () => {
+    const state = initTypeahead(testItems);
+    const afterTyping = type(state, "newrepo");
+
+    expect(filteredLabels(afterTyping)).toEqual([]);
+
+    const result = handleTypeaheadKey(afterTyping, Keys.ENTER);
+    assertCreate(result, "newrepo");
+  });
+
+  test("backspace restores items", () => {
+    const state = initTypeahead(testItems);
+    const afterTyping = type(state, "xyz");
+    expect(filteredLabels(afterTyping)).toEqual([]);
+
+    // Backspace three times to clear
+    const result = simulate(afterTyping, Keys.BACKSPACE, Keys.BACKSPACE, Keys.BACKSPACE);
+    const afterBackspace = assertContinue(result);
+    expect(filteredLabels(afterBackspace)).toEqual(["cmux", "clardio", "shellbot"]);
+  });
+
+  test("escape cancels at any point", () => {
+    const state = initTypeahead(testItems);
+    const afterTyping = type(state, "cm");
+    const result = handleTypeaheadKey(afterTyping, Keys.ESCAPE);
+    expect(result.action).toBe("cancel");
+  });
+
+  test("up arrow wraps from top to bottom", () => {
+    const state = initTypeahead(testItems);
+    const result = handleTypeaheadKey(state, Keys.UP);
+    if (result.action === "continue") {
+      expect(selected(result.state)?.id).toBe("shellbot");
+    }
+  });
+
+  test("down arrow wraps from bottom to top", () => {
+    const state = { ...initTypeahead(testItems), selectedIndex: 2 };
+    const result = handleTypeaheadKey(state, Keys.DOWN);
+    if (result.action === "continue") {
+      expect(selected(result.state)?.id).toBe("cmux");
+    }
+  });
+
+  test("ctrl+n and ctrl+p work like arrows", () => {
+    const state = initTypeahead(testItems);
+
+    const down = handleTypeaheadKey(state, Keys.CTRL_N);
+    if (down.action === "continue") {
+      expect(selected(down.state)?.id).toBe("clardio");
+    }
+
+    const up = handleTypeaheadKey(state, Keys.CTRL_P);
+    if (up.action === "continue") {
+      expect(selected(up.state)?.id).toBe("shellbot");
+    }
+  });
+});
+
+describe("rendered output", () => {
+  test("shows all items initially", () => {
+    const state = initTypeahead(testItems);
+    const items = renderedItems(state);
+    expect(items).toContain("→ cmux main");
+    expect(items.some(i => i.includes("clardio"))).toBe(true);
+    expect(items.some(i => i.includes("shellbot"))).toBe(true);
+  });
+
+  test("shows filtered items after typing", () => {
+    const state = type(initTypeahead(testItems), "sh");
+    const items = renderedItems(state);
+    expect(items.length).toBe(1);
+    expect(items[0]).toContain("shellbot");
+  });
+
+  test("shows hint only for selected item", () => {
+    const state = initTypeahead(testItems);
+    const items = renderedItems(state);
+    // First item (selected) should show hint
+    expect(items[0]).toContain("main");
+    // Second item should not show its hint
+    expect(items[1]).not.toContain("feature-x");
   });
 });
