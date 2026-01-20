@@ -216,7 +216,7 @@ export function renderTypeaheadLines(
   lines.push(box.v + inputPadded + box.v);
 
   // Separator
-  lines.push(box.vr + box.h.repeat(boxWidth - 2) + box.vl);
+  lines.push(box.ltee + box.h.repeat(boxWidth - 2) + box.rtee);
 
   // Item listing
   const listHeight = boxHeight - 4; // borders, input, separator
