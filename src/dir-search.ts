@@ -112,8 +112,8 @@ export function* walkDirs(
   // For resumption, use snapshot's pending queue
   if (snapshot?.pending && snapshot.pending.length > 0) {
     const queue = snapshot.pending;
-    while (queue.length > 0) {
-      const { path, depth } = queue.shift()!;
+    for (let item = queue.shift(); item !== undefined; item = queue.shift()) {
+      const { path, depth } = item;
       if (depth > maxDepth) continue;
 
       try {
@@ -152,8 +152,8 @@ export function* walkDirs(
       { path: root, depth: 0 },
     ];
 
-    while (queue.length > 0) {
-      const { path, depth } = queue.shift()!;
+    for (let item = queue.shift(); item !== undefined; item = queue.shift()) {
+      const { path, depth } = item;
       if (depth > maxDepth) continue;
 
       try {

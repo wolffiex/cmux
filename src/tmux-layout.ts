@@ -85,7 +85,8 @@ function buildLayoutTree(
       const children: LayoutNode[] = [];
 
       for (const colX of [...columns.keys()].sort((a, b) => a - b)) {
-        const colPanes = columns.get(colX)!;
+        const colPanes = columns.get(colX);
+        if (!colPanes) continue;
         const colWidth = Math.max(...colPanes.map((p) => p.x + p.width)) - colX;
         const child = buildLayoutTree(colPanes, colX, y, colWidth, height);
         children.push(child);
@@ -118,7 +119,8 @@ function buildLayoutTree(
       const children: LayoutNode[] = [];
 
       for (const rowY of [...rows.keys()].sort((a, b) => a - b)) {
-        const rowPanes = rows.get(rowY)!;
+        const rowPanes = rows.get(rowY);
+        if (!rowPanes) continue;
         const rowHeight =
           Math.max(...rowPanes.map((p) => p.y + p.height)) - rowY;
         const child = buildLayoutTree(rowPanes, x, rowY, width, rowHeight);

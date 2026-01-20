@@ -3,11 +3,10 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { box } from "./box-chars";
 import {
-  type DirPickerState,
-  handleDirPickerKey,
-  initDirPickerState,
-  renderDirPicker,
-} from "./dir-picker";
+  type BranchPickerState,
+  handleBranchPickerKey,
+  initBranchPicker,
+} from "./branch-picker";
 import { Font } from "./fonts";
 import { renderLayoutPreview } from "./layout-preview";
 import { ALL_LAYOUTS, type LayoutTemplate, resolveLayout } from "./layouts";
@@ -37,7 +36,7 @@ const SELF_PATH = import.meta.path;
 // ── State ──────────────────────────────────────────────────────────────────
 type Focus = "window" | "layout";
 type AnimationDirection = "left" | "right" | null;
-type Mode = "main" | "dirPicker" | "repoPicker";
+type Mode = "main" | "repoPicker" | "branchPicker";
 
 interface State {
   windows: TmuxWindow[];
@@ -59,10 +58,10 @@ interface State {
   windowSwapToIndex: number; // Index in windows array
   // Delete confirmation state
   confirmingDelete: boolean;
-  // Directory picker state
-  dirPicker: DirPickerState | null;
   // Repo picker state
   repoPicker: RepoPickerState | null;
+  // Branch picker state
+  branchPicker: BranchPickerState | null;
   // Summary cache: windowIndex -> summary text (or "loading..." while fetching)
   summaryCache: Map<number, string>;
   // Track which summaries are being fetched
@@ -148,10 +147,10 @@ function initState(): State {
     windowSwapToIndex: -1,
     // Delete confirmation state
     confirmingDelete: false,
-    // Directory picker state
-    dirPicker: null,
     // Repo picker state
     repoPicker: null,
+    // Branch picker state
+    branchPicker: null,
     // Summary cache
     summaryCache: new Map(),
     summaryFetching: new Set(),
@@ -807,11 +806,12 @@ function render(): void {
   const previewY = 8; // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
   const previewH = Math.min(height - 11, 12);
 
-  if (state.mode === "repoPicker" && state.repoPicker) {
-    // Render repo picker centered in the middle section
+  const activePicker = state.repoPicker ?? state.branchPicker;
+  if (activePicker && state.mode !== "main") {
+    // Render picker centered in the middle section
     const pickerHeight = previewH + 2;
     const pickerLines = renderTypeaheadLines(
-      state.repoPicker.typeahead,
+      activePicker.typeahead,
       width,
       pickerHeight,
     );
@@ -900,18 +900,15 @@ function render(): void {
   out += ansi.moveTo(0, height - 2) + box.h.repeat(width);
 
   // Key hints (bottom row)
-  const hints =
-    state.mode === "dirPicker" || state.mode === "repoPicker"
-      ? "type to filter  jk nav  ⏎ select  esc cancel"
-      : "tab focus  hjkl nav  ⏎ apply";
-  out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset;
-
-  // Directory picker overlay (if active)
-  if (state.mode === "dirPicker" && state.dirPicker) {
-    out += renderDirPicker(state.dirPicker, width, height);
+  let hints: string;
+  if (state.mode === "branchPicker") {
+    hints = "type to filter  jk nav  ⏎ select  ^X delete  esc cancel";
+  } else if (state.mode === "repoPicker") {
+    hints = "type to filter  jk nav  ⏎ select  esc cancel";
+  } else {
+    hints = "tab focus  hjkl nav  ⏎ apply";
   }
-
-  // Repo picker is now rendered inline in the middle section (not as overlay)
+  out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset;
 
   process.stdout.write(out);
 }
@@ -938,37 +935,13 @@ async function renameWindowsOnStartup(): Promise<void> {
 
 // ── Input handling ─────────────────────────────────────────────────────────
 function handleKey(key: string): boolean {
-  if (state.mode === "dirPicker") {
-    return handleDirPickerMode(key);
-  }
   if (state.mode === "repoPicker") {
     return handleRepoPickerMode(key);
   }
+  if (state.mode === "branchPicker") {
+    return handleBranchPickerMode(key);
+  }
   return handleMainKey(key);
-}
-
-function handleDirPickerMode(key: string): boolean {
-  if (!state.dirPicker) {
-    state.mode = "main";
-    return true;
-  }
-
-  const result = handleDirPickerKey(state.dirPicker, key);
-
-  switch (result.action) {
-    case "continue":
-      state.dirPicker = result.state;
-      break;
-    case "cancel":
-      state.mode = "main";
-      state.dirPicker = null;
-      break;
-    case "select":
-      createNewWindowAtPath(result.path);
-      return false; // Exit UI after creating window
-  }
-
-  return true;
 }
 
 function handleRepoPickerMode(key: string): boolean {
@@ -988,20 +961,104 @@ function handleRepoPickerMode(key: string): boolean {
       state.repoPicker = null;
       break;
     case "select":
-      // TODO: Open branch picker for this repo
-      // For now, just open a window at the repo path
-      createNewWindowAtPath(result.repo.path);
-      return false;
-    case "directory":
-      // Fall back to dir picker with the selected/typed path
+      // Open branch picker for this repo
       state.repoPicker = null;
-      try {
-        state.dirPicker = initDirPickerState(result.path);
-        state.mode = "dirPicker";
-      } catch {
-        state.mode = "main";
-      }
+      state.branchPicker = initBranchPicker(result.repo.path);
+      state.mode = "branchPicker";
       break;
+    case "directory":
+      // Create new window at this directory
+      state.repoPicker = null;
+      state.mode = "main";
+      createNewWindowAtPath(result.path);
+      return false;
+  }
+
+  return true;
+}
+
+function handleBranchPickerMode(key: string): boolean {
+  if (!state.branchPicker) {
+    state.mode = "main";
+    return true;
+  }
+
+  const result = handleBranchPickerKey(state.branchPicker, key);
+
+  switch (result.action) {
+    case "continue":
+      state.branchPicker = result.state;
+      break;
+    case "cancel":
+      // Go back to repo picker
+      state.branchPicker = null;
+      state.mode = "main";
+      break;
+    case "select":
+      // Open window at the worktree path
+      state.branchPicker = null;
+      state.mode = "main";
+      createNewWindowAtPath(result.path);
+      return false;
+    case "create": {
+      // Create worktree and open window
+      const repoPath = state.branchPicker.repoPath;
+      state.branchPicker = null;
+      state.mode = "main";
+      try {
+        execSync(
+          `git -C '${repoPath}' worktree add '${result.path}' -b '${result.branch}'`,
+          { timeout: 10000 },
+        );
+        createNewWindowAtPath(result.path);
+      } catch {
+        // If branch exists, try without -b
+        try {
+          execSync(
+            `git -C '${repoPath}' worktree add '${result.path}' '${result.branch}'`,
+            { timeout: 10000 },
+          );
+          createNewWindowAtPath(result.path);
+        } catch {
+          // Failed to create worktree
+        }
+      }
+      return false;
+    }
+    case "delete": {
+      // Delete worktree or branch, then refresh picker
+      const repoPath = state.branchPicker.repoPath;
+      try {
+        if (result.type === "worktree") {
+          execSync(`git -C '${repoPath}' worktree remove '${result.path}'`, {
+            timeout: 10000,
+          });
+        } else {
+          execSync(`git -C '${repoPath}' branch -d '${result.branch}'`, {
+            timeout: 10000,
+          });
+        }
+      } catch {
+        // Force delete if normal delete fails
+        try {
+          if (result.type === "worktree") {
+            execSync(
+              `git -C '${repoPath}' worktree remove --force '${result.path}'`,
+              { timeout: 10000 },
+            );
+          } else {
+            execSync(`git -C '${repoPath}' branch -D '${result.branch}'`, {
+              timeout: 10000,
+            });
+          }
+        } catch {
+          // Failed to delete
+        }
+      }
+      // Refresh the branch picker
+      state.branchPicker = initBranchPicker(repoPath);
+      break;
+    }
   }
 
   return true;
@@ -1009,7 +1066,6 @@ function handleRepoPickerMode(key: string): boolean {
 
 function handleMainKey(key: string): boolean {
   // Convert arrow keys to hjkl in main mode
-  // This is done here (not in runUI) so dirPicker mode gets raw escape sequences
   let normalizedKey = key;
   if (key === "\x1b[A")
     normalizedKey = "k"; // Up arrow
@@ -1509,7 +1565,6 @@ function runUI(): void {
 
     // Parse input into key sequences
     // Arrow keys send: \x1b[A (up), \x1b[B (down), \x1b[C (right), \x1b[D (left)
-    // Skip translation in dirPicker mode - it expects raw escape sequences
     let i = 0;
     while (i < input.length) {
       let key: string;
@@ -1527,7 +1582,6 @@ function runUI(): void {
           ) {
             // Pass arrow key escape sequence through as-is
             // handleMainKey() will convert to hjkl for main mode
-            // handleDirPickerKey() expects raw sequences for dirPicker mode
             key = input.slice(i, i + 3);
             i += 3;
           } else {

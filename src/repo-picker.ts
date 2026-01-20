@@ -122,8 +122,9 @@ export function initRepoPicker(): RepoPickerState {
   // Build initial items
   const items = buildItems(repos, dirs, "");
 
+  const typeahead = initTypeahead(items);
   return {
-    typeahead: initTypeahead(items),
+    typeahead: withDynamicTitle(typeahead),
     repos,
     dirSearch: newDirSearch,
     lastFilter: "",
@@ -167,6 +168,24 @@ function updateItemsForFilter(
 }
 
 /**
+ * Get dynamic title based on selected item.
+ */
+function getTitleForSelection(typeahead: TypeaheadState): string {
+  const selected = typeahead.filtered[typeahead.selectedIndex];
+  if (!selected) return "select";
+  if (selected.id.startsWith("repo:")) return "repo";
+  if (selected.id.startsWith("dir:")) return "directory";
+  return "select";
+}
+
+/**
+ * Update typeahead with dynamic title based on selection.
+ */
+function withDynamicTitle(typeahead: TypeaheadState): TypeaheadState {
+  return { ...typeahead, title: getTitleForSelection(typeahead) };
+}
+
+/**
  * Handle key press.
  */
 export function handleRepoPickerKey(
@@ -193,6 +212,9 @@ export function handleRepoPickerKey(
           selectedIndex: 0,
         };
       }
+
+      // Update title based on current selection
+      newState.typeahead = withDynamicTitle(newState.typeahead);
 
       return { action: "continue", state: newState };
     }
