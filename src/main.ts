@@ -1,18 +1,24 @@
 import { execSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { box } from "./box-chars";
-import { Font } from "./fonts";
 import {
   type DirPickerState,
   handleDirPickerKey,
   initDirPickerState,
   renderDirPicker,
 } from "./dir-picker";
+import { Font } from "./fonts";
 import { renderLayoutPreview } from "./layout-preview";
 import { ALL_LAYOUTS, type LayoutTemplate, resolveLayout } from "./layouts";
 import { initLog, log } from "./logger";
 import { matchPanesToSlots, type Pane, type Slot } from "./pane-matcher";
+import {
+  handleRepoPickerKey,
+  initRepoPicker,
+  type RepoPickerState,
+} from "./repo-picker";
+import { collectReposFromWindows } from "./repo-store";
 import { computeSwaps, executeSwaps } from "./swap-orchestrator";
 import {
   getStartupInfo,
@@ -21,15 +27,9 @@ import {
   type TmuxWindow,
 } from "./tmux";
 import { generateLayoutString } from "./tmux-layout";
+import { renderTypeaheadLines } from "./typeahead";
 import { easeOut, splitWindowName, stripAnsi, wordWrap } from "./utils";
 import { getWindowSummary } from "./window-summary";
-import {
-  type RepoPickerState,
-  initRepoPicker,
-  handleRepoPickerKey,
-  renderRepoPicker,
-} from "./repo-picker";
-import { collectReposFromWindows } from "./repo-store";
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
 const SELF_PATH = import.meta.path;
@@ -217,7 +217,10 @@ function stopPolling(): void {
 // ── Summary fetching ────────────────────────────────────────────────────────
 function fetchSummaryForWindow(windowIndex: number): void {
   // Already have it cached or fetching
-  if (state.summaryCache.has(windowIndex) || state.summaryFetching.has(windowIndex)) {
+  if (
+    state.summaryCache.has(windowIndex) ||
+    state.summaryFetching.has(windowIndex)
+  ) {
     return;
   }
 
@@ -795,72 +798,102 @@ function render(): void {
   out += ansi.moveTo(0, 6) + box.h.repeat(width);
 
   // Middle section: layout preview (left) + AI summary (right)
+  // OR repo picker dialog when in repoPicker mode
   // Constrain to 100 chars max width, centered if terminal is wider
   const maxContentWidth = 100;
   const contentWidth = Math.min(width, maxContentWidth);
   const contentMargin = Math.floor((width - contentWidth) / 2);
 
-  // Layout preview (left side of content area)
-  const layout = ALL_LAYOUTS[state.layoutIndex];
-  const previewW = Math.min(40, Math.floor(contentWidth / 2));
-  const previewH = Math.min(height - 11, 12);
-  const previewX = contentMargin + 2;
   const previewY = 8; // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
-  out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
+  const previewH = Math.min(height - 11, 12);
 
-  // Layout counter (below preview, centered under it)
-  const paneCount = layout.panes.length;
-  const layoutFocused = state.focus === "layout";
-  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
-  const counterX = previewX + Math.floor((previewW - counter.length) / 2);
-  out += ansi.moveTo(counterX, previewY + previewH);
-  if (layoutFocused) out += ansi.inverse;
-  out += ` ${counter} `;
-  out += ansi.reset;
+  if (state.mode === "repoPicker" && state.repoPicker) {
+    // Render repo picker centered in the middle section
+    const pickerHeight = previewH + 2;
+    const pickerLines = renderTypeaheadLines(
+      state.repoPicker.typeahead,
+      width,
+      pickerHeight,
+    );
 
-  // Right column: title + AI summary
-  const summaryX = previewX + previewW + 4; // Right of layout preview with gap
-  const summaryWidth = contentMargin + contentWidth - summaryX - 2;
+    // The typeahead box is max 50 chars wide, center it
+    const boxWidth = Math.min(width - 4, 50);
+    const pickerX = Math.floor((width - boxWidth) / 2);
 
-  // Get selected window (if carousel is on a window, not +/- buttons)
-  const selectedWindowIdx = state.carouselIndex - 1; // Convert carousel index to window array index
-  const selectedWindow =
-    selectedWindowIdx >= 0 && selectedWindowIdx < state.windows.length
-      ? state.windows[selectedWindowIdx]
-      : null;
-
-  // Window title in large font (centered in right column)
-  // Use repo name (first part of window name) as title, or action name for +/- buttons
-  const maxCarouselIdx = state.windows.length + 1;
-  let titleText: string;
-  if (state.carouselIndex === 0) {
-    titleText = "remove";
-  } else if (state.carouselIndex === maxCarouselIdx) {
-    titleText = "add";
+    for (let i = 0; i < pickerLines.length; i++) {
+      out += ansi.moveTo(pickerX, previewY + i) + pickerLines[i];
+    }
   } else {
-    const [repoName] = selectedWindow ? splitWindowName(selectedWindow.name) : [""];
-    titleText = repoName || "cmux";
-  }
-  const titleLines = titleFont.render(titleText);
-  const titleWidth = titleLines.reduce((max, line) => Math.max(max, line.length), 0);
-  const titleX = summaryX + Math.floor((summaryWidth - titleWidth) / 2);
-  for (let i = 0; i < titleLines.length; i++) {
-    out += ansi.moveTo(titleX, previewY + i);
-    out += titleLines[i];
-  }
+    // Layout preview (left side of content area)
+    const layout = ALL_LAYOUTS[state.layoutIndex];
+    const previewW = Math.min(40, Math.floor(contentWidth / 2));
+    const previewX = contentMargin + 2;
+    out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
 
-  // AI summary (below title, word-wrapped)
-  const summaryY = previewY + titleLines.length + 1;
-  let summaryText = "";
-  if (selectedWindow) {
-    // Trigger fetch if not cached
-    fetchSummaryForWindow(selectedWindow.index);
-    summaryText = state.summaryCache.get(selectedWindow.index) || "Loading summary...";
-  }
-  const summaryLines = wordWrap(summaryText, summaryWidth);
-  for (let i = 0; i < summaryLines.length && summaryY + i < previewY + previewH; i++) {
-    out += ansi.moveTo(summaryX, summaryY + i);
-    out += ansi.dim + summaryLines[i] + ansi.reset;
+    // Layout counter (below preview, centered under it)
+    const paneCount = layout.panes.length;
+    const layoutFocused = state.focus === "layout";
+    const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+    const counterX = previewX + Math.floor((previewW - counter.length) / 2);
+    out += ansi.moveTo(counterX, previewY + previewH);
+    if (layoutFocused) out += ansi.inverse;
+    out += ` ${counter} `;
+    out += ansi.reset;
+
+    // Right column: title + AI summary
+    const summaryX = previewX + previewW + 4; // Right of layout preview with gap
+    const summaryWidth = contentMargin + contentWidth - summaryX - 2;
+
+    // Get selected window (if carousel is on a window, not +/- buttons)
+    const selectedWindowIdx = state.carouselIndex - 1; // Convert carousel index to window array index
+    const selectedWindow =
+      selectedWindowIdx >= 0 && selectedWindowIdx < state.windows.length
+        ? state.windows[selectedWindowIdx]
+        : null;
+
+    // Window title in large font (centered in right column)
+    // Use repo name (first part of window name) as title, or action name for +/- buttons
+    const maxCarouselIdx = state.windows.length + 1;
+    let titleText: string;
+    if (state.carouselIndex === 0) {
+      titleText = "remove";
+    } else if (state.carouselIndex === maxCarouselIdx) {
+      titleText = "add";
+    } else {
+      const [repoName] = selectedWindow
+        ? splitWindowName(selectedWindow.name)
+        : [""];
+      titleText = repoName || "cmux";
+    }
+    const titleLines = titleFont.render(titleText);
+    const titleWidth = titleLines.reduce(
+      (max, line) => Math.max(max, line.length),
+      0,
+    );
+    const titleX = summaryX + Math.floor((summaryWidth - titleWidth) / 2);
+    for (let i = 0; i < titleLines.length; i++) {
+      out += ansi.moveTo(titleX, previewY + i);
+      out += titleLines[i];
+    }
+
+    // AI summary (below title, word-wrapped)
+    const summaryY = previewY + titleLines.length + 1;
+    let summaryText = "";
+    if (selectedWindow) {
+      // Trigger fetch if not cached
+      fetchSummaryForWindow(selectedWindow.index);
+      summaryText =
+        state.summaryCache.get(selectedWindow.index) || "Loading summary...";
+    }
+    const summaryLines = wordWrap(summaryText, summaryWidth);
+    for (
+      let i = 0;
+      i < summaryLines.length && summaryY + i < previewY + previewH;
+      i++
+    ) {
+      out += ansi.moveTo(summaryX, summaryY + i);
+      out += ansi.dim + summaryLines[i] + ansi.reset;
+    }
   }
 
   // Separator
@@ -868,7 +901,7 @@ function render(): void {
 
   // Key hints (bottom row)
   const hints =
-    state.mode === "dirPicker"
+    state.mode === "dirPicker" || state.mode === "repoPicker"
       ? "type to filter  jk nav  ⏎ select  esc cancel"
       : "tab focus  hjkl nav  ⏎ apply";
   out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset;
@@ -878,10 +911,7 @@ function render(): void {
     out += renderDirPicker(state.dirPicker, width, height);
   }
 
-  // Repo picker overlay (if active)
-  if (state.mode === "repoPicker" && state.repoPicker) {
-    out += renderRepoPicker(state.repoPicker, width, height);
-  }
+  // Repo picker is now rendered inline in the middle section (not as overlay)
 
   process.stdout.write(out);
 }
@@ -1389,7 +1419,7 @@ function outputTmuxCommand(): void {
 
   console.log(
     `exec tmux -f '${safeConfigPath}' new-session -s ${SESSION_NAME} \\; ` +
-    `bind -n M-Space display-popup -w 80% -h 80% -E '${safePopupCmd}'`
+      `bind -n M-Space display-popup -w 80% -h 80% -E '${safePopupCmd}'`,
   );
 }
 
@@ -1432,7 +1462,7 @@ eval "$(bun ${SELF_PATH})"
       mkdirSync(configDir, { recursive: true });
     }
 
-    writeFileSync(keyPath, apiKey + "\n", { mode: 0o600 });
+    writeFileSync(keyPath, `${apiKey}\n`, { mode: 0o600 });
     console.log(`saved API key to ${keyPath}`);
   }
 

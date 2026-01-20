@@ -11,9 +11,9 @@ import { join } from "node:path";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface DirSearchOptions {
-  roots: string[];           // Starting directories (e.g., [~, /var, /etc])
-  maxDepth: number;          // Maximum depth to search
-  limit: number;             // Stop after finding this many matches
+  roots: string[]; // Starting directories (e.g., [~, /var, /etc])
+  maxDepth: number; // Maximum depth to search
+  limit: number; // Stop after finding this many matches
 }
 
 export interface DirSearchState {
@@ -22,9 +22,9 @@ export interface DirSearchState {
 }
 
 interface CacheEntry {
-  dirs: string[];            // Directories found so far
-  complete: boolean;         // True if search exhausted all directories
-  generatorState?: GeneratorSnapshot;  // For resuming
+  dirs: string[]; // Directories found so far
+  complete: boolean; // True if search exhausted all directories
+  generatorState?: GeneratorSnapshot; // For resuming
 }
 
 interface GeneratorSnapshot {
@@ -47,7 +47,7 @@ const IGNORED_DIRS = new Set([
   "coverage",
   ".next",
   ".nuxt",
-  "target",        // Rust
+  "target", // Rust
   "venv",
   ".venv",
   "env",
@@ -148,7 +148,9 @@ export function* walkDirs(
     }
 
     // BFS within this root
-    const queue: Array<{ path: string; depth: number }> = [{ path: root, depth: 0 }];
+    const queue: Array<{ path: string; depth: number }> = [
+      { path: root, depth: 0 },
+    ];
 
     while (queue.length > 0) {
       const { path, depth } = queue.shift()!;
@@ -233,7 +235,9 @@ export function getDirsForFilter(
 
   if (prefixHit) {
     // Filter cached results with new filter
-    const filtered = prefixHit.entry.dirs.filter(d => matchesFilter(d, filter));
+    const filtered = prefixHit.entry.dirs.filter((d) =>
+      matchesFilter(d, filter),
+    );
 
     if (filtered.length >= limit || prefixHit.entry.complete) {
       // Have enough results or search was complete

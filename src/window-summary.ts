@@ -1,8 +1,8 @@
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
-import { execSync } from "child_process";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
 import { Cache } from "./cache";
 
 // Read API key from config file (never passed through tmux)
@@ -45,12 +45,12 @@ function run(cmd: string): string {
 
 function gatherWindowContext(windowTarget: string): WindowContext {
   const windowName = run(
-    `tmux display-message -t ${windowTarget} -p '#{window_name}'`
+    `tmux display-message -t ${windowTarget} -p '#{window_name}'`,
   );
 
   // Get pane info including active status
   const paneData = run(
-    `tmux list-panes -t ${windowTarget} -F '#{pane_index}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_active}'`
+    `tmux list-panes -t ${windowTarget} -F '#{pane_index}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_active}'`,
   );
 
   const panes: PaneInfo[] = paneData
@@ -58,8 +58,16 @@ function gatherWindowContext(windowTarget: string): WindowContext {
     .filter(Boolean)
     .map((line) => {
       const [index, command, cwd, active] = line.split("\t");
-      const content = run(`tmux capture-pane -t ${windowTarget}.${index} -p | tail -30`);
-      return { index: parseInt(index), command, cwd, content, active: active === "1" };
+      const content = run(
+        `tmux capture-pane -t ${windowTarget}.${index} -p | tail -30`,
+      );
+      return {
+        index: parseInt(index, 10),
+        command,
+        cwd,
+        content,
+        active: active === "1",
+      };
     })
     // Sort active pane first
     .sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
@@ -69,7 +77,7 @@ function gatherWindowContext(windowTarget: string): WindowContext {
   const gitBranch = run(`git -C "${primaryCwd}" branch --show-current`);
   const gitStatus = run(`git -C "${primaryCwd}" status --short`);
   const gitDiff = run(
-    `git -C "${primaryCwd}" diff --stat HEAD 2>/dev/null | tail -20`
+    `git -C "${primaryCwd}" diff --stat HEAD 2>/dev/null | tail -20`,
   );
 
   return { windowName, panes, gitBranch, gitStatus, gitDiff };
@@ -96,9 +104,11 @@ Rules:
 function buildUserPrompt(ctx: WindowContext): string {
   const panes = ctx.panes
     .map(
-      (p) => `<pane index="${p.index}" command="${p.command}" cwd="${p.cwd}"${p.active ? " active" : ""}>
+      (
+        p,
+      ) => `<pane index="${p.index}" command="${p.command}" cwd="${p.cwd}"${p.active ? " active" : ""}>
 ${p.content || "(empty)"}
-</pane>`
+</pane>`,
     )
     .join("\n");
 

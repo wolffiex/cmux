@@ -73,7 +73,7 @@ export function wordWrap(text: string, width: number): string[] {
     if (!currentLine) {
       currentLine = word;
     } else if (currentLine.length + 1 + word.length <= width) {
-      currentLine += " " + word;
+      currentLine += ` ${word}`;
     } else {
       lines.push(currentLine);
       currentLine = word;

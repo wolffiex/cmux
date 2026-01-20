@@ -1,13 +1,13 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  findLongestPrefixCache,
+  getDirsForFilter,
+  initDirSearch,
   matchesFilter,
   walkDirs,
-  initDirSearch,
-  getDirsForFilter,
-  findLongestPrefixCache,
 } from "./dir-search";
 
 // ── Test Fixtures ────────────────────────────────────────────────────────────
@@ -63,7 +63,9 @@ describe("matchesFilter", () => {
   });
 
   test("substring match within segment", () => {
-    expect(matchesFilter("/home/user/code/beatzero/examples", "codebex")).toBe(true);
+    expect(matchesFilter("/home/user/code/beatzero/examples", "codebex")).toBe(
+      true,
+    );
   });
 
   test("no match returns false", () => {
@@ -83,9 +85,9 @@ describe("walkDirs", () => {
     const dirs = [...walkDirs([testDir], 3, "")];
 
     // Should find code, projects at depth 1 first
-    const codeIdx = dirs.findIndex(d => d.endsWith("/code"));
-    const projectsIdx = dirs.findIndex(d => d.endsWith("/projects"));
-    const cmuxIdx = dirs.findIndex(d => d.endsWith("/cmux"));
+    const codeIdx = dirs.findIndex((d) => d.endsWith("/code"));
+    const projectsIdx = dirs.findIndex((d) => d.endsWith("/projects"));
+    const cmuxIdx = dirs.findIndex((d) => d.endsWith("/cmux"));
 
     // Depth 1 dirs should come before depth 2 dirs
     expect(codeIdx).toBeLessThan(cmuxIdx);
@@ -94,12 +96,12 @@ describe("walkDirs", () => {
 
   test("skips hidden directories", () => {
     const dirs = [...walkDirs([testDir], 3, "")];
-    expect(dirs.some(d => d.includes(".hidden"))).toBe(false);
+    expect(dirs.some((d) => d.includes(".hidden"))).toBe(false);
   });
 
   test("skips node_modules", () => {
     const dirs = [...walkDirs([testDir], 3, "")];
-    expect(dirs.some(d => d.includes("node_modules"))).toBe(false);
+    expect(dirs.some((d) => d.includes("node_modules"))).toBe(false);
   });
 
   test("respects maxDepth", () => {
@@ -107,17 +109,17 @@ describe("walkDirs", () => {
     const depth3 = [...walkDirs([testDir], 3, "")];
 
     // Depth 1 shouldn't find nested examples dir
-    expect(depth1.some(d => d.endsWith("/examples"))).toBe(false);
+    expect(depth1.some((d) => d.endsWith("/examples"))).toBe(false);
     // Depth 3 should find it
-    expect(depth3.some(d => d.endsWith("/examples"))).toBe(true);
+    expect(depth3.some((d) => d.endsWith("/examples"))).toBe(true);
   });
 
   test("filters results by filter string", () => {
     const dirs = [...walkDirs([testDir], 3, "beat")];
 
     // Should only return dirs matching "beat"
-    expect(dirs.every(d => matchesFilter(d, "beat"))).toBe(true);
-    expect(dirs.some(d => d.includes("beatzero"))).toBe(true);
+    expect(dirs.every((d) => matchesFilter(d, "beat"))).toBe(true);
+    expect(dirs.some((d) => d.includes("beatzero"))).toBe(true);
   });
 
   test("handles permission errors gracefully", () => {
@@ -136,9 +138,7 @@ describe("findLongestPrefixCache", () => {
   });
 
   test("finds exact match", () => {
-    const cache = new Map([
-      ["code", { dirs: ["/code"], complete: true }],
-    ]);
+    const cache = new Map([["code", { dirs: ["/code"], complete: true }]]);
     const result = findLongestPrefixCache(cache, "code");
     expect(result?.prefix).toBe("code");
   });
@@ -154,9 +154,7 @@ describe("findLongestPrefixCache", () => {
   });
 
   test("returns null when no prefix matches", () => {
-    const cache = new Map([
-      ["xyz", { dirs: ["/xyz"], complete: true }],
-    ]);
+    const cache = new Map([["xyz", { dirs: ["/xyz"], complete: true }]]);
     expect(findLongestPrefixCache(cache, "code")).toBe(null);
   });
 });
@@ -170,7 +168,7 @@ describe("getDirsForFilter", () => {
     });
 
     const { dirs } = getDirsForFilter(state, "code");
-    expect(dirs.some(d => d.endsWith("/code"))).toBe(true);
+    expect(dirs.some((d) => d.endsWith("/code"))).toBe(true);
   });
 
   test("caches results for reuse", () => {
@@ -195,7 +193,7 @@ describe("getDirsForFilter", () => {
     const { dirs } = getDirsForFilter(state2, "code");
 
     // Should return same results from cache
-    expect(dirs.some(d => d.endsWith("/code"))).toBe(true);
+    expect(dirs.some((d) => d.endsWith("/code"))).toBe(true);
   });
 
   test("uses prefix cache for longer filters", () => {
@@ -211,7 +209,7 @@ describe("getDirsForFilter", () => {
     // Then search for "code" - should use "co" cache
     const { state: state3, dirs } = getDirsForFilter(state2, "code");
 
-    expect(dirs.some(d => d.endsWith("/code"))).toBe(true);
+    expect(dirs.some((d) => d.endsWith("/code"))).toBe(true);
     expect(state3.cache.has("code")).toBe(true);
   });
 
@@ -255,7 +253,7 @@ describe("progressive search", () => {
 
     // "code" results should be subset of "c" results
     expect(dirsCode.length).toBeLessThanOrEqual(dirsC.length);
-    expect(dirsCode.every(d => matchesFilter(d, "code"))).toBe(true);
+    expect(dirsCode.every((d) => matchesFilter(d, "code"))).toBe(true);
   });
 
   test("fuzzy path search finds nested directories", () => {
@@ -268,6 +266,6 @@ describe("progressive search", () => {
     const { dirs } = getDirsForFilter(state, "codebeatex");
 
     // Should find code/beatzero/examples
-    expect(dirs.some(d => d.endsWith("/examples"))).toBe(true);
+    expect(dirs.some((d) => d.endsWith("/examples"))).toBe(true);
   });
 });

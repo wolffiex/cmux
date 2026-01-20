@@ -1,21 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import {
-  initTypeahead,
   filterItems,
   handleTypeaheadKey,
+  initTypeahead,
   renderTypeaheadLines,
   type TypeaheadItem,
 } from "./typeahead";
 import {
-  Keys,
-  type,
-  simulate,
-  selected,
-  filteredLabels,
-  renderedItems,
-  assertSelect,
-  assertCreate,
   assertContinue,
+  assertCreate,
+  assertSelect,
+  filteredLabels,
+  Keys,
+  renderedItems,
+  selected,
+  simulate,
+  type,
 } from "./typeahead-test-utils";
 
 // ── Test Fixtures ───────────────────────────────────────────────────────────
@@ -68,9 +68,7 @@ describe("filterItems", () => {
   });
 
   test("fuzzy path match is case insensitive", () => {
-    const pathItems: TypeaheadItem[] = [
-      { id: "1", label: "~/Code/BeatZero" },
-    ];
+    const pathItems: TypeaheadItem[] = [{ id: "1", label: "~/Code/BeatZero" }];
     expect(filterItems(pathItems, "codebeat").length).toBe(1);
   });
 
@@ -80,7 +78,9 @@ describe("filterItems", () => {
       { id: "2", label: "~/work/backend" },
     ];
     // "projwebapp" should match "~/projects/web/app"
-    expect(filterItems(pathItems, "projwebapp").map(i => i.id)).toEqual(["1"]);
+    expect(filterItems(pathItems, "projwebapp").map((i) => i.id)).toEqual([
+      "1",
+    ]);
   });
 
   test("fuzzy match allows partial segment matches across multiple segments", () => {
@@ -90,7 +90,7 @@ describe("filterItems", () => {
     ];
     // "codebex" should match "~/code/beatzero/examples" because:
     // "code" matches "code", "be" matches "beatzero" prefix, "x" matches "examples" substring
-    expect(filterItems(pathItems, "codebex").map(i => i.id)).toEqual(["1"]);
+    expect(filterItems(pathItems, "codebex").map((i) => i.id)).toEqual(["1"]);
   });
 });
 
@@ -111,7 +111,11 @@ describe("handleTypeaheadKey", () => {
   });
 
   test("enter with no matches returns create action", () => {
-    const state = { ...initTypeahead(testItems), input: "newrepo", filtered: [] };
+    const state = {
+      ...initTypeahead(testItems),
+      input: "newrepo",
+      filtered: [],
+    };
     const result = handleTypeaheadKey(state, "\r");
     expect(result.action).toBe("create");
     if (result.action === "create") {
@@ -217,9 +221,18 @@ describe("typeahead scenarios", () => {
     expect(filteredLabels(afterTyping)).toEqual([]);
 
     // Backspace three times to clear
-    const result = simulate(afterTyping, Keys.BACKSPACE, Keys.BACKSPACE, Keys.BACKSPACE);
+    const result = simulate(
+      afterTyping,
+      Keys.BACKSPACE,
+      Keys.BACKSPACE,
+      Keys.BACKSPACE,
+    );
     const afterBackspace = assertContinue(result);
-    expect(filteredLabels(afterBackspace)).toEqual(["cmux", "clardio", "shellbot"]);
+    expect(filteredLabels(afterBackspace)).toEqual([
+      "cmux",
+      "clardio",
+      "shellbot",
+    ]);
   });
 
   test("escape cancels at any point", () => {
@@ -265,8 +278,8 @@ describe("rendered output", () => {
     const state = initTypeahead(testItems);
     const items = renderedItems(state);
     expect(items).toContain("→ cmux main");
-    expect(items.some(i => i.includes("clardio"))).toBe(true);
-    expect(items.some(i => i.includes("shellbot"))).toBe(true);
+    expect(items.some((i) => i.includes("clardio"))).toBe(true);
+    expect(items.some((i) => i.includes("shellbot"))).toBe(true);
   });
 
   test("shows filtered items after typing", () => {

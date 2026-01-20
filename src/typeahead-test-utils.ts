@@ -7,8 +7,8 @@ import {
   handleTypeaheadKey,
   renderTypeaheadLines,
   type TypeaheadItem,
-  type TypeaheadState,
   type TypeaheadResult,
+  type TypeaheadState,
 } from "./typeahead";
 
 // ── Special Keys ────────────────────────────────────────────────────────────
@@ -37,7 +37,9 @@ export function type(state: TypeaheadState, text: string): TypeaheadState {
   for (const char of text) {
     const result = handleTypeaheadKey(current, char);
     if (result.action !== "continue") {
-      throw new Error(`Unexpected action ${result.action} while typing "${text}"`);
+      throw new Error(
+        `Unexpected action ${result.action} while typing "${text}"`,
+      );
     }
     current = result.state;
   }
@@ -118,7 +120,7 @@ export function renderedItems(
       line
         .slice(1, -1) // remove box chars
         .replace(/\x1b\[[0-9;]*m/g, "") // strip ANSI
-        .trim()
+        .trim(),
     )
     .filter(Boolean);
 }
@@ -151,7 +153,9 @@ export function assertSelect(
     throw new Error(`Expected select action, got ${result.action}`);
   }
   if (result.item.id !== expectedId) {
-    throw new Error(`Expected selection of "${expectedId}", got "${result.item.id}"`);
+    throw new Error(
+      `Expected selection of "${expectedId}", got "${result.item.id}"`,
+    );
   }
 }
 
@@ -166,7 +170,9 @@ export function assertCreate(
     throw new Error(`Expected create action, got ${result.action}`);
   }
   if (result.input !== expectedInput) {
-    throw new Error(`Expected create input "${expectedInput}", got "${result.input}"`);
+    throw new Error(
+      `Expected create input "${expectedInput}", got "${result.input}"`,
+    );
   }
 }
 
@@ -184,9 +190,7 @@ export function assertCancel(
 /**
  * Assert that a result is a continue action and return the state.
  */
-export function assertContinue(
-  result: TypeaheadResult,
-): TypeaheadState {
+export function assertContinue(result: TypeaheadResult): TypeaheadState {
   if (result.action !== "continue") {
     throw new Error(`Expected continue action, got ${result.action}`);
   }

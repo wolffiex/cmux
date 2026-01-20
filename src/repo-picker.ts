@@ -6,19 +6,19 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  initTypeahead,
+  type DirSearchState,
+  getDirsForFilter,
+  initDirSearch,
+  matchesFilter,
+} from "./dir-search";
+import { getKnownRepos, getRemoteUrl, type RepoInfo } from "./repo-store";
+import {
   handleTypeaheadKey,
+  initTypeahead,
   renderTypeahead,
   type TypeaheadItem,
   type TypeaheadState,
 } from "./typeahead";
-import { getKnownRepos, getRemoteUrl, type RepoInfo } from "./repo-store";
-import {
-  initDirSearch,
-  getDirsForFilter,
-  matchesFilter,
-  type DirSearchState,
-} from "./dir-search";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,8 +47,8 @@ const DIR_SEARCH_MAX_DEPTH = 4;
  */
 function formatPath(path: string): string {
   const home = process.env.HOME || "/home";
-  if (path.startsWith(home + "/")) {
-    return "~" + path.slice(home.length);
+  if (path.startsWith(`${home}/`)) {
+    return `~${path.slice(home.length)}`;
   }
   if (path === home) {
     return "~";
@@ -89,7 +89,9 @@ function buildItems(
 ): TypeaheadItem[] {
   // Filter repos by the search filter
   const filteredRepos = filter
-    ? repos.filter((r) => matchesFilter(r.name, filter) || matchesFilter(r.path, filter))
+    ? repos.filter(
+        (r) => matchesFilter(r.name, filter) || matchesFilter(r.path, filter),
+      )
     : repos;
 
   const repoItems = reposToItems(filteredRepos);
@@ -131,13 +133,19 @@ export function initRepoPicker(): RepoPickerState {
 /**
  * Update items based on current filter.
  */
-function updateItemsForFilter(state: RepoPickerState, filter: string): RepoPickerState {
+function updateItemsForFilter(
+  state: RepoPickerState,
+  filter: string,
+): RepoPickerState {
   if (filter === state.lastFilter) {
     return state;
   }
 
   // Search for directories matching the new filter
-  const { dirs, state: newDirSearch } = getDirsForFilter(state.dirSearch, filter);
+  const { dirs, state: newDirSearch } = getDirsForFilter(
+    state.dirSearch,
+    filter,
+  );
 
   // Build new items
   const items = buildItems(state.repos, dirs, filter);
@@ -180,7 +188,7 @@ export function handleRepoPickerKey(
           ...newState.typeahead,
           input: newFilter,
           filtered: newState.typeahead.items.filter((item) =>
-            matchesFilter(item.label, newFilter)
+            matchesFilter(item.label, newFilter),
           ),
           selectedIndex: 0,
         };

@@ -8,11 +8,11 @@ import { box } from "./box-chars";
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface TypeaheadItem {
-  id: string;           // unique identifier (used for selection)
-  label: string;        // display text (used for filtering)
-  hint?: string;        // secondary text shown dimmed (e.g., branch name)
-  marker?: string;      // indicator shown after label (e.g., "·" for existing)
-  icon?: string;        // icon shown after arrow when selected (e.g., "📦")
+  id: string; // unique identifier (used for selection)
+  label: string; // display text (used for filtering)
+  hint?: string; // secondary text shown dimmed (e.g., branch name)
+  marker?: string; // indicator shown after label (e.g., "·" for existing)
+  icon?: string; // icon shown after arrow when selected (e.g., "📦")
 }
 
 export interface TypeaheadState {
@@ -27,7 +27,7 @@ export type TypeaheadResult =
   | { action: "continue"; state: TypeaheadState }
   | { action: "cancel" }
   | { action: "select"; item: TypeaheadItem }
-  | { action: "create"; input: string };  // when input doesn't match any item
+  | { action: "create"; input: string }; // when input doesn't match any item
 
 // ── State Management ────────────────────────────────────────────────────────
 
@@ -107,7 +107,7 @@ export function filterItems(
   return items.filter(
     (item) =>
       matchesFuzzyPath(item.label, input) ||
-      item.label.toLowerCase().includes(lower)
+      item.label.toLowerCase().includes(lower),
   );
 }
 
@@ -252,7 +252,7 @@ export function renderTypeaheadLines(
         box.h.repeat(leftPad) +
         titleText +
         box.h.repeat(rightPad) +
-        box.tr
+        box.tr,
     );
   } else {
     lines.push(box.tl + box.h.repeat(boxWidth - 2) + box.tr);
@@ -314,7 +314,8 @@ export function renderTypeaheadLines(
           : item.label;
 
       const visibleLine = prefix + displayLabel + marker;
-      const visibleLen = prefixWidth + displayLabel.length + marker.length + hintLen;
+      const visibleLen =
+        prefixWidth + displayLabel.length + marker.length + hintLen;
       const padding = boxWidth - 2 - visibleLen;
       const line = visibleLine + hintText + " ".repeat(Math.max(0, padding));
       lines.push(box.v + line + box.v);

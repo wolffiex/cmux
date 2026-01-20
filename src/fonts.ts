@@ -1,6 +1,6 @@
-import { readFileSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface Row {
   chars: string;
@@ -60,7 +60,9 @@ export class Font {
 
   get height(): number {
     if (this.metadata.rows.length === 0) return 0;
-    return Math.max(...this.metadata.rows.map(row => row.bottom - row.top + 1));
+    return Math.max(
+      ...this.metadata.rows.map((row) => row.bottom - row.top + 1),
+    );
   }
 
   get_char(char: string): CharMetadata | undefined {
@@ -74,7 +76,11 @@ export class Font {
     }
 
     const result: string[] = [];
-    for (let row = meta.top; row <= meta.bottom && row < this.font_lines.length; row++) {
+    for (
+      let row = meta.top;
+      row <= meta.bottom && row < this.font_lines.length;
+      row++
+    ) {
       const line = this.font_lines[row] || "";
       result.push(line.slice(meta.left, meta.right + 1));
     }
@@ -93,7 +99,7 @@ export class Font {
     for (let i = 0; i < text.length; i++) {
       const char = text[i];
 
-      if (char === ' ') {
+      if (char === " ") {
         for (let line_idx = 0; line_idx < this.height; line_idx++) {
           result[line_idx] += " ".repeat(word_spacing);
         }
@@ -106,7 +112,7 @@ export class Font {
         const char_line = char_lines[line_idx] || "";
         result[line_idx] += char_line;
 
-        if (i < text.length - 1 && text[i + 1] !== ' ') {
+        if (i < text.length - 1 && text[i + 1] !== " ") {
           result[line_idx] += " ".repeat(spacing);
         }
       }

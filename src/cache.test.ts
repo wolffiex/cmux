@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { existsSync, unlinkSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { Cache } from "./cache";
-import { unlinkSync, existsSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
 
 function getCacheDir(): string {
   const xdgCache = process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
@@ -146,7 +146,7 @@ describe("Cache", () => {
   it("should handle complex objects", async () => {
     const complexCache = new Cache<{ name: string; items: number[] }>(
       "test-complex",
-      100
+      100,
     );
 
     const obj = { name: "test", items: [1, 2, 3] };

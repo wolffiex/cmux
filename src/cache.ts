@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync, existsSync, chmodSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 function getCacheDir(): string {
   const xdgCache = process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
@@ -49,14 +49,14 @@ export class Cache<T> {
 
     // Prepare statements
     this.getStmt = this.db.prepare(
-      "SELECT value, expires_at FROM cache WHERE key = ?"
+      "SELECT value, expires_at FROM cache WHERE key = ?",
     );
     this.setStmt = this.db.prepare(
-      "INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?, ?, ?)"
+      "INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?, ?, ?)",
     );
     this.deleteStmt = this.db.prepare("DELETE FROM cache WHERE key = ?");
     this.existsStmt = this.db.prepare(
-      "SELECT 1 FROM cache WHERE key = ? AND expires_at > ?"
+      "SELECT 1 FROM cache WHERE key = ? AND expires_at > ?",
     );
     this.clearStmt = this.db.prepare("DELETE FROM cache");
     this.pruneStmt = this.db.prepare("DELETE FROM cache WHERE expires_at <= ?");
@@ -66,9 +66,10 @@ export class Cache<T> {
    * Get a value from cache, or compute it using the factory if missing/expired.
    */
   async get(key: string, factory: () => Promise<T>): Promise<T> {
-    const row = this.getStmt.get(key) as
-      | { value: string; expires_at: number }
-      | null;
+    const row = this.getStmt.get(key) as {
+      value: string;
+      expires_at: number;
+    } | null;
     const now = Date.now();
 
     if (row && row.expires_at > now) {
@@ -93,9 +94,10 @@ export class Cache<T> {
    * Get a value if it exists and is not expired, without computing.
    */
   peek(key: string): T | undefined {
-    const row = this.getStmt.get(key) as
-      | { value: string; expires_at: number }
-      | null;
+    const row = this.getStmt.get(key) as {
+      value: string;
+      expires_at: number;
+    } | null;
     if (row && row.expires_at > Date.now()) {
       return JSON.parse(row.value) as T;
     }

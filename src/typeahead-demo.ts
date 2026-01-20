@@ -5,8 +5,8 @@
  */
 
 import {
-  initTypeahead,
   handleTypeaheadKey,
+  initTypeahead,
   renderTypeahead,
   type TypeaheadItem,
   type TypeaheadState,
