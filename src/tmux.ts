@@ -87,7 +87,7 @@ export function getWindows(): TmuxWindow[] {
  */
 export interface StartupInfo {
   windows: TmuxWindow[];
-  currentWindowPaneCount: number;
+  currentWindowInfo: WindowInfo;
 }
 
 /**
@@ -98,10 +98,11 @@ export interface StartupInfo {
 export function getStartupInfo(): StartupInfo {
   // Use \n as section separator and | as field separator within sections
   // Section 1: list-windows output (one line per window)
-  // Section 2: list-panes output for current window (just need count)
+  // Section 2: list-panes output for current window (with full position info for layout matching)
   const windowFormat =
     "#{window_index}|#{window_name}|#{window_active}|#{window_bell_flag}|#{window_activity_flag}|#{pane_current_command}";
-  const paneFormat = "#{pane_id}";
+  const paneFormat =
+    "#{window_width}|#{window_height}|#{pane_id}|#{pane_width}|#{pane_height}|#{pane_left}|#{pane_top}|#{pane_title}";
 
   // Chain commands: renumber, then output windows, then separator, then panes
   // Using \; to chain tmux commands
@@ -131,11 +132,28 @@ export function getStartupInfo(): StartupInfo {
       };
     });
 
-  // Count panes (each line is one pane)
-  const currentWindowPaneCount =
-    panesSection.split("\n").filter((line) => line.length > 0).length || 1;
+  // Parse pane info for current window
+  const paneLines = panesSection.split("\n").filter((line) => line.length > 0);
+  let windowWidth = 80;
+  let windowHeight = 24;
+  const panes: PaneInfo[] = paneLines.map((line) => {
+    const parts = line.split("|");
+    windowWidth = Number(parts[0]);
+    windowHeight = Number(parts[1]);
+    return {
+      id: parts[2],
+      width: Number(parts[3]),
+      height: Number(parts[4]),
+      left: Number(parts[5]),
+      top: Number(parts[6]),
+      title: parts[7] || "",
+    };
+  });
 
-  return { windows, currentWindowPaneCount };
+  return {
+    windows,
+    currentWindowInfo: { width: windowWidth, height: windowHeight, panes },
+  };
 }
 
 /**

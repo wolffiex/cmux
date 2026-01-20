@@ -93,12 +93,11 @@ function initState(): State {
     currentWindowIndex = windows.findIndex((w) => w.active);
     if (currentWindowIndex < 0) currentWindowIndex = 0;
 
-    // Find best matching layout for current window
-    const windowInfo = getWindowInfo();
+    // Find best matching layout for current window (uses pane info from startup query)
     layoutIndex = findBestMatchingLayout(
-      windowInfo.width,
-      windowInfo.height,
-      windowInfo.panes,
+      startupInfo.currentWindowInfo.width,
+      startupInfo.currentWindowInfo.height,
+      startupInfo.currentWindowInfo.panes,
     );
   } catch (_e) {
     // Not in tmux - use dummy data for testing
@@ -1607,15 +1606,17 @@ eval "$(bun ${SELF_PATH})"
 }
 
 function runUI(): void {
-  if (!process.stdin.isTTY) {
+  if (!BENCHMARK_MODE && !process.stdin.isTTY) {
     console.error("Not a TTY");
     process.exit(1);
   }
 
   // Switch to alt-screen immediately for instant visual feedback
-  process.stdout.write(ansi.altScreen + ansi.hideCursor);
-  process.stdin.setRawMode(true);
-  process.stdin.resume();
+  if (!BENCHMARK_MODE) {
+    process.stdout.write(ansi.altScreen + ansi.hideCursor);
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+  }
 
   // Initialize state after alt-screen switch (includes tmux queries)
   state = initState();
@@ -1627,8 +1628,7 @@ function runUI(): void {
 
   // Benchmark mode: exit immediately after first render
   if (BENCHMARK_MODE) {
-    cleanup();
-    return;
+    process.exit(0);
   }
 
   startPolling();
