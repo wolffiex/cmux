@@ -13,6 +13,7 @@ interface PaneInfo {
   command: string;
   cwd: string;
   content: string;
+  active: boolean;
 }
 
 interface WindowContext {
@@ -36,21 +37,21 @@ function gatherWindowContext(windowTarget: string): WindowContext {
     `tmux display-message -t ${windowTarget} -p '#{window_name}'`
   );
 
-  // Get pane info
+  // Get pane info including active status
   const paneData = run(
-    `tmux list-panes -t ${windowTarget} -F '#{pane_index}\t#{pane_current_command}\t#{pane_current_path}'`
+    `tmux list-panes -t ${windowTarget} -F '#{pane_index}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_active}'`
   );
 
   const panes: PaneInfo[] = paneData
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [index, command, cwd] = line.split("\t");
-      const content = run(
-        `tmux capture-pane -t ${windowTarget}.${index} -p | tail -30`
-      );
-      return { index: parseInt(index), command, cwd, content };
-    });
+      const [index, command, cwd, active] = line.split("\t");
+      const content = run(`tmux capture-pane -t ${windowTarget}.${index} -p | tail -30`);
+      return { index: parseInt(index), command, cwd, content, active: active === "1" };
+    })
+    // Sort active pane first
+    .sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
 
   // Get git info from first pane's cwd
   const primaryCwd = panes[0]?.cwd || "";
@@ -63,27 +64,28 @@ function gatherWindowContext(windowTarget: string): WindowContext {
   return { windowName, panes, gitBranch, gitStatus, gitDiff };
 }
 
-const SYSTEM_PROMPT = `You summarize tmux windows in exactly 3 sentences.
+const SYSTEM_PROMPT = `You summarize tmux windows in exactly 2 short sentences.
 
-Sentence 1: What the project is - infer from repo name, directory, and code context.
-Sentence 2: System state - what's actively running (server, tests, build) or "idle" if nothing.
-Sentence 3: Current work - infer from git changes and recent activity.
+Sentence 1: What the project is (3-4 words max).
+Sentence 2: Current work - what the user is doing right now.
 
 Example outputs:
-- "React e-commerce app with Stripe integration. Dev server running. Adding product search filters."
-- "CLI tool for managing tmux sessions. Idle. Fixing window summary API targets."
-- "Python ML pipeline for sentiment analysis. Training job running (epoch 5/10). Tuning hyperparameters."
-- "Go microservice for user auth. Tests failing (3 errors). Refactoring JWT validation."
+- "Tmux session manager. Working on AI summaries."
+- "React e-commerce app. Adding search filters."
+- "Python ML pipeline. Tuning hyperparameters."
+- "Go auth microservice. Fixing JWT validation."
+- "Fitness tracking app. Adding coach feature."
 
 Rules:
-- Be concise. Use active voice. No fluff.
-- Skip port numbers unless relevant.
-- Reply with only the 3 sentences, nothing else.`;
+- Be extremely concise. No fluff.
+- First sentence: just the project type, no details.
+- Second sentence: specific current task. Focus primarily on the active pane (marked "active", shown first) - it has the most recent activity. Other panes may contain stale output from earlier work. If panes are empty, infer from git changes.
+- Reply with only the 2 sentences, nothing else.`;
 
 function buildUserPrompt(ctx: WindowContext): string {
   const panes = ctx.panes
     .map(
-      (p) => `<pane index="${p.index}" command="${p.command}" cwd="${p.cwd}">
+      (p) => `<pane index="${p.index}" command="${p.command}" cwd="${p.cwd}"${p.active ? " active" : ""}>
 ${p.content || "(empty)"}
 </pane>`
     )
