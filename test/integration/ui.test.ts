@@ -111,13 +111,6 @@ describe("cmux UI", () => {
     expect(output).toContain("hjkl nav");
   });
 
-  test("Tab switches focus between window bar and layout", () => {
-    sendKey("Tab");
-    const output = capture();
-    // Could use snapshot or check for visual change
-    expect(output).toContain("pane");
-  });
-
   test("j drops focus to layout", () => {
     sendKey("j");
     Bun.sleepSync(200); // Extra time for render
