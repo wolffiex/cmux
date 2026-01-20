@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -234,15 +234,15 @@ describe("getRepoFromPath with worktrees", () => {
 
     // Create main git repo
     fs.mkdirSync(mainRepoPath, { recursive: true });
-    execSync("git init", { cwd: mainRepoPath });
-    execSync("git config user.email 'test@test.com'", { cwd: mainRepoPath });
-    execSync("git config user.name 'Test'", { cwd: mainRepoPath });
+    execFileSync("git", ["init", "-b", "main"], { cwd: mainRepoPath });
+    execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: mainRepoPath });
+    execFileSync("git", ["config", "user.name", "Test"], { cwd: mainRepoPath });
     fs.writeFileSync(path.join(mainRepoPath, "README.md"), "# Test");
-    execSync("git add .", { cwd: mainRepoPath });
-    execSync("git commit -m 'Initial commit'", { cwd: mainRepoPath });
+    execFileSync("git", ["add", "."], { cwd: mainRepoPath });
+    execFileSync("git", ["commit", "-m", "Initial commit"], { cwd: mainRepoPath });
 
     // Create worktree with branch name matching directory name
-    execSync(`git worktree add '${worktreePath}' -b '${branchName}'`, {
+    execFileSync("git", ["worktree", "add", worktreePath, "-b", branchName], {
       cwd: mainRepoPath,
     });
   });
@@ -250,7 +250,7 @@ describe("getRepoFromPath with worktrees", () => {
   afterEach(() => {
     // Clean up worktree first (required before deleting repo)
     try {
-      execSync(`git worktree remove '${worktreePath}' --force`, {
+      execFileSync("git", ["worktree", "remove", worktreePath, "--force"], {
         cwd: mainRepoPath,
       });
     } catch {
@@ -269,7 +269,7 @@ describe("getRepoFromPath with worktrees", () => {
     // Create worktree with pattern "main-repo-branchname"
     const testBranch = "my-feature";
     const patternWorktreePath = path.join(tempDir, `main-repo-${testBranch}`);
-    execSync(`git worktree add '${patternWorktreePath}' -b '${testBranch}'`, {
+    execFileSync("git", ["worktree", "add", patternWorktreePath, "-b", testBranch], {
       cwd: mainRepoPath,
     });
 
@@ -280,7 +280,7 @@ describe("getRepoFromPath with worktrees", () => {
       // Worktree "main-repo-my-feature" with branch "my-feature" -> repo "main-repo"
       expect(result!.repo).toBe("main-repo");
     } finally {
-      execSync(`git worktree remove '${patternWorktreePath}' --force`, {
+      execFileSync("git", ["worktree", "remove", patternWorktreePath, "--force"], {
         cwd: mainRepoPath,
       });
     }
@@ -298,7 +298,7 @@ describe("getRepoFromPath with worktrees", () => {
   test("returns worktree name when worktree has different prefix than repo", () => {
     // Create worktree with a different prefix
     const otherWorktreePath = path.join(tempDir, "other-prefix-some-branch");
-    execSync(`git worktree add '${otherWorktreePath}' -b 'some-branch'`, {
+    execFileSync("git", ["worktree", "add", otherWorktreePath, "-b", "some-branch"], {
       cwd: mainRepoPath,
     });
 
@@ -309,7 +309,7 @@ describe("getRepoFromPath with worktrees", () => {
       // "other-prefix-some-branch" != "main-repo-some-branch", so return worktree name
       expect(result!.repo).toBe("other-prefix-some-branch");
     } finally {
-      execSync(`git worktree remove '${otherWorktreePath}' --force`, {
+      execFileSync("git", ["worktree", "remove", otherWorktreePath, "--force"], {
         cwd: mainRepoPath,
       });
     }
