@@ -37,7 +37,7 @@ export type RepoPickerResult =
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const DIR_SEARCH_LIMIT = 100;
+const DIR_SEARCH_LIMIT = 20;
 const DIR_SEARCH_MAX_DEPTH = 4;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 /**
  * Progressive directory search with caching.
  *
- * Uses a generator to walk directories lazily, with an LRU cache
+ * Uses a generator to walk directories lazily, with a FIFO cache
  * keyed by filter prefix to avoid re-scanning.
  */
 
@@ -274,8 +274,8 @@ export function getDirsForFilter(
     complete: dirs.length < limit,
   });
 
-  // Limit cache size (simple LRU: remove oldest entries)
-  const MAX_CACHE_SIZE = 10;
+  // Limit cache size (FIFO: remove oldest entries)
+  const MAX_CACHE_SIZE = 5;
   if (newCache.size > MAX_CACHE_SIZE) {
     const firstKey = newCache.keys().next().value;
     if (firstKey !== undefined) {
