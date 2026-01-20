@@ -829,9 +829,17 @@ function render(): void {
       : null;
 
   // Window title in large font (centered in right column)
-  // Use repo name (first part of window name) as title
-  const [repoName] = selectedWindow ? splitWindowName(selectedWindow.name) : [""];
-  const titleText = repoName || "cmux";
+  // Use repo name (first part of window name) as title, or action name for +/- buttons
+  const maxCarouselIdx = state.windows.length + 1;
+  let titleText: string;
+  if (state.carouselIndex === 0) {
+    titleText = "remove";
+  } else if (state.carouselIndex === maxCarouselIdx) {
+    titleText = "add";
+  } else {
+    const [repoName] = selectedWindow ? splitWindowName(selectedWindow.name) : [""];
+    titleText = repoName || "cmux";
+  }
   const titleLines = titleFont.render(titleText);
   const titleWidth = titleLines.reduce((max, line) => Math.max(max, line.length), 0);
   const titleX = summaryX + Math.floor((summaryWidth - titleWidth) / 2);
