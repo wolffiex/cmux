@@ -118,6 +118,7 @@ Panes are numbered largest-to-smallest by area.
 | File | Description |
 |------|-------------|
 | `~/.config/cmux/api-key` | Anthropic API key for AI summaries (created by `--install` if `ANTHROPIC_API_KEY` is set) |
+| `~/.config/cmux/repos` | Repo name aliases for window naming (format: `long-repo-name=short`) |
 
 ## Environment Variables
 
