@@ -278,8 +278,12 @@ export function handleBranchPickerKey(
     return { action: "continue", state };
   }
 
-  // Handle delete key (Ctrl+X or Delete key)
-  if (key === "\x18" || key === "\x1b[3~") {
+  // Handle delete key (Ctrl+X, Delete key, or Backspace when input is empty)
+  const isDeleteKey =
+    key === "\x18" ||
+    key === "\x1b[3~" ||
+    (key === "\x7f" && !state.typeahead.input);
+  if (isDeleteKey) {
     if (canDeleteSelected(state)) {
       const newTypeahead = withDynamicTitle(state.typeahead, true);
       return {
