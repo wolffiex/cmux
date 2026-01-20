@@ -13,7 +13,7 @@ export interface RepoInfo {
   name: string;        // short name (e.g., "cmux")
   path: string;        // primary path (e.g., "/home/user/code/cmux")
   remoteUrl: string;   // canonical identifier
-  lastSeen: number;    // timestamp
+  lastSeen: number;    // timestamp when we last saw this repo
 }
 
 // ── Database Setup ──────────────────────────────────────────────────────────
@@ -44,7 +44,6 @@ function getDb(): Database {
         last_seen INTEGER NOT NULL
       )
     `);
-    db.run("CREATE INDEX IF NOT EXISTS idx_last_seen ON repos(last_seen DESC)");
   }
   return db;
 }
@@ -62,6 +61,22 @@ export function getRemoteUrl(path: string): string | null {
     }).trim() || null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Get the timestamp of the most recent commit on any branch.
+ */
+export function getLastActivity(path: string): number {
+  try {
+    // Get the most recent commit across all branches
+    const timestamp = execSync(
+      `git -C '${path}' log --all --format='%ct' -1 2>/dev/null`,
+      { encoding: "utf-8", timeout: 5000 }
+    ).trim();
+    return timestamp ? parseInt(timestamp, 10) * 1000 : 0;
+  } catch {
+    return 0;
   }
 }
 
@@ -104,14 +119,34 @@ export function trackRepo(path: string): RepoInfo | null {
   return info;
 }
 
+// In-memory cache for activity timestamps (refreshed on demand)
+const activityCache = new Map<string, { timestamp: number; cachedAt: number }>();
+const ACTIVITY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 /**
- * Get all known repos, sorted by last seen (most recent first).
+ * Get cached activity timestamp for a repo, refreshing if stale.
+ */
+function getCachedActivity(path: string, remoteUrl: string): number {
+  const cached = activityCache.get(remoteUrl);
+  const now = Date.now();
+
+  if (cached && now - cached.cachedAt < ACTIVITY_CACHE_TTL) {
+    return cached.timestamp;
+  }
+
+  const timestamp = getLastActivity(path);
+  activityCache.set(remoteUrl, { timestamp, cachedAt: now });
+  return timestamp;
+}
+
+/**
+ * Get all known repos, sorted by most recent git activity.
  * Filters out repos whose paths no longer exist.
  */
 export function getKnownRepos(): RepoInfo[] {
   const database = getDb();
   const rows = database.query(
-    "SELECT remote_url, name, path, last_seen FROM repos ORDER BY last_seen DESC"
+    "SELECT remote_url, name, path, last_seen FROM repos"
   ).all() as { remote_url: string; name: string; path: string; last_seen: number }[];
 
   const repos: RepoInfo[] = [];
@@ -135,7 +170,12 @@ export function getKnownRepos(): RepoInfo[] {
     database.run("DELETE FROM repos WHERE remote_url = ?", [url]);
   }
 
-  return repos;
+  // Sort by activity (most recent first)
+  return repos.sort((a, b) => {
+    const activityA = getCachedActivity(a.path, a.remoteUrl);
+    const activityB = getCachedActivity(b.path, b.remoteUrl);
+    return activityB - activityA;
+  });
 }
 
 /**
