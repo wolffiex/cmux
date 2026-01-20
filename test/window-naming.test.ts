@@ -298,16 +298,16 @@ describe("getRepoFromPath with worktrees", () => {
     }
   });
 
-  test("returns worktree name when worktree does not match {repo}-{branch} pattern", () => {
-    // Worktree named just "feature-xyz" (same as branch) doesn't match "main-repo-feature-xyz"
+  test("returns main repo name for worktree with different directory name", () => {
+    // Worktree named just "feature-xyz" (same as branch) - should still return main repo name
     const result = getRepoFromPath(worktreePath);
     expect(result).not.toBeNull();
     expect(result?.branch).toBe(branchName);
-    // Worktree "feature-xyz" != "main-repo-feature-xyz", so return worktree name
-    expect(result?.repo).toBe(branchName);
+    // Always returns main repo name, not worktree directory name
+    expect(result?.repo).toBe("main-repo");
   });
 
-  test("returns worktree name when worktree has different prefix than repo", () => {
+  test("returns main repo name for worktree with arbitrary prefix", () => {
     // Create worktree with a different prefix
     const otherWorktreePath = path.join(tempDir, "other-prefix-some-branch");
     execFileSync(
@@ -322,8 +322,8 @@ describe("getRepoFromPath with worktrees", () => {
       const result = getRepoFromPath(otherWorktreePath);
       expect(result).not.toBeNull();
       expect(result?.branch).toBe("some-branch");
-      // "other-prefix-some-branch" != "main-repo-some-branch", so return worktree name
-      expect(result?.repo).toBe("other-prefix-some-branch");
+      // Always returns main repo name, not worktree directory name
+      expect(result?.repo).toBe("main-repo");
     } finally {
       execFileSync(
         "git",

@@ -8,6 +8,10 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { getLastActivity, resolveRepoPath } from "./git-utils";
+
+// Re-export git utilities for external consumers
+export { isGitRepo, resolveRepoPath } from "./git-utils";
 
 export interface RepoInfo {
   name: string; // short name (e.g., "cmux")
@@ -58,76 +62,6 @@ function getDb(): Database {
     }
   }
   return db;
-}
-
-// ── Git Helpers ─────────────────────────────────────────────────────────────
-
-/**
- * Check if a path is a git repository.
- */
-export function isGitRepo(path: string): boolean {
-  try {
-    execFileSync("git", ["-C", path, "rev-parse", "--git-dir"], {
-      encoding: "utf-8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "ignore"],
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Resolve a path to the main repo path (handles worktrees).
- * Returns the canonical absolute path to the main checkout.
- */
-export function resolveRepoPath(path: string): string | null {
-  try {
-    // Get the common git dir (same for main repo and worktrees)
-    const gitCommonDir = execFileSync(
-      "git",
-      ["-C", path, "rev-parse", "--git-common-dir"],
-      {
-        encoding: "utf-8",
-        timeout: 5000,
-        stdio: ["pipe", "pipe", "ignore"],
-      },
-    ).trim();
-
-    // For main repo: returns ".git" or absolute path to .git
-    // For worktree: returns "/path/to/main/repo/.git"
-    if (gitCommonDir === ".git") {
-      // We're in the main repo, resolve to absolute path
-      return execFileSync("git", ["-C", path, "rev-parse", "--show-toplevel"], {
-        encoding: "utf-8",
-        timeout: 5000,
-        stdio: ["pipe", "pipe", "ignore"],
-      }).trim();
-    }
-
-    // Worktree: strip the .git suffix to get main repo path
-    return gitCommonDir.replace(/\/\.git$/, "");
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Get the timestamp of the most recent commit on any branch.
- */
-export function getLastActivity(path: string): number {
-  try {
-    // Get the most recent commit across all branches
-    const timestamp = execFileSync(
-      "git",
-      ["-C", path, "log", "--all", "--format=%ct", "-1"],
-      { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "ignore"] },
-    ).trim();
-    return timestamp ? parseInt(timestamp, 10) * 1000 : 0;
-  } catch {
-    return 0;
-  }
 }
 
 // ── Store Operations ────────────────────────────────────────────────────────

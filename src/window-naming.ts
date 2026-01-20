@@ -6,6 +6,7 @@
 
 import { execFileSync } from "node:child_process";
 import { basename } from "node:path";
+import { getBranch, resolveRepoPath } from "./git-utils";
 import { log } from "./logger";
 import { getWindows } from "./tmux";
 
@@ -54,92 +55,21 @@ export function loadRepoConfig(): Map<string, string> {
 
 /**
  * Get repo name and branch from a directory path.
- * Uses git commands to detect git context.
+ * Always resolves worktrees to the main repo name.
  * Returns null if not a git repo.
- *
- * Special case: If the branch name matches the worktree directory name,
- * we return the actual repository name instead. This is useful for worktrees
- * where the directory is named after the branch (e.g., "feature-xyz" worktree
- * with "feature-xyz" branch should show the repo name, not the worktree name).
  */
 export function getRepoFromPath(
   panePath: string,
 ): { repo: string; branch: string } | null {
   if (!panePath) return null;
 
-  try {
-    // Get git root directory
-    const gitRoot = execFileSync(
-      "git",
-      ["-C", panePath, "rev-parse", "--show-toplevel"],
-      { stdio: ["pipe", "pipe", "ignore"] },
-    )
-      .toString()
-      .trim();
+  const repoPath = resolveRepoPath(panePath);
+  if (!repoPath) return null;
 
-    if (!gitRoot) return null;
+  const branch = getBranch(panePath) || "unknown";
+  const repo = basename(repoPath);
 
-    // Get repo/worktree name from the root directory
-    // For regular repos: gitRoot is the repo root (e.g., /home/user/repos/myproject)
-    // For worktrees: gitRoot is the worktree root (e.g., /home/user/repos/myproject-feature)
-    const worktreeName = basename(gitRoot);
-
-    // Get current branch
-    let branch: string;
-    try {
-      branch = execFileSync(
-        "git",
-        ["-C", panePath, "rev-parse", "--abbrev-ref", "HEAD"],
-        { stdio: ["pipe", "pipe", "ignore"] },
-      )
-        .toString()
-        .trim();
-
-      // Handle detached HEAD - use short SHA
-      if (branch === "HEAD") {
-        branch = execFileSync(
-          "git",
-          ["-C", panePath, "rev-parse", "--short", "HEAD"],
-          { stdio: ["pipe", "pipe", "ignore"] },
-        )
-          .toString()
-          .trim();
-      }
-    } catch {
-      branch = "unknown";
-    }
-
-    // Special case: if worktree name is exactly {repo}-{branch}, use the repo name
-    // e.g., worktree "cmux-layout-picker" with branch "layout-picker" and repo "cmux"
-    try {
-      const commonDir = execFileSync(
-        "git",
-        ["-C", panePath, "rev-parse", "--git-common-dir"],
-        { stdio: ["pipe", "pipe", "ignore"] },
-      )
-        .toString()
-        .trim();
-
-      // For worktrees, commonDir points to main repo's .git directory
-      // e.g., /home/user/repos/myproject/.git
-      // For regular repos, commonDir is just ".git"
-      if (commonDir && commonDir !== ".git") {
-        const repoPath = commonDir.replace(/\/\.git\/?$/, "");
-        const actualRepoName = basename(repoPath);
-
-        // Only use repo name if worktree is exactly {repo}-{branch}
-        if (worktreeName === `${actualRepoName}-${branch}`) {
-          return { repo: actualRepoName, branch };
-        }
-      }
-    } catch {
-      // Fall through to default behavior
-    }
-
-    return { repo: worktreeName, branch };
-  } catch {
-    return null;
-  }
+  return { repo, branch };
 }
 
 /**
