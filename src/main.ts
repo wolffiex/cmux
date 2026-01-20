@@ -24,16 +24,6 @@ import { generateLayoutString } from "./tmux-layout";
 import { easeOut, splitWindowName, stripAnsi, wordWrap } from "./utils";
 import { getWindowSummary } from "./window-summary";
 
-// Store API key before unsetting from environment
-// Modules (like window-summary.ts) have already captured it during import
-const ANTHROPIC_API_KEY =
-  process.env.ANTHROPIC_API_KEY ||
-  process.env.TEST_ANTHROPIC_API_KEY ||
-  process.env.DEMO_ANTHROPIC_API_KEY;
-
-// Unset API key from environment to prevent leaking to child processes (tmux, git, etc.)
-delete process.env.ANTHROPIC_API_KEY;
-
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
 const SELF_PATH = import.meta.path;
 
@@ -1367,10 +1357,8 @@ function outputTmuxCommand(): void {
     return;
   }
 
-  // Build popup command - pass API key inline if available (memory only, not stored)
-  const popupCmd = ANTHROPIC_API_KEY
-    ? `ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY}' bun ${SELF_PATH}`
-    : `bun ${SELF_PATH}`;
+  // Build popup command (API key read from config file, not passed here)
+  const popupCmd = `bun ${SELF_PATH}`;
 
   // Escape single quotes in paths for shell safety
   const safeConfigPath = CONFIG_PATH.replace(/'/g, "'\\''");
@@ -1410,6 +1398,21 @@ eval "$(bun ${SELF_PATH})"
   chmodSync(scriptPath, 0o755);
 
   console.log(`installed ${scriptPath}`);
+
+  // Save API key to config file if set in environment
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (apiKey) {
+    const configDir = join(home, ".config", "cmux");
+    const keyPath = join(configDir, "api-key");
+
+    if (!existsSync(configDir)) {
+      mkdirSync(configDir, { recursive: true });
+    }
+
+    writeFileSync(keyPath, apiKey + "\n", { mode: 0o600 });
+    console.log(`saved API key to ${keyPath}`);
+  }
+
   console.log("");
   console.log("make sure ~/.local/bin is in your PATH:");
   console.log('  export PATH="$HOME/.local/bin:$PATH"');

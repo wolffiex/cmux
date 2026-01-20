@@ -1,11 +1,22 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { execSync } from "child_process";
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 import { Cache } from "./cache";
 
-// API key is passed via environment (inline in popup command, not stored)
-const client = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  : null;
+// Read API key from config file (never passed through tmux)
+function getApiKey(): string | null {
+  const configPath = join(homedir(), ".config", "cmux", "api-key");
+  if (existsSync(configPath)) {
+    return readFileSync(configPath, "utf-8").trim();
+  }
+  // Fall back to env for development convenience
+  return process.env.ANTHROPIC_API_KEY || null;
+}
+
+const apiKey = getApiKey();
+const client = apiKey ? new Anthropic({ apiKey }) : null;
 const summaryCache = new Cache<string>("window-summaries");
 
 interface PaneInfo {
