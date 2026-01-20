@@ -225,6 +225,168 @@ describe("updateFilter", () => {
 
 // ── Integration tests ────────────────────────────────────────────────────────
 
+describe("breadth-first ordering", () => {
+  test("shallower matches come before deeper matches", () => {
+    // Create structure:
+    // testDir/
+    //   aaa/
+    //     src/
+    //       cmux/   <- depth 3, matches "srccmux"
+    //   src/
+    //     cmux/     <- depth 2, matches "srccmux"
+    mkdirSync(join(testDir, "aaa/src/cmux"), { recursive: true });
+    mkdirSync(join(testDir, "src/cmux"), { recursive: true });
+
+    const filter = createFilter(
+      { roots: [testDir], maxDepth: 4, limit: 100 },
+      "srccmux",
+    );
+
+    const results = getResults(filter);
+
+    // Should find both
+    expect(results.some((d) => d.endsWith("/src/cmux"))).toBe(true);
+
+    // The shallower one (testDir/src/cmux) should come BEFORE the deeper one (testDir/aaa/src/cmux)
+    const shallowIndex = results.findIndex(
+      (d) => d === join(testDir, "src/cmux"),
+    );
+    const deepIndex = results.findIndex(
+      (d) => d === join(testDir, "aaa/src/cmux"),
+    );
+
+    expect(shallowIndex).toBeGreaterThanOrEqual(0);
+    expect(deepIndex).toBeGreaterThanOrEqual(0);
+    expect(shallowIndex).toBeLessThan(deepIndex);
+  });
+
+  test("alphabetically later but shallower dir comes first", () => {
+    // Create structure:
+    // testDir/
+    //   aaa/
+    //     zzz/     <- depth 2, alphabetically first parent
+    //   zzz/       <- depth 1, alphabetically last at this level
+    mkdirSync(join(testDir, "aaa/zzz"), { recursive: true });
+    mkdirSync(join(testDir, "zzz"), { recursive: true });
+
+    const filter = createFilter(
+      { roots: [testDir], maxDepth: 4, limit: 100 },
+      "zzz",
+    );
+
+    const results = getResults(filter);
+
+    // testDir/zzz (depth 1) should come before testDir/aaa/zzz (depth 2)
+    const shallowIndex = results.findIndex((d) => d === join(testDir, "zzz"));
+    const deepIndex = results.findIndex((d) => d === join(testDir, "aaa/zzz"));
+
+    expect(shallowIndex).toBeGreaterThanOrEqual(0);
+    expect(deepIndex).toBeGreaterThanOrEqual(0);
+    expect(shallowIndex).toBeLessThan(deepIndex);
+  });
+
+  test("progressive typing maintains BFS order", () => {
+    // Create structure where progressive narrowing could break BFS order.
+    // The key is that when we resume scanning after narrowing, deeper directories
+    // in the pending queue shouldn't be returned before shallower matches.
+    //
+    // Structure:
+    // testDir/
+    //   aaa/           <- many children here to fill initial results and pending queue
+    //     bbb01/ bbb02/ ... bbb25/
+    //       deep/
+    //         myrepo/  <- depth 4, matches "myrepo"
+    //   zzz/           <- alphabetically last, so processed later
+    //     myrepo/      <- depth 2, matches "myrepo"
+    //
+    // When initial scan runs with limit 20, it will:
+    // 1. Add testDir, aaa, zzz (depth 0-1) to results
+    // 2. Process aaa first (alphabetically), adding bbb01-bbb25 to pending and results
+    // 3. Hit limit before processing zzz's children or going deeper
+    //
+    // When we narrow to "myrepo", none of the initial results match.
+    // Resume scanning should process remaining pending items, but should still
+    // return shallower matches (zzz/myrepo depth 2) before deeper ones (aaa/bbb01/deep/myrepo depth 4).
+
+    // Create many directories - more than limit to ensure we hit the limit mid-scan
+    for (let i = 1; i <= 25; i++) {
+      mkdirSync(join(testDir, `aaa/bbb${i.toString().padStart(2, "0")}`), {
+        recursive: true,
+      });
+    }
+    // Create the deep match
+    mkdirSync(join(testDir, "aaa/bbb01/deep/myrepo"), { recursive: true });
+    // Create the shallow match (alphabetically last at depth 1)
+    mkdirSync(join(testDir, "zzz/myrepo"), { recursive: true });
+
+    // Start with empty filter (as repo-picker does)
+    let filter = createFilter(
+      { roots: [testDir], maxDepth: 5, limit: 20 },
+      "",
+    );
+
+    // Progressively type "myrepo"
+    for (const char of "myrepo") {
+      filter = updateFilter(filter, filter.needle + char);
+    }
+
+    const results = getResults(filter);
+
+    // Should find both matches
+    const shallowMatch = join(testDir, "zzz/myrepo");
+    const deepMatch = join(testDir, "aaa/bbb01/deep/myrepo");
+
+    const shallowIndex = results.findIndex((d) => d === shallowMatch);
+    const deepIndex = results.findIndex((d) => d === deepMatch);
+
+    // Both should be found
+    expect(shallowIndex).toBeGreaterThanOrEqual(0);
+    expect(deepIndex).toBeGreaterThanOrEqual(0);
+
+    // The shallower one (depth 2) should come before the deeper one (depth 4)
+    expect(shallowIndex).toBeLessThan(deepIndex);
+  });
+
+  test("alphabetically later children are found when limit is reached mid-directory", () => {
+    // This tests a specific bug: when scanning a directory with many children,
+    // hitting the result limit mid-directory causes alphabetically later children
+    // to never be added to the pending queue, so they're never found.
+    //
+    // Structure:
+    // testDir/
+    //   parent/
+    //     aaa/ bbb/ ccc/ ... (many dirs to hit limit)
+    //     zzz/   <- alphabetically last, should still be found
+    //
+    // The fix ensures all children are added to pending before checking limit.
+
+    // Create parent with many children + one target at the end alphabetically
+    for (let i = 1; i <= 25; i++) {
+      mkdirSync(join(testDir, `parent/child${i.toString().padStart(2, "0")}`), {
+        recursive: true,
+      });
+    }
+    mkdirSync(join(testDir, "parent/zzztarget"), { recursive: true });
+
+    // Start with empty filter and low limit
+    let filter = createFilter(
+      { roots: [testDir], maxDepth: 3, limit: 10 },
+      "",
+    );
+
+    // Type "zzz" to filter to just the target
+    for (const char of "zzz") {
+      filter = updateFilter(filter, filter.needle + char);
+    }
+
+    const results = getResults(filter);
+    const targetPath = join(testDir, "parent/zzztarget");
+
+    // The target should be found even though it comes late alphabetically
+    expect(results).toContain(targetPath);
+  });
+});
+
 describe("progressive typing", () => {
   test("typing c -> co -> code progressively narrows", () => {
     const opts = { roots: [testDir], maxDepth: 3, limit: 100 };

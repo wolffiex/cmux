@@ -189,6 +189,9 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
     }
 
     // BFS within current root
+    // Track which paths we've already added to results to avoid duplicates
+    const inResults = new Set(results);
+
     while (pending.length > 0) {
       const item = pending.shift();
       if (!item) break;
@@ -196,21 +199,46 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
       const { path, depth } = item;
       if (depth > maxDepth) continue;
 
+      // Check if this pending item itself matches the filter
+      // This handles the case where the filter changed since the item was queued
+      if (!inResults.has(path) && matchesFilter(path, filter.needle)) {
+        results.push(path);
+        inResults.add(path);
+        if (results.length >= limit) {
+          return {
+            ...filter,
+            results,
+            pending,
+            currentRootIndex: rootIndex,
+            complete: false,
+          };
+        }
+      }
+
       try {
         const entries = readdirSync(path, { withFileTypes: true });
         entries.sort((a, b) => a.name.localeCompare(b.name));
 
+        // First pass: add ALL children to pending queue for proper BFS
+        // This ensures we don't miss alphabetically later children when hitting limit
+        const children: string[] = [];
         for (const entry of entries) {
           if (!entry.isDirectory()) continue;
           if (entry.name.startsWith(".")) continue;
           if (IGNORED_DIRS.has(entry.name)) continue;
 
           const fullPath = join(path, entry.name);
+          children.push(fullPath);
           if (depth < maxDepth) {
             pending.push({ path: fullPath, depth: depth + 1 });
           }
-          if (matchesFilter(fullPath, filter.needle)) {
+        }
+
+        // Second pass: add matching children to results
+        for (const fullPath of children) {
+          if (!inResults.has(fullPath) && matchesFilter(fullPath, filter.needle)) {
             results.push(fullPath);
+            inResults.add(fullPath);
             if (results.length >= limit) {
               return {
                 ...filter,
