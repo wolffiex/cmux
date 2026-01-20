@@ -284,8 +284,19 @@ export function renderTypeaheadLines(
     if (itemIndex < filtered.length) {
       const item = filtered[itemIndex];
       const isSelected = itemIndex === selectedIndex;
-      const icon = isSelected && item.icon ? `${item.icon} ` : "";
-      const prefix = isSelected ? `\u2192 ${icon}` : "  ";
+      // Icon only on selected, but reserve space to prevent layout shift
+      // Format: "📦 → label" (selected) or "     label" (not selected)
+      let prefix: string;
+      let prefixWidth: number;
+      if (item.icon) {
+        // Items with icons: "📦 → " selected, "     " not selected
+        prefix = isSelected ? `${item.icon} \u2192 ` : "     ";
+        prefixWidth = 5; // emoji (2) + space + arrow + space
+      } else {
+        // Items without icons: "→ " selected, "  " not selected
+        prefix = isSelected ? "\u2192 " : "  ";
+        prefixWidth = 2;
+      }
       const marker = item.marker ? ` ${item.marker}` : "";
 
       // Calculate available space for label and hint
@@ -296,14 +307,14 @@ export function renderTypeaheadLines(
         hintLen = 1 + item.hint.length;
       }
 
-      const maxLabelLen = boxWidth - 4 - prefix.length - marker.length - hintLen;
+      const maxLabelLen = boxWidth - 4 - prefixWidth - marker.length - hintLen;
       const displayLabel =
         item.label.length > maxLabelLen
           ? `${item.label.slice(0, maxLabelLen - 1)}\u2026`
           : item.label;
 
       const visibleLine = prefix + displayLabel + marker;
-      const visibleLen = visibleLine.length + hintLen;
+      const visibleLen = prefixWidth + displayLabel.length + marker.length + hintLen;
       const padding = boxWidth - 2 - visibleLen;
       const line = visibleLine + hintText + " ".repeat(Math.max(0, padding));
       lines.push(box.v + line + box.v);

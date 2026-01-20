@@ -99,8 +99,8 @@ export function matchesFilter(path: string, filter: string): boolean {
 // ── Generator ────────────────────────────────────────────────────────────────
 
 /**
- * Walk directories breadth-first, yielding paths that pass the filter.
- * Yields root directories first, then their children.
+ * Walk directories breadth-first within each root, processing roots sequentially.
+ * This ensures all directories under ~ come before /var, which come before /etc.
  * Skips hidden and ignored directories.
  */
 export function* walkDirs(
@@ -109,58 +109,75 @@ export function* walkDirs(
   filter: string,
   snapshot?: GeneratorSnapshot,
 ): Generator<string, GeneratorSnapshot, undefined> {
-  // Initialize queue from snapshot or roots
-  const queue: Array<{ path: string; depth: number }> = snapshot?.pending ??
-    roots.map(r => ({ path: r, depth: 0 }));
+  // For resumption, use snapshot's pending queue
+  if (snapshot?.pending && snapshot.pending.length > 0) {
+    const queue = snapshot.pending;
+    while (queue.length > 0) {
+      const { path, depth } = queue.shift()!;
+      if (depth > maxDepth) continue;
 
-  // Track if we've yielded roots yet (for fresh searches)
-  let yieldedRoots = snapshot !== undefined;
+      try {
+        const entries = readdirSync(path, { withFileTypes: true });
+        entries.sort((a, b) => a.name.localeCompare(b.name));
 
-  // Yield roots first (if not resuming from snapshot)
-  if (!yieldedRoots) {
-    for (const root of roots) {
-      if (existsSync(root) && matchesFilter(root, filter)) {
-        yield root;
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          if (entry.name.startsWith(".")) continue;
+          if (IGNORED_DIRS.has(entry.name)) continue;
+
+          const fullPath = join(path, entry.name);
+          if (depth < maxDepth) {
+            queue.push({ path: fullPath, depth: depth + 1 });
+          }
+          if (matchesFilter(fullPath, filter)) {
+            yield fullPath;
+          }
+        }
+      } catch {
+        // Permission denied - skip
       }
     }
-    yieldedRoots = true;
+    return { pending: [] };
   }
 
-  while (queue.length > 0) {
-    const { path, depth } = queue.shift()!;
+  // Process each root completely before moving to the next
+  for (const root of roots) {
+    // Yield root itself first
+    if (existsSync(root) && matchesFilter(root, filter)) {
+      yield root;
+    }
 
-    if (depth > maxDepth) continue;
+    // BFS within this root
+    const queue: Array<{ path: string; depth: number }> = [{ path: root, depth: 0 }];
 
-    try {
-      const entries = readdirSync(path, { withFileTypes: true });
+    while (queue.length > 0) {
+      const { path, depth } = queue.shift()!;
+      if (depth > maxDepth) continue;
 
-      // Sort entries for consistent ordering
-      entries.sort((a, b) => a.name.localeCompare(b.name));
+      try {
+        const entries = readdirSync(path, { withFileTypes: true });
+        entries.sort((a, b) => a.name.localeCompare(b.name));
 
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        if (entry.name.startsWith(".")) continue;
-        if (IGNORED_DIRS.has(entry.name)) continue;
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          if (entry.name.startsWith(".")) continue;
+          if (IGNORED_DIRS.has(entry.name)) continue;
 
-        const fullPath = join(path, entry.name);
-
-        // Add children to queue for next depth level
-        if (depth < maxDepth) {
-          queue.push({ path: fullPath, depth: depth + 1 });
+          const fullPath = join(path, entry.name);
+          if (depth < maxDepth) {
+            queue.push({ path: fullPath, depth: depth + 1 });
+          }
+          if (matchesFilter(fullPath, filter)) {
+            yield fullPath;
+          }
         }
-
-        // Yield if matches filter
-        if (matchesFilter(fullPath, filter)) {
-          yield fullPath;
-        }
+      } catch {
+        // Permission denied - skip
       }
-    } catch {
-      // Permission denied or other error - skip
     }
   }
 
-  // Return final state for potential resumption
-  return { pending: queue };
+  return { pending: [] };
 }
 
 // ── Cache Management ─────────────────────────────────────────────────────────
