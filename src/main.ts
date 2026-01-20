@@ -1232,7 +1232,12 @@ function handleMainKey(key: string): boolean {
         if (state.carouselIndex < maxCarouselIndex) {
           state.carouselIndex++;
           state.confirmingDelete = false; // Cancel confirmation when navigating
-          updateLayoutForSelectedWindow();
+          // If we moved to the + button, open repo picker immediately
+          if (state.carouselIndex === maxCarouselIndex) {
+            openRepoPicker();
+          } else {
+            updateLayoutForSelectedWindow();
+          }
         }
       } else {
         state.previousLayoutIndex = state.layoutIndex;
