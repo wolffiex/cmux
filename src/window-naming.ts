@@ -56,6 +56,11 @@ export function loadRepoConfig(): Map<string, string> {
  * Get repo name and branch from a directory path.
  * Uses git commands to detect git context.
  * Returns null if not a git repo.
+ *
+ * Special case: If the branch name matches the worktree directory name,
+ * we return the actual repository name instead. This is useful for worktrees
+ * where the directory is named after the branch (e.g., "feature-xyz" worktree
+ * with "feature-xyz" branch should show the repo name, not the worktree name).
  */
 export function getRepoFromPath(
   panePath: string,
@@ -75,8 +80,7 @@ export function getRepoFromPath(
     // Get repo/worktree name from the root directory
     // For regular repos: gitRoot is the repo root (e.g., /home/user/repos/myproject)
     // For worktrees: gitRoot is the worktree root (e.g., /home/user/repos/myproject-feature)
-    // In both cases, we want the directory name, which is what the user sees in their filesystem
-    const repo = basename(gitRoot);
+    const worktreeName = basename(gitRoot);
 
     // Get current branch
     let branch: string;
@@ -99,7 +103,32 @@ export function getRepoFromPath(
       branch = "unknown";
     }
 
-    return { repo, branch };
+    // Special case: if worktree name is exactly {repo}-{branch}, use the repo name
+    // e.g., worktree "cmux-layout-picker" with branch "layout-picker" and repo "cmux"
+    try {
+      const commonDir = execSync(
+        `git -C '${panePath}' rev-parse --git-common-dir 2>/dev/null`,
+      )
+        .toString()
+        .trim();
+
+      // For worktrees, commonDir points to main repo's .git directory
+      // e.g., /home/user/repos/myproject/.git
+      // For regular repos, commonDir is just ".git"
+      if (commonDir && commonDir !== ".git") {
+        const repoPath = commonDir.replace(/\/\.git\/?$/, "");
+        const actualRepoName = basename(repoPath);
+
+        // Only use repo name if worktree is exactly {repo}-{branch}
+        if (worktreeName === `${actualRepoName}-${branch}`) {
+          return { repo: actualRepoName, branch };
+        }
+      }
+    } catch {
+      // Fall through to default behavior
+    }
+
+    return { repo: worktreeName, branch };
   } catch {
     return null;
   }

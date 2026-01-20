@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
   generateWindowName,
   getConfigPath,
+  getRepoFromPath,
   loadRepoConfig,
   processBranchName,
   processRepoName,
@@ -215,5 +217,110 @@ describe("getConfigPath", () => {
     delete process.env.XDG_CONFIG_HOME;
     process.env.HOME = "/home/testuser";
     expect(getConfigPath()).toBe("/home/testuser/.config/cmux/repos");
+  });
+});
+
+describe("getRepoFromPath with worktrees", () => {
+  let tempDir: string;
+  let mainRepoPath: string;
+  let worktreePath: string;
+  const branchName = "feature-xyz";
+
+  beforeEach(() => {
+    // Create temp directory structure
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmux-worktree-test-"));
+    mainRepoPath = path.join(tempDir, "main-repo");
+    worktreePath = path.join(tempDir, branchName); // Worktree named same as branch
+
+    // Create main git repo
+    fs.mkdirSync(mainRepoPath, { recursive: true });
+    execSync("git init", { cwd: mainRepoPath });
+    execSync("git config user.email 'test@test.com'", { cwd: mainRepoPath });
+    execSync("git config user.name 'Test'", { cwd: mainRepoPath });
+    fs.writeFileSync(path.join(mainRepoPath, "README.md"), "# Test");
+    execSync("git add .", { cwd: mainRepoPath });
+    execSync("git commit -m 'Initial commit'", { cwd: mainRepoPath });
+
+    // Create worktree with branch name matching directory name
+    execSync(`git worktree add '${worktreePath}' -b '${branchName}'`, {
+      cwd: mainRepoPath,
+    });
+  });
+
+  afterEach(() => {
+    // Clean up worktree first (required before deleting repo)
+    try {
+      execSync(`git worktree remove '${worktreePath}' --force`, {
+        cwd: mainRepoPath,
+      });
+    } catch {
+      // Ignore if already removed
+    }
+
+    // Cleanup temp dir
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  test("returns main repo name when worktree is exactly {repo}-{branch}", () => {
+    // Create worktree with pattern "main-repo-branchname"
+    const testBranch = "my-feature";
+    const patternWorktreePath = path.join(tempDir, `main-repo-${testBranch}`);
+    execSync(`git worktree add '${patternWorktreePath}' -b '${testBranch}'`, {
+      cwd: mainRepoPath,
+    });
+
+    try {
+      const result = getRepoFromPath(patternWorktreePath);
+      expect(result).not.toBeNull();
+      expect(result!.branch).toBe(testBranch);
+      // Worktree "main-repo-my-feature" with branch "my-feature" -> repo "main-repo"
+      expect(result!.repo).toBe("main-repo");
+    } finally {
+      execSync(`git worktree remove '${patternWorktreePath}' --force`, {
+        cwd: mainRepoPath,
+      });
+    }
+  });
+
+  test("returns worktree name when worktree does not match {repo}-{branch} pattern", () => {
+    // Worktree named just "feature-xyz" (same as branch) doesn't match "main-repo-feature-xyz"
+    const result = getRepoFromPath(worktreePath);
+    expect(result).not.toBeNull();
+    expect(result!.branch).toBe(branchName);
+    // Worktree "feature-xyz" != "main-repo-feature-xyz", so return worktree name
+    expect(result!.repo).toBe(branchName);
+  });
+
+  test("returns worktree name when worktree has different prefix than repo", () => {
+    // Create worktree with a different prefix
+    const otherWorktreePath = path.join(tempDir, "other-prefix-some-branch");
+    execSync(`git worktree add '${otherWorktreePath}' -b 'some-branch'`, {
+      cwd: mainRepoPath,
+    });
+
+    try {
+      const result = getRepoFromPath(otherWorktreePath);
+      expect(result).not.toBeNull();
+      expect(result!.branch).toBe("some-branch");
+      // "other-prefix-some-branch" != "main-repo-some-branch", so return worktree name
+      expect(result!.repo).toBe("other-prefix-some-branch");
+    } finally {
+      execSync(`git worktree remove '${otherWorktreePath}' --force`, {
+        cwd: mainRepoPath,
+      });
+    }
+  });
+
+  test("returns directory name for regular repos even when branch matches", () => {
+    // For the main repo on main branch, branch might match directory name
+    // This tests that we don't incorrectly apply the worktree logic
+    const result = getRepoFromPath(mainRepoPath);
+    expect(result).not.toBeNull();
+    // Main repo should return its directory name
+    expect(result!.repo).toBe("main-repo");
   });
 });
