@@ -387,6 +387,95 @@ describe("breadth-first ordering", () => {
   });
 });
 
+describe("matched directory pruning", () => {
+  test("children of a matched directory are not included in results", () => {
+    // When a directory matches the filter, we should NOT descend into it.
+    // This avoids cluttering results with nested subdirectories of an
+    // already-matched parent.
+    //
+    // Structure:
+    // testDir/
+    //   aaa/          <- matches filter "aaa"
+    //     bbb/        <- should NOT appear (child of matched dir)
+    //       ccc/      <- should NOT appear (grandchild of matched dir)
+
+    mkdirSync(join(testDir, "aaa/bbb/ccc"), { recursive: true });
+
+    const filter = createFilter(
+      { roots: [testDir], maxDepth: 5, limit: 100 },
+      "aaa",
+    );
+
+    const results = getResults(filter);
+
+    // The matched directory itself should be in results
+    expect(results).toContain(join(testDir, "aaa"));
+
+    // Children of the matched directory should NOT be in results
+    expect(results).not.toContain(join(testDir, "aaa/bbb"));
+    expect(results).not.toContain(join(testDir, "aaa/bbb/ccc"));
+  });
+
+  test("non-matching directories are still explored for deeper matches", () => {
+    // If a directory does NOT match the filter, we should still descend
+    // into it because its children might match.
+    //
+    // Structure:
+    // testDir/
+    //   xxx/          <- does NOT match "aaa"
+    //     aaa/        <- matches "aaa" (should be found)
+    //       bbb/      <- should NOT appear (child of matched dir)
+    //   aaa/          <- matches "aaa"
+    //     zzz/        <- should NOT appear (child of matched dir)
+
+    mkdirSync(join(testDir, "xxx/aaa/bbb"), { recursive: true });
+    mkdirSync(join(testDir, "aaa/zzz"), { recursive: true });
+
+    const filter = createFilter(
+      { roots: [testDir], maxDepth: 5, limit: 100 },
+      "aaa",
+    );
+
+    const results = getResults(filter);
+
+    // Both matching directories should be found
+    expect(results).toContain(join(testDir, "aaa"));
+    expect(results).toContain(join(testDir, "xxx/aaa"));
+
+    // Children of matched directories should NOT be found
+    expect(results).not.toContain(join(testDir, "aaa/zzz"));
+    expect(results).not.toContain(join(testDir, "xxx/aaa/bbb"));
+  });
+
+  test("pruning works with progressive typing", () => {
+    // When narrowing a filter progressively, the same pruning should apply.
+    //
+    // Structure:
+    // testDir/
+    //   myproject/          <- matches "myproject"
+    //     src/              <- should NOT appear
+    //       components/     <- should NOT appear
+
+    mkdirSync(join(testDir, "myproject/src/components"), { recursive: true });
+
+    // Start with empty filter, then progressively type
+    let filter = createFilter(
+      { roots: [testDir], maxDepth: 5, limit: 100 },
+      "",
+    );
+
+    for (const char of "myproject") {
+      filter = updateFilter(filter, filter.needle + char);
+    }
+
+    const results = getResults(filter);
+
+    expect(results).toContain(join(testDir, "myproject"));
+    expect(results).not.toContain(join(testDir, "myproject/src"));
+    expect(results).not.toContain(join(testDir, "myproject/src/components"));
+  });
+});
+
 describe("progressive typing", () => {
   test("typing c -> co -> code progressively narrows", () => {
     const opts = { roots: [testDir], maxDepth: 3, limit: 100 };
