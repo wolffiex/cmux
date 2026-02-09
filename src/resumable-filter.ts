@@ -150,12 +150,46 @@ export function updateFilter(
 
 /**
  * Get results from filter (up to limit).
+ * When there is an active filter (non-empty needle), prune descendants:
+ * if a directory matches, its children are excluded from results.
+ * Search roots are never considered pruning parents (they are structural,
+ * not user-selected matches).
  */
 export function getResults(filter: ResumableFilter): string[] {
-  return filter.results.slice(0, filter.options.limit);
+  const sliced = filter.results.slice(0, filter.options.limit);
+  if (!filter.needle) return sliced;
+  return pruneDescendants(sliced, new Set(filter.options.roots));
 }
 
 // ── Internal Scanning ────────────────────────────────────────────────────────
+
+/**
+ * Remove any path whose non-excluded ancestor is also in the list.
+ * Preserves original order. Paths in `excludeAsParents` are never
+ * treated as pruning parents (e.g., search roots).
+ */
+function pruneDescendants(
+  paths: string[],
+  excludeAsParents: Set<string> = new Set(),
+): string[] {
+  if (paths.length <= 1) return paths;
+
+  // Build a set of all paths for quick lookup
+  const pathSet = new Set(paths);
+
+  return paths.filter((p) => {
+    // Check if any ancestor of p is also in the set (and not excluded)
+    let slash = p.indexOf("/", 1);
+    while (slash !== -1) {
+      const ancestor = p.slice(0, slash);
+      if (pathSet.has(ancestor) && !excludeAsParents.has(ancestor)) {
+        return false; // A non-excluded ancestor exists in the set - prune
+      }
+      slash = p.indexOf("/", slash + 1);
+    }
+    return true;
+  });
+}
 
 /**
  * Continue scanning directories until we have enough results or exhaust search.
@@ -199,8 +233,11 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
       const { path, depth } = item;
       if (depth > maxDepth) continue;
 
-      // Check if this pending item itself matches the filter
-      // This handles the case where the filter changed since the item was queued
+      // Check if this pending item itself matches the filter.
+      // This handles the case where the filter changed since the item was queued.
+      // Note: we still explore this item's children even if it matches, because
+      // items carried over from a previous scan may match via path prefix rather
+      // than directory name. Pruning of children is handled in the child pass below.
       if (!inResults.has(path) && matchesFilter(path, filter.needle)) {
         results.push(path);
         inResults.add(path);
@@ -219,8 +256,8 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
         const entries = readdirSync(path, { withFileTypes: true });
         entries.sort((a, b) => a.name.localeCompare(b.name));
 
-        // First pass: add ALL children to pending queue for proper BFS
-        // This ensures we don't miss alphabetically later children when hitting limit
+        // First pass: collect children and queue non-matching ones for BFS.
+        // All queueing happens before limit checks to ensure resumability.
         const children: string[] = [];
         for (const entry of entries) {
           if (!entry.isDirectory()) continue;
@@ -229,14 +266,24 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
 
           const fullPath = join(path, entry.name);
           children.push(fullPath);
+
+          // Queue for deeper exploration when:
+          // - within depth limit, AND
+          // - either no needle (explore everything) or child doesn't match
+          //   (prune: matched directories with non-empty needle are NOT queued)
           if (depth < maxDepth) {
-            pending.push({ path: fullPath, depth: depth + 1 });
+            if (!filter.needle || !matchesFilter(fullPath, filter.needle)) {
+              pending.push({ path: fullPath, depth: depth + 1 });
+            }
           }
         }
 
         // Second pass: add matching children to results
         for (const fullPath of children) {
-          if (!inResults.has(fullPath) && matchesFilter(fullPath, filter.needle)) {
+          if (
+            !inResults.has(fullPath) &&
+            matchesFilter(fullPath, filter.needle)
+          ) {
             results.push(fullPath);
             inResults.add(fullPath);
             if (results.length >= limit) {
