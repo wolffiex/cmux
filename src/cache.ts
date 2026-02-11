@@ -33,6 +33,9 @@ export class Cache<T> {
     // Enable WAL mode for better performance
     this.db.run("PRAGMA journal_mode = WAL");
 
+    // Checkpoint any existing WAL bloat from previous runs
+    this.db.run("PRAGMA wal_checkpoint(TRUNCATE)");
+
     // Create table if not exists
     this.db.run(`
       CREATE TABLE IF NOT EXISTS cache (

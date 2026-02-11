@@ -19,7 +19,11 @@ import {
   initRepoPicker,
   type RepoPickerState,
 } from "./repo-picker";
-import { collectReposFromWindows, trackRepo } from "./repo-store";
+import {
+  closeRepoStore,
+  collectReposFromWindows,
+  trackRepo,
+} from "./repo-store";
 import { computeSwaps, executeSwaps } from "./swap-orchestrator";
 import {
   getStartupInfo,
@@ -31,7 +35,7 @@ import {
 import { generateLayoutString } from "./tmux-layout";
 import { renderTypeaheadLines } from "./typeahead";
 import { easeOut, splitWindowName, stripAnsi, wordWrap } from "./utils";
-import { getWindowSummary } from "./window-summary";
+import { closeSummaryCache, getWindowSummary } from "./window-summary";
 import { deleteWorktree } from "./worktree-utils";
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
@@ -1779,6 +1783,11 @@ function cleanup() {
   stopPolling();
   process.stdout.write(ansi.showCursor + ansi.exitAltScreen);
   process.stdin.setRawMode(false);
+
+  // Close database connections and checkpoint WAL before exiting
+  closeRepoStore();
+  closeSummaryCache();
+
   process.exit(0);
 }
 

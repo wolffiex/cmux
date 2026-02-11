@@ -46,6 +46,7 @@ export interface ResumableFilter {
   needle: string;
   results: string[]; // All results found so far (may exceed limit)
   pending: Array<{ path: string; depth: number }>; // BFS queue for resumption
+  pendingIndex: number; // Current read position in pending (avoids O(n) shift)
   currentRootIndex: number; // Which root we're currently processing
   complete: boolean; // True if we've exhausted all directories
   options: FilterOptions;
@@ -106,6 +107,7 @@ export function createFilter(
     needle,
     results: [],
     pending: [],
+    pendingIndex: 0,
     currentRootIndex: 0,
     complete: false,
     options,
@@ -193,19 +195,50 @@ function pruneDescendants(
 
 /**
  * Continue scanning directories until we have enough results or exhaust search.
+ *
+ * Uses index-based iteration over the pending queue instead of Array.shift()
+ * to avoid O(n) re-indexing on each dequeue (which made the BFS loop O(n^2)).
+ * The pending array uses copy-on-write: we read from the input filter's array
+ * via index, and only copy (the unconsumed tail) when we first need to push
+ * new entries.  The returned filter stores pendingIndex so that subsequent
+ * calls can continue without copying the consumed prefix.
  */
 function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
   const { roots, maxDepth, limit } = filter.options;
   const results = [...filter.results];
-  const pending = [...filter.pending];
+
+  // Use the input filter's pending array directly for reads (via index).
+  // We defer copying until the first push to avoid mutating shared state.
+  let pending = filter.pending;
+  let pendingIdx = filter.pendingIndex;
+  let pendingOwned = false; // true once we've made our own copy
+
+  /** Ensure we own the pending array before pushing to it. */
+  function ensureOwned(): void {
+    if (!pendingOwned) {
+      // Copy only the unconsumed tail
+      pending = pending.slice(pendingIdx);
+      pendingIdx = 0;
+      pendingOwned = true;
+    }
+  }
+
+  /** Compact consumed prefix when it grows large, to reclaim memory. */
+  function maybeCompact(): void {
+    if (pendingIdx > 1000 && pendingIdx > pending.length >>> 1) {
+      pending = pending.slice(pendingIdx);
+      pendingIdx = 0;
+    }
+  }
+
   let rootIndex = filter.currentRootIndex;
 
   // Process roots starting from where we left off
   while (rootIndex < roots.length) {
     const root = roots[rootIndex];
 
-    // If pending is empty and this is a new root, initialize it
-    if (pending.length === 0) {
+    // If pending is exhausted and this is a new root, initialize it
+    if (pendingIdx >= pending.length) {
       // Yield root itself first
       if (existsSync(root) && matchesFilter(root, filter.needle)) {
         results.push(root);
@@ -214,11 +247,13 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
             ...filter,
             results,
             pending,
+            pendingIndex: pendingIdx,
             currentRootIndex: rootIndex,
             complete: false,
           };
         }
       }
+      ensureOwned();
       pending.push({ path: root, depth: 0 });
     }
 
@@ -226,9 +261,8 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
     // Track which paths we've already added to results to avoid duplicates
     const inResults = new Set(results);
 
-    while (pending.length > 0) {
-      const item = pending.shift();
-      if (!item) break;
+    while (pendingIdx < pending.length) {
+      const item = pending[pendingIdx++];
 
       const { path, depth } = item;
       if (depth > maxDepth) continue;
@@ -246,6 +280,7 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
             ...filter,
             results,
             pending,
+            pendingIndex: pendingIdx,
             currentRootIndex: rootIndex,
             complete: false,
           };
@@ -255,6 +290,9 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
       try {
         const entries = readdirSync(path, { withFileTypes: true });
         entries.sort((a, b) => a.name.localeCompare(b.name));
+
+        // Ensure we own pending before pushing children
+        ensureOwned();
 
         // First pass: collect children and queue non-matching ones for BFS.
         // All queueing happens before limit checks to ensure resumability.
@@ -291,6 +329,7 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
                 ...filter,
                 results,
                 pending,
+                pendingIndex: pendingIdx,
                 currentRootIndex: rootIndex,
                 complete: false,
               };
@@ -300,6 +339,9 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
       } catch {
         // Permission denied - skip
       }
+
+      // Periodically compact to reclaim memory
+      maybeCompact();
     }
 
     // Move to next root
@@ -311,6 +353,7 @@ function scanUntilLimit(filter: ResumableFilter): ResumableFilter {
     ...filter,
     results,
     pending: [],
+    pendingIndex: 0,
     currentRootIndex: rootIndex,
     complete: true,
   };

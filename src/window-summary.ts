@@ -162,6 +162,17 @@ export async function getWindowSummary(windowId: string): Promise<string> {
   });
 }
 
+/**
+ * Close the summary cache database connection.
+ */
+export function closeSummaryCache(): void {
+  try {
+    summaryCache.close();
+  } catch {
+    // Ignore close errors during shutdown
+  }
+}
+
 // For testing: summarize current window or show prompt with --debug
 if (import.meta.main) {
   const args = process.argv.slice(2);

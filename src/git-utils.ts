@@ -87,13 +87,15 @@ export function getBranch(path: string): string | null {
 }
 
 /**
- * Get the timestamp of the most recent commit on any branch.
+ * Get the timestamp of the most recent commit on the current branch.
+ * Uses HEAD only (not --all) to avoid traversing all branches, which can be
+ * extremely slow on repos with many branches (e.g. 908ms with 79k branches).
  */
 export function getLastActivity(path: string): number {
   try {
     const timestamp = execFileSync(
       "git",
-      ["-C", path, "log", "--all", "--format=%ct", "-1"],
+      ["-C", path, "log", "HEAD", "--format=%ct", "-1"],
       { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "ignore"] },
     ).trim();
     return timestamp ? parseInt(timestamp, 10) * 1000 : 0;

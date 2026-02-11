@@ -40,25 +40,41 @@ function getDb(): Database {
 
     db.run("PRAGMA journal_mode = WAL");
 
-    // Check schema - blow away if it doesn't match
+    // Checkpoint any existing WAL bloat from previous runs that exited
+    // without closing the DB. TRUNCATE resets the WAL file to zero size.
+    db.run("PRAGMA wal_checkpoint(TRUNCATE)");
+
+    // Check schema - blow away if it doesn't match expected base columns
     const tableInfo = db.query("PRAGMA table_info(repos)").all() as {
       name: string;
     }[];
     const columns = new Set(tableInfo.map((col) => col.name));
-    const expectedColumns = new Set(["path", "name", "last_seen"]);
-    const schemaMatches =
-      columns.size === expectedColumns.size &&
-      [...expectedColumns].every((col) => columns.has(col));
+    const requiredColumns = ["path", "name", "last_seen"];
+    const hasRequiredColumns = requiredColumns.every((col) =>
+      columns.has(col),
+    );
 
-    if (!schemaMatches) {
+    if (!hasRequiredColumns) {
       db.run("DROP TABLE IF EXISTS repos");
       db.run(`
         CREATE TABLE repos (
           path TEXT PRIMARY KEY,
           name TEXT NOT NULL,
-          last_seen INTEGER NOT NULL
+          last_seen INTEGER NOT NULL,
+          last_activity INTEGER,
+          last_activity_checked INTEGER
         )
       `);
+    } else {
+      // Migrate: add last_activity columns if missing
+      if (!columns.has("last_activity")) {
+        db.run("ALTER TABLE repos ADD COLUMN last_activity INTEGER");
+      }
+      if (!columns.has("last_activity_checked")) {
+        db.run(
+          "ALTER TABLE repos ADD COLUMN last_activity_checked INTEGER",
+        );
+      }
     }
   }
   return db;
@@ -66,51 +82,81 @@ function getDb(): Database {
 
 // ── Store Operations ────────────────────────────────────────────────────────
 
+const TRACK_WRITE_INTERVAL = 60 * 60 * 1000; // 1 hour - skip writes if last_seen is recent
+
 /**
  * Track a repo (insert or update).
  * Resolves worktrees to their main repo path.
+ * Skips the write if last_seen was updated within the last hour to reduce WAL writes.
  */
 export function trackRepo(path: string): RepoInfo | null {
   const repoPath = resolveRepoPath(path);
   if (!repoPath) return null;
 
   const name = repoPath.split("/").pop() || "repo";
+  const now = Date.now();
+
+  const database = getDb();
+
+  // Check if we already have a recent entry - skip write if so
+  const existing = database
+    .query("SELECT last_seen FROM repos WHERE path = ?")
+    .get(repoPath) as { last_seen: number } | null;
+
+  if (existing && now - existing.last_seen < TRACK_WRITE_INTERVAL) {
+    return { name, path: repoPath, lastSeen: existing.last_seen };
+  }
 
   const info: RepoInfo = {
     name,
     path: repoPath,
-    lastSeen: Date.now(),
+    lastSeen: now,
   };
 
-  const database = getDb();
   database.run(
-    `INSERT OR REPLACE INTO repos (path, name, last_seen) VALUES (?, ?, ?)`,
+    `INSERT INTO repos (path, name, last_seen) VALUES (?, ?, ?)
+     ON CONFLICT(path) DO UPDATE SET name = excluded.name, last_seen = excluded.last_seen`,
     [info.path, info.name, info.lastSeen],
   );
 
   return info;
 }
 
-// In-memory cache for activity timestamps (refreshed on demand)
-const activityCache = new Map<
-  string,
-  { timestamp: number; cachedAt: number }
->();
 const ACTIVITY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Get cached activity timestamp for a repo, refreshing if stale.
+ * Persists the activity cache in SQLite so it survives across cmux invocations.
  */
 function getCachedActivity(path: string): number {
-  const cached = activityCache.get(path);
+  const database = getDb();
   const now = Date.now();
 
-  if (cached && now - cached.cachedAt < ACTIVITY_CACHE_TTL) {
-    return cached.timestamp;
+  // Check DB for persisted activity cache
+  const row = database
+    .query(
+      "SELECT last_activity, last_activity_checked FROM repos WHERE path = ?",
+    )
+    .get(path) as {
+    last_activity: number | null;
+    last_activity_checked: number | null;
+  } | null;
+
+  if (
+    row &&
+    row.last_activity !== null &&
+    row.last_activity_checked !== null &&
+    now - row.last_activity_checked < ACTIVITY_CACHE_TTL
+  ) {
+    return row.last_activity;
   }
 
+  // Cache miss or stale - call git and persist
   const timestamp = getLastActivity(path);
-  activityCache.set(path, { timestamp, cachedAt: now });
+  database.run(
+    "UPDATE repos SET last_activity = ?, last_activity_checked = ? WHERE path = ?",
+    [timestamp, now, path],
+  );
   return timestamp;
 }
 
@@ -177,5 +223,25 @@ export function collectReposFromWindows(): void {
     }
   } catch {
     // Ignore errors
+  }
+}
+
+/**
+ * Close the repo store database connection.
+ * Runs WAL checkpoint to compact the WAL file before closing.
+ */
+export function closeRepoStore(): void {
+  if (db) {
+    try {
+      db.run("PRAGMA wal_checkpoint(TRUNCATE)");
+    } catch {
+      // Ignore checkpoint errors during shutdown
+    }
+    try {
+      db.close();
+    } catch {
+      // Ignore close errors during shutdown
+    }
+    db = null;
   }
 }
