@@ -1199,6 +1199,16 @@ cmux-accept-line() {
   exit
 }
 zle -N accept-line cmux-accept-line
+
+cmux-vi-cmd-mode() {
+  if [[ -z "$BUFFER" ]]; then
+    exit
+  else
+    zle vi-cmd-mode
+  fi
+}
+zle -N cmux-vi-cmd-mode
+bindkey '\\e' cmux-vi-cmd-mode
 `;
           execFileSync("sh", ["-c", `cat > '${tmpDir}/.zshrc' << 'CMUX_EOF'\n${zshrc}\nCMUX_EOF`]);
 
