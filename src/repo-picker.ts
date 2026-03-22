@@ -165,8 +165,8 @@ function buildItems(
   const sortedRepos = sortByFrequency(repoItems, frequencies);
   const sortedDirs = sortByFrequency(dirItems, frequencies);
 
-  // Screens first, then repos, then directories
-  return [...sortedScreens, ...sortedRepos, ...sortedDirs];
+  // Repos first, then screens, then directories
+  return [...sortedRepos, ...sortedScreens, ...sortedDirs];
 }
 
 // ── State Management ─────────────────────────────────────────────────────────
