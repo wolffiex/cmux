@@ -28,17 +28,10 @@ function capture(): string {
 }
 
 function waitForUI(): void {
-  // Poll until we see the UI is ready (contains window bar with minus and plus buttons)
-  // The minus button is " − " and plus button is " + " (with surrounding spaces)
-  // But the plus might have extra padding before it from window names
+  // Poll until we see the UI is ready (contains layout counter with "pane" text)
   for (let i = 0; i < 20; i++) {
     const output = capture();
-    // Check for minus sign (U+2212) and plus sign in the carousel bar
-    if (
-      output.includes("−") &&
-      output.includes("+") &&
-      output.includes("pane")
-    ) {
+    if (output.includes("pane")) {
       return;
     }
     Bun.sleepSync(100);
@@ -81,8 +74,7 @@ function quitCmux(): void {
 
 function _isUIRunning(): boolean {
   const output = capture();
-  // Check for minus sign (U+2212) or plus sign in the carousel bar
-  return output.includes("−") || output.includes("+");
+  return output.includes("pane");
 }
 
 describe("cmux UI", () => {
@@ -114,9 +106,6 @@ describe("cmux UI", () => {
 
   test("initial render shows window bar and layout preview", () => {
     const output = capture();
-    // Check for minus sign (U+2212) and plus in the carousel bar
-    expect(output).toContain("−");
-    expect(output).toContain("+");
     expect(output).toContain("pane");
     expect(output).toContain("hjkl nav");
   });

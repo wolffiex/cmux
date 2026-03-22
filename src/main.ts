@@ -9,7 +9,6 @@ import {
   handleBranchPickerKey,
   initBranchPicker,
 } from "./branch-picker";
-import { Font } from "./fonts";
 import { renderLayoutPreview } from "./layout-preview";
 import { ALL_LAYOUTS, type LayoutTemplate, resolveLayout } from "./layouts";
 import { initLog, log } from "./logger";
@@ -34,8 +33,7 @@ import {
 } from "./tmux";
 import { generateLayoutString } from "./tmux-layout";
 import { renderTypeaheadLines } from "./typeahead";
-import { easeOut, splitWindowName, stripAnsi, wordWrap } from "./utils";
-import { closeSummaryCache, getWindowSummary } from "./window-summary";
+import { easeOut, splitWindowName, stripAnsi } from "./utils";
 import { deleteWorktree } from "./worktree-utils";
 
 const CONFIG_PATH = join(import.meta.dir, "../config/tmux.conf");
@@ -50,7 +48,7 @@ interface State {
   windows: TmuxWindow[];
   currentWindowIndex: number;
   layoutIndex: number;
-  carouselIndex: number; // 0 = minus, 1..n = windows, n+1 = plus
+  carouselIndex: number; // 0..n-1 = windows (direct index)
   focus: Focus;
   mode: Mode;
   // Animation state (for layout)
@@ -70,10 +68,6 @@ interface State {
   repoPicker: RepoPickerState | null;
   // Branch picker state
   branchPicker: BranchPickerState | null;
-  // Summary cache: windowIndex -> summary text (or "loading..." while fetching)
-  summaryCache: Map<number, string>;
-  // Track which summaries are being fetched
-  summaryFetching: Set<number>;
 }
 
 /**
@@ -157,7 +151,7 @@ function initState(): State {
     windows,
     currentWindowIndex,
     layoutIndex,
-    carouselIndex: currentWindowIndex + 1, // Start on current window (index 0 = minus)
+    carouselIndex: currentWindowIndex, // Start on current window
     focus: "window",
     mode: "main",
     // Animation state (for layout)
@@ -177,9 +171,6 @@ function initState(): State {
     repoPicker: null,
     // Branch picker state
     branchPicker: null,
-    // Summary cache
-    summaryCache: new Map(),
-    summaryFetching: new Set(),
   };
 }
 
@@ -236,32 +227,6 @@ function stopPolling(): void {
   }
 }
 
-// ── Summary fetching ────────────────────────────────────────────────────────
-function fetchSummaryForWindow(windowIndex: number): void {
-  // Already have it cached or fetching
-  if (
-    state.summaryCache.has(windowIndex) ||
-    state.summaryFetching.has(windowIndex)
-  ) {
-    return;
-  }
-
-  state.summaryFetching.add(windowIndex);
-  state.summaryCache.set(windowIndex, "Loading summary...");
-
-  // Fully async - gatherWindowContext now uses async exec
-  getWindowSummary(`${SESSION_NAME}:${windowIndex}`)
-    .then((summary) => {
-      state.summaryCache.set(windowIndex, summary);
-      state.summaryFetching.delete(windowIndex);
-      render();
-    })
-    .catch(() => {
-      state.summaryCache.set(windowIndex, "Unable to load summary");
-      state.summaryFetching.delete(windowIndex);
-      render();
-    });
-}
 
 // ── ANSI helpers ───────────────────────────────────────────────────────────
 const ESC = "\x1b";
@@ -285,8 +250,6 @@ const ansi = {
 // Superscript digits for window numbering
 const superscript = ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"];
 
-// Font for window titles
-const titleFont = new Font("mini");
 
 // ── Layout matching ─────────────────────────────────────────────────────────
 /**
@@ -348,8 +311,7 @@ function findBestMatchingLayout(
  * Called when carousel selection changes to a window.
  */
 function updateLayoutForSelectedWindow(): void {
-  // Only update if carousel is on a window (not +/- buttons)
-  const windowIndex = state.carouselIndex - 1;
+  const windowIndex = state.carouselIndex;
   if (windowIndex < 0 || windowIndex >= state.windows.length) return;
 
   const selectedWindow = state.windows[windowIndex];
@@ -520,7 +482,6 @@ function startAnimation(direction: AnimationDirection): void {
 export const WINDOW_SWAP_FRAMES = 8;
 export const WINDOW_SWAP_FRAME_MS = 25; // 8 frames * 25ms = 200ms total
 export const WINDOW_BOX_WIDTH = 17; // Inner width for window names
-export const BUTTON_BOX_WIDTH = 3; // Inner width for +/- buttons
 
 function startWindowSwapAnimation(
   fromIndex: number,
@@ -558,7 +519,7 @@ function startWindowSwapAnimation(
         // Refresh window list
         state.windows = getWindows();
         // Update carousel to follow the swapped window
-        state.carouselIndex = toIndex + 1; // +1 because 0 is minus button
+        state.carouselIndex = toIndex;
         state.currentWindowIndex = toIndex;
       } catch {
         // Ignore errors
@@ -584,10 +545,10 @@ function render(): void {
 
   // Window carousel (6 rows tall with gray box outline, 2 content lines per box)
   const windowFocused = state.focus === "window";
-  const maxIndex = state.windows.length + 1; // 0=minus, 1..n=windows, n+1=plus
+  const maxIndex = state.windows.length - 1;
 
   // Build the 4-row carousel content (each window/button is a bordered box with 2 content lines)
-  // Note: WINDOW_BOX_WIDTH and BUTTON_BOX_WIDTH are module-level constants
+  // Note: WINDOW_BOX_WIDTH is a module-level constant
 
   // Build arrays for each row of the carousel content
   const row0Parts: string[] = []; // Top borders
@@ -668,25 +629,13 @@ function render(): void {
     return [topBorder, middleRow1, middleRow2, bottomBorder];
   };
 
-  // [−] button (always shows as normal button, delete confirmation appears inline in window)
-  const isMinusSelected = windowFocused && state.carouselIndex === 0;
-  const [minusT, minusM1, minusM2, minusB] = buildBox(
-    [" − ", ""],
-    BUTTON_BOX_WIDTH,
-    isMinusSelected,
-  );
-  row0Parts.push(minusT);
-  row1Parts.push(minusM1);
-  row2Parts.push(minusM2);
-  row3Parts.push(minusB);
-
   // Window items (two lines: repo name on line 1, branch/path + indicator on line 2)
   // During swap animation, we render windows in swapped order based on animation progress
   const windowBoxes: [string, string, string, string][] = [];
 
   for (let i = 0; i < state.windows.length; i++) {
     const win = state.windows[i];
-    const isSelected = windowFocused && state.carouselIndex === i + 1;
+    const isSelected = windowFocused && state.carouselIndex === i;
     const isCurrent = i === state.currentWindowIndex;
     const isConfirmingThisWindow = state.confirmingDelete && isCurrent;
 
@@ -843,19 +792,6 @@ function render(): void {
     }
   }
 
-  // [+] button (two lines: "+" on first line, empty second line)
-  const isPlusSelected = windowFocused && state.carouselIndex === maxIndex;
-  const [plusT, plusM1, plusM2, plusB] = buildBox(
-    [" + ", ""],
-    BUTTON_BOX_WIDTH,
-    isPlusSelected,
-    !isPlusSelected,
-  );
-  row0Parts.push(plusT);
-  row1Parts.push(plusM1);
-  row2Parts.push(plusM2);
-  row3Parts.push(plusB);
-
   // Join with spaces between boxes
   const carouselRow0 = row0Parts.join(" ");
   const carouselRow1 = row1Parts.join(" ");
@@ -948,60 +884,6 @@ function render(): void {
     out += ` ${counter} `;
     out += ansi.reset;
 
-    // Right column: title + AI summary
-    const summaryX = previewX + previewW + 4; // Right of layout preview with gap
-    const summaryWidth = contentMargin + contentWidth - summaryX - 2;
-
-    // Get selected window (if carousel is on a window, not +/- buttons)
-    const selectedWindowIdx = state.carouselIndex - 1; // Convert carousel index to window array index
-    const selectedWindow =
-      selectedWindowIdx >= 0 && selectedWindowIdx < state.windows.length
-        ? state.windows[selectedWindowIdx]
-        : null;
-
-    // Window title in large font (centered in right column)
-    // Use repo name (first part of window name) as title, or action name for +/- buttons
-    const maxCarouselIdx = state.windows.length + 1;
-    let titleText: string;
-    if (state.carouselIndex === 0) {
-      titleText = "remove";
-    } else if (state.carouselIndex === maxCarouselIdx) {
-      titleText = "add";
-    } else {
-      const [repoName] = selectedWindow
-        ? splitWindowName(selectedWindow.name)
-        : [""];
-      titleText = repoName || "cmux";
-    }
-    const titleLines = titleFont.render(titleText);
-    const titleWidth = titleLines.reduce(
-      (max, line) => Math.max(max, line.length),
-      0,
-    );
-    const titleX = summaryX + Math.floor((summaryWidth - titleWidth) / 2);
-    for (let i = 0; i < titleLines.length; i++) {
-      out += ansi.moveTo(titleX, previewY + i);
-      out += titleLines[i];
-    }
-
-    // AI summary (below title, word-wrapped)
-    const summaryY = previewY + titleLines.length + 1;
-    let summaryText = "";
-    if (selectedWindow) {
-      // Trigger async fetch if not cached (uses dynamic import, doesn't block render)
-      fetchSummaryForWindow(selectedWindow.index);
-      summaryText =
-        state.summaryCache.get(selectedWindow.index) || "Loading summary...";
-    }
-    const summaryLines = wordWrap(summaryText, summaryWidth);
-    for (
-      let i = 0;
-      i < summaryLines.length && summaryY + i < previewY + previewH;
-      i++
-    ) {
-      out += ansi.moveTo(summaryX, summaryY + i);
-      out += ansi.dim + summaryLines[i] + ansi.reset;
-    }
   }
 
   // Separator
@@ -1205,7 +1087,7 @@ function handleMainKey(key: string): boolean {
     return true; // Ignore window nav during swap animation
   }
 
-  const maxCarouselIndex = state.windows.length + 1; // 0=minus, 1..n=windows, n+1=plus
+  const maxCarouselIndex = state.windows.length - 1;
 
   switch (normalizedKey) {
     case "\t": // Tab - switch focus
@@ -1247,12 +1129,7 @@ function handleMainKey(key: string): boolean {
         if (state.carouselIndex < maxCarouselIndex) {
           state.carouselIndex++;
           state.confirmingDelete = false; // Cancel confirmation when navigating
-          // If we moved to the + button, open repo picker immediately
-          if (state.carouselIndex === maxCarouselIndex) {
-            openRepoPicker();
-          } else {
-            updateLayoutForSelectedWindow();
-          }
+          updateLayoutForSelectedWindow();
         }
       } else {
         state.previousLayoutIndex = state.layoutIndex;
@@ -1270,30 +1147,20 @@ function handleMainKey(key: string): boolean {
       }
 
       if (state.focus === "window") {
-        if (state.carouselIndex === 0) {
-          // Minus button - show delete confirmation (inline in current window)
-          if (state.windows.length > 1) {
-            state.confirmingDelete = true;
+        // Window selected - switch to that window and exit
+        const windowIndex = state.carouselIndex;
+        const selectedWindow = state.windows[windowIndex];
+        if (selectedWindow && windowIndex !== state.currentWindowIndex) {
+          try {
+            execFileSync("tmux", [
+              "select-window",
+              "-t",
+              `:${selectedWindow.index}`,
+            ]);
+          } catch {
+            // Ignore errors
           }
-        } else if (state.carouselIndex === maxCarouselIndex) {
-          // Plus button - open repo picker
-          openRepoPicker();
-        } else {
-          // Window selected - switch to that window and exit
-          const windowIndex = state.carouselIndex - 1;
-          const selectedWindow = state.windows[windowIndex];
-          if (selectedWindow && windowIndex !== state.currentWindowIndex) {
-            try {
-              execFileSync("tmux", [
-                "select-window",
-                "-t",
-                `:${selectedWindow.index}`,
-              ]);
-            } catch {
-              // Ignore errors
-            }
-            return false; // Exit UI after switching window
-          }
+          return false; // Exit UI after switching window
         }
       } else {
         applyAndExit();
@@ -1357,10 +1224,8 @@ function handleMainKey(key: string): boolean {
     }
     case "\x1bh": // Alt+h - move window left
       if (state.focus === "window" && !state.windowSwapAnimating) {
-        // Only works when on an actual window (carouselIndex 1 to windows.length)
-        const currentIdx = state.carouselIndex - 1; // Convert to window array index
+        const currentIdx = state.carouselIndex;
         if (currentIdx > 0 && currentIdx < state.windows.length) {
-          // Can move left - start animation
           startWindowSwapAnimation(currentIdx, currentIdx - 1, "left");
           return true; // Animation handles render
         }
@@ -1368,10 +1233,8 @@ function handleMainKey(key: string): boolean {
       break;
     case "\x1bl": // Alt+l - move window right
       if (state.focus === "window" && !state.windowSwapAnimating) {
-        // Only works when on an actual window (carouselIndex 1 to windows.length)
-        const currentIdx = state.carouselIndex - 1; // Convert to window array index
+        const currentIdx = state.carouselIndex;
         if (currentIdx >= 0 && currentIdx < state.windows.length - 1) {
-          // Can move right - start animation
           startWindowSwapAnimation(currentIdx, currentIdx + 1, "right");
           return true; // Animation handles render
         }
@@ -1644,20 +1507,6 @@ eval "$(bun ${SELF_PATH})"
 
   console.log(`installed ${scriptPath}`);
 
-  // Save API key to config file if set in environment
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (apiKey) {
-    const configDir = join(home, ".config", "cmux");
-    const keyPath = join(configDir, "api-key");
-
-    if (!existsSync(configDir)) {
-      mkdirSync(configDir, { recursive: true });
-    }
-
-    writeFileSync(keyPath, `${apiKey}\n`, { mode: 0o600 });
-    console.log(`saved API key to ${keyPath}`);
-  }
-
   console.log("");
   console.log("make sure ~/.local/bin is in your PATH:");
   console.log('  export PATH="$HOME/.local/bin:$PATH"');
@@ -1786,7 +1635,6 @@ function cleanup() {
 
   // Close database connections and checkpoint WAL before exiting
   closeRepoStore();
-  closeSummaryCache();
 
   process.exit(0);
 }
