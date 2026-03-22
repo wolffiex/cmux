@@ -1203,6 +1203,8 @@ zle -N accept-line cmux-accept-line
 cmux-escape() {
   if [[ -z "$BUFFER" ]]; then
     exit
+  else
+    zle vi-cmd-mode
   fi
 }
 zle -N cmux-escape
