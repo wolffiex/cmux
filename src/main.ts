@@ -879,12 +879,20 @@ function render(): void {
     const formY = previewY + previewH + 2;
     const formX = previewX;
     const selectedWindow = state.windows[state.carouselIndex];
-    const winName = selectedWindow?.name ?? "";
+    const [repoName, branchName] = splitWindowName(selectedWindow?.name ?? "");
+
+    // Get actual directory path from tmux pane
+    let dirPath = "";
+    try {
+      dirPath = execFileSync("tmux", [
+        "display-message", "-t", `:${selectedWindow?.index ?? 0}`, "-p", "#{pane_current_path}",
+      ]).toString().trim();
+    } catch { /* ignore */ }
 
     const fields: { label: string; value: string; field: LayoutField }[] = [
-      { label: "directory", value: winName, field: "directory" },
-      { label: "repo", value: winName.split("/")[0] || winName, field: "repo" },
-      { label: "branch", value: winName.split("/")[1] || "", field: "branch" },
+      { label: "directory", value: dirPath, field: "directory" },
+      { label: "repo", value: repoName, field: "repo" },
+      { label: "branch", value: branchName, field: "branch" },
     ];
 
     for (let i = 0; i < fields.length; i++) {
