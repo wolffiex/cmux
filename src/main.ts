@@ -811,6 +811,8 @@ function render(): void {
   const carouselBoxWidth = width - 4;
   const carouselStartX = 1;
 
+  const dimCarousel = !windowFocused;
+
   // Row 0: Top border of outer box
   out += ansi.moveTo(carouselStartX, 0);
   out +=
@@ -818,25 +820,25 @@ function render(): void {
 
   // Row 1: Top borders of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 1);
-  out += `${ansi.dim + box.v + ansi.reset} ${carouselRow0}`;
+  out += `${ansi.dim + box.v + ansi.reset} ${dimCarousel ? ansi.dim : ""}${carouselRow0}${dimCarousel ? ansi.reset : ""}`;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 1);
   out += ansi.dim + box.v + ansi.reset;
 
   // Row 2: Content line 1 of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 2);
-  out += `${ansi.dim + box.v + ansi.reset} ${carouselRow1}`;
+  out += `${ansi.dim + box.v + ansi.reset} ${dimCarousel ? ansi.dim : ""}${carouselRow1}${dimCarousel ? ansi.reset : ""}`;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 2);
   out += ansi.dim + box.v + ansi.reset;
 
   // Row 3: Content line 2 of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 3);
-  out += `${ansi.dim + box.v + ansi.reset} ${carouselRow2}`;
+  out += `${ansi.dim + box.v + ansi.reset} ${dimCarousel ? ansi.dim : ""}${carouselRow2}${dimCarousel ? ansi.reset : ""}`;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 3);
   out += ansi.dim + box.v + ansi.reset;
 
   // Row 4: Bottom borders of inner boxes (with outer side borders)
   out += ansi.moveTo(carouselStartX, 4);
-  out += `${ansi.dim + box.v + ansi.reset} ${carouselRow3}`;
+  out += `${ansi.dim + box.v + ansi.reset} ${dimCarousel ? ansi.dim : ""}${carouselRow3}${dimCarousel ? ansi.reset : ""}`;
   out += ansi.moveTo(carouselStartX + carouselBoxWidth + 1, 4);
   out += ansi.dim + box.v + ansi.reset;
 
