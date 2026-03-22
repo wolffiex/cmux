@@ -1175,16 +1175,52 @@ function handlePickerMode(key: string): boolean {
         log("[shell] command selected, starting shell");
         log("[shell] SHELL=" + (process.env.SHELL || "(unset)"));
         try {
-          // Restore terminal without exiting
           cleanup(false);
-          log("[shell] cleanup done, spawning shell");
-          const shell = process.env.SHELL || "/bin/bash";
-          const proc = Bun.spawnSync([shell, "--login"], {
+          const marker = "⟪ cmux ⟫";
+
+          // Write a temporary zshrc that sources user config, then adds
+          // a preexec hook to print our marker before command output
+          const tmpDir = execFileSync("mktemp", ["-d"]).toString().trim();
+          const zshrc = [
+            // Source user's real config for completions, aliases, PATH, etc.
+            '[[ -f "${CMUX_REAL_ZDOTDIR:-$HOME}/.zshrc" ]] && source "${CMUX_REAL_ZDOTDIR:-$HOME}/.zshrc"',
+            // Print marker right before command output starts
+            `preexec() { print '${marker}' }`,
+          ].join("\n");
+          execFileSync("sh", ["-c", `cat > '${tmpDir}/.zshrc' << 'CMUX_EOF'\n${zshrc}\nCMUX_EOF`]);
+
+          // Spawn interactive single-command zsh
+          const realZdotdir = process.env.ZDOTDIR || process.env.HOME || "";
+          const proc = Bun.spawnSync(["zsh", "-it"], {
             stdin: "inherit",
             stdout: "inherit",
             stderr: "inherit",
+            env: {
+              ...process.env,
+              ZDOTDIR: tmpDir,
+              CMUX_REAL_ZDOTDIR: realZdotdir,
+            },
           });
-          log("[shell] shell exited with code " + proc.exitCode);
+
+          // After zsh exits, capture pane and copy everything after the marker
+          try {
+            const pane = execFileSync("tmux", ["capture-pane", "-p", "-S", "-200"])
+              .toString();
+            const markerIdx = pane.lastIndexOf(marker);
+            if (markerIdx >= 0) {
+              // Take everything after the marker line, trim trailing blank lines
+              const afterMarker = pane.slice(markerIdx + marker.length + 1).trimEnd();
+              if (afterMarker) {
+                execFileSync("sh", ["-c", `printf '%s' "$1" | pbcopy`, "sh", afterMarker]);
+              }
+            }
+          } catch {
+            // Ignore capture errors
+          }
+
+          // Clean up temp dir
+          try { execFileSync("rm", ["-rf", tmpDir]); } catch { /* ignore */ }
+
           process.exit(proc.exitCode);
         } catch (e) {
           log("[shell] error: " + e);
