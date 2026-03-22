@@ -133,7 +133,8 @@ function sortByFrequency(
 
 /**
  * Build combined items list from screens, repos, and directories.
- * Screens always come first, then repos and dirs sorted by frequency.
+ * Order: screens (except current), repos, directories.
+ * Repos and dirs sorted by frequency within their groups.
  */
 function buildItems(
   windows: TmuxWindow[],
@@ -148,19 +149,20 @@ function buildItems(
       )
     : repos;
 
-  const screenItems = screensToItems(windows);
+  // Exclude current screen — you're already there
+  const otherWindows = windows.filter((w) => !w.active);
+  const screenItems = screensToItems(otherWindows);
   const repoItems = reposToItems(filteredRepos);
   const dirItems = dirsToItems(dirs);
 
-  // Get frequency data and sort repos + dirs by it
+  // Sort each group by frequency independently
   const frequencies = getAllFrequencies();
-  const sortedRepoDirItems = sortByFrequency(
-    [...repoItems, ...dirItems],
-    frequencies,
-  );
+  const sortedScreens = sortByFrequency(screenItems, frequencies);
+  const sortedRepos = sortByFrequency(repoItems, frequencies);
+  const sortedDirs = sortByFrequency(dirItems, frequencies);
 
-  // Screens always first, then frequency-sorted repos/dirs
-  return [...screenItems, ...sortedRepoDirItems];
+  // Screens first, then repos, then directories
+  return [...sortedScreens, ...sortedRepos, ...sortedDirs];
 }
 
 // ── State Management ─────────────────────────────────────────────────────────
