@@ -915,8 +915,12 @@ function render(): void {
     const boxWidth = Math.min(width - 4, 50);
     const pickerX = Math.floor((width - boxWidth) / 2);
 
+    const dimPicker = state.focus !== "typeahead";
     for (let i = 0; i < pickerLines.length; i++) {
-      out += ansi.moveTo(pickerX, previewY + i) + pickerLines[i];
+      out += ansi.moveTo(pickerX, previewY + i);
+      if (dimPicker) out += ansi.dim;
+      out += pickerLines[i];
+      if (dimPicker) out += ansi.reset;
     }
   }
 
