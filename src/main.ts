@@ -1172,15 +1172,16 @@ function handlePickerMode(key: string): boolean {
       return false;
     case "command":
       if (result.command === "shell") {
-        // Stub: open a popup that says hello world, then waits for keypress
-        try {
-          execFileSync("tmux", [
-            "display-popup", "-w", "80%", "-h", "80%", "-E",
-            "echo 'hello world from shell command'; read -p 'press enter to close'",
-          ]);
-        } catch {
-          // Popup was dismissed
-        }
+        // Restore terminal, then exec into a login shell in the same popup.
+        // Output is tee'd to clipboard — when the shell exits, the popup closes.
+        cleanup();
+        const shell = process.env.SHELL || "/bin/bash";
+        const proc = Bun.spawnSync([shell, "--login"], {
+          stdin: "inherit",
+          stdout: "inherit",
+          stderr: "inherit",
+        });
+        process.exit(proc.exitCode);
       }
       return false;
     case "directory":
