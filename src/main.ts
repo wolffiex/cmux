@@ -1176,22 +1176,34 @@ function handlePickerMode(key: string): boolean {
         log("[shell] SHELL=" + (process.env.SHELL || "(unset)"));
         try {
           cleanup(false);
-          const marker = "⟪⟫⟪";
 
-          // Write a temporary zshrc that sources user config, then adds
-          // a preexec hook to print our marker before command output
+          // Write a temporary zshrc that:
+          // 1. Sources user config (completions, aliases, PATH)
+          // 2. Overrides accept-line to capture output in a subshell
+          // 3. Copies output to clipboard, shows it, waits for keypress
           const tmpDir = execFileSync("mktemp", ["-d"]).toString().trim();
-          const zshrc = [
-            // Source user's real config for completions, aliases, PATH, etc.
-            '[[ -f "${CMUX_REAL_ZDOTDIR:-$HOME}/.zshrc" ]] && source "${CMUX_REAL_ZDOTDIR:-$HOME}/.zshrc"',
-            // Print marker right before command output starts
-            `preexec() { print '${marker}' }`,
-          ].join("\n");
+          const zshrc = `
+[[ -f "\${CMUX_REAL_ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${CMUX_REAL_ZDOTDIR:-$HOME}/.zshrc"
+
+cmux-accept-line() {
+  local cmd="$BUFFER"
+  BUFFER=""
+  zle reset-prompt
+  print
+  local output
+  output=$(eval "$cmd" 2>&1)
+  print "$output"
+  printf '%s' "$output" | pbcopy
+  print -P "%F{8}(copied to clipboard — press any key)%f"
+  read -k 1
+  exit
+}
+zle -N accept-line cmux-accept-line
+`;
           execFileSync("sh", ["-c", `cat > '${tmpDir}/.zshrc' << 'CMUX_EOF'\n${zshrc}\nCMUX_EOF`]);
 
-          // Spawn interactive single-command zsh
           const realZdotdir = process.env.ZDOTDIR || process.env.HOME || "";
-          const proc = Bun.spawnSync(["zsh", "-it"], {
+          const proc = Bun.spawnSync(["zsh", "-i"], {
             stdin: "inherit",
             stdout: "inherit",
             stderr: "inherit",
@@ -1201,36 +1213,6 @@ function handlePickerMode(key: string): boolean {
               CMUX_REAL_ZDOTDIR: realZdotdir,
             },
           });
-
-          // After zsh exits, capture pane and copy everything after the marker
-          let copied = false;
-          try {
-            const pane = execFileSync("tmux", ["capture-pane", "-p", "-S", "-200"])
-              .toString();
-            const markerIdx = pane.lastIndexOf(marker);
-            if (markerIdx >= 0) {
-              const afterMarker = pane.slice(markerIdx + marker.length + 1).trimEnd();
-              if (afterMarker) {
-                execFileSync("sh", ["-c", `printf '%s' "$1" | pbcopy`, "sh", afterMarker]);
-                copied = true;
-              }
-            }
-          } catch {
-            // Ignore capture errors
-          }
-
-          // Show status and wait for any keypress before closing
-          const msg = copied
-            ? "\x1b[2m(copied to clipboard — press any key)\x1b[0m"
-            : "\x1b[2m(press any key to close)\x1b[0m";
-          process.stdout.write(`\n${msg}`);
-          process.stdin.setRawMode(true);
-          process.stdin.resume();
-          // Read one byte then exit
-          const buf = Buffer.alloc(1);
-          const fd = require("fs").openSync("/dev/tty", "r");
-          require("fs").readSync(fd, buf, 0, 1, null);
-          require("fs").closeSync(fd);
 
           // Clean up temp dir
           try { execFileSync("rm", ["-rf", tmpDir]); } catch { /* ignore */ }
