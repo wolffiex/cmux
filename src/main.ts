@@ -1022,7 +1022,7 @@ function handlePickerMode(key: string): boolean {
     case "select":
       // Open branch picker for this repo
       state.picker = null;
-      state.branchPicker = initBranchPicker(result.repo.path);
+      state.branchPicker = initBranchPicker(result.repo.path, result.repo.name);
       state.mode = "branchPicker";
       break;
     case "screen":
@@ -1077,14 +1077,15 @@ function handleBranchPickerMode(key: string): boolean {
       state.branchPicker = null;
       state.mode = "picker";
       try {
+        // New branch from origin/main
         execFileSync(
           "git",
-          ["-C", repoPath, "worktree", "add", result.path, "-b", result.branch],
+          ["-C", repoPath, "worktree", "add", result.path, "-b", result.branch, "origin/main"],
           { timeout: 10000 },
         );
         createNewWindowAtPath(result.path);
       } catch {
-        // If branch exists, try without -b
+        // If branch exists or origin/main doesn't exist, try without -b and start point
         try {
           execFileSync(
             "git",
@@ -1124,8 +1125,9 @@ function handleBranchPickerMode(key: string): boolean {
           }
         }
       }
-      // Refresh the branch picker
-      state.branchPicker = initBranchPicker(repoPath);
+      // Refresh the branch picker (preserve repo name)
+      const repoName = state.branchPicker?.repoName;
+      state.branchPicker = initBranchPicker(repoPath, repoName);
       break;
     }
   }

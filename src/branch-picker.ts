@@ -23,6 +23,7 @@ export interface Worktree {
 export interface BranchPickerState {
   typeahead: TypeaheadState;
   repoPath: string;
+  repoName: string; // nickname or basename, used for worktree directory names
   worktrees: Worktree[];
   confirmingDelete: boolean;
 }
@@ -183,9 +184,13 @@ function withDynamicTitle(
 /**
  * Initialize branch picker for a repo.
  */
-export function initBranchPicker(repoPath: string): BranchPickerState {
+export function initBranchPicker(
+  repoPath: string,
+  repoName?: string,
+): BranchPickerState {
   const worktrees = getWorktrees(repoPath);
   const branches = getBranchesWithoutWorktree(repoPath, worktrees);
+  const name = repoName || basename(repoPath);
 
   const items: TypeaheadItem[] = [];
 
@@ -213,6 +218,7 @@ export function initBranchPicker(repoPath: string): BranchPickerState {
   return {
     typeahead: withDynamicTitle(typeahead, false),
     repoPath,
+    repoName: name,
     worktrees,
     confirmingDelete: false,
   };
@@ -322,11 +328,10 @@ export function handleBranchPickerKey(
 
       if (itemId.startsWith("branch:")) {
         const branch = itemId.slice(7);
-        // Create worktree for this branch
+        // Create worktree for this existing branch
         const mainPath = getMainWorktreePath(state.repoPath);
         const parentDir = dirname(mainPath);
-        const repoName = basename(mainPath);
-        const worktreePath = join(parentDir, `${repoName}-${branch}`);
+        const worktreePath = join(parentDir, `${state.repoName}-${branch}`);
         return { action: "create", branch, path: worktreePath };
       }
 
@@ -334,14 +339,16 @@ export function handleBranchPickerKey(
     }
 
     case "create": {
-      // User typed a new branch name - create worktree
-      const branch = result.input.trim();
-      if (!branch) return { action: "cancel" };
+      // User typed a new branch name — create worktree with repoName-input dir
+      const input = result.input.trim();
+      if (!input) return { action: "cancel" };
 
       const mainPath = getMainWorktreePath(state.repoPath);
       const parentDir = dirname(mainPath);
-      const repoName = basename(mainPath);
-      const worktreePath = join(parentDir, `${repoName}-${branch}`);
+      // Worktree dir: repoName-input (e.g., cmux-auth-fix)
+      const worktreePath = join(parentDir, `${state.repoName}-${input}`);
+      // Branch name is just the input, no repo prefix
+      const branch = input;
 
       return { action: "create", branch, path: worktreePath };
     }
