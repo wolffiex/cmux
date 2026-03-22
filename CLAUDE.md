@@ -12,17 +12,15 @@ bun src/main.ts --install
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## Running
+## How It Works
 
-```bash
-# Outside tmux: starts or attaches to "cmux" session with Alt-Space bound
-cmux
+cmux uses a shell replacement trick for zero-overhead startup:
 
-# Inside tmux: runs UI directly (usually via Alt-Space popup)
-cmux
-```
+1. **Wrapper script** (`~/.local/bin/cmux`): `eval "$(bun src/main.ts)"`
+2. **Outside tmux**: cmux outputs `exec tmux new-session ...` — the wrapper evals this, replacing the shell process with tmux directly. No intermediate process remains. The tmux session gets an Alt-Space binding for the popup.
+3. **Inside tmux** (Alt-Space): `display-popup -w 80% -h 80% -E 'bun src/main.ts'` runs the UI directly in a popup. When cmux exits, the popup closes.
 
-When run outside tmux, cmux outputs a shell command that the wrapper script evals. This execs into tmux directly, avoiding intermediate processes.
+The `exec` pattern means environment variables (API keys, etc.) don't leak to child processes — the original shell is replaced entirely.
 
 ## Features
 
