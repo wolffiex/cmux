@@ -43,15 +43,21 @@ const SELF_PATH = import.meta.path;
 
 // ── State ──────────────────────────────────────────────────────────────────
 type AnimationDirection = "left" | "right" | null;
-// Middle panel modes: typeahead search, branch picker, or layout picker
-type Mode = "picker" | "branchPicker" | "layout";
+type Focus = "typeahead" | "carousel" | "layout";
+// Sub-focus within layout mode: which element has focus
+type LayoutField = "picker" | "directory" | "repo" | "branch";
+// What's shown in the typeahead area
+type TypeaheadMode = "picker" | "branchPicker";
 
 interface State {
   windows: TmuxWindow[];
   currentWindowIndex: number;
   layoutIndex: number;
   carouselIndex: number; // 0..n-1 = windows (direct index)
-  mode: Mode;
+  focus: Focus;
+  typeaheadMode: TypeaheadMode;
+  // Layout mode sub-focus
+  layoutField: LayoutField;
   // Animation state (for layout)
   animating: boolean;
   animationDirection: AnimationDirection;
@@ -153,7 +159,9 @@ function initState(): State {
     currentWindowIndex,
     layoutIndex,
     carouselIndex: currentWindowIndex, // Start on current window
-    mode: "picker",
+    focus: "typeahead",
+    typeaheadMode: "picker",
+    layoutField: "picker",
     // Animation state (for layout)
     animating: false,
     animationDirection: null,
@@ -439,7 +447,7 @@ function startAnimation(direction: AnimationDirection): void {
 
   // Update the counter immediately (shows new layout info)
   const paneCount = nextLayout.panes.length;
-  const layoutFocused = state.mode === "layout";
+  const layoutFocused = state.focus === "layout";
   const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
   const counterX = previewX + Math.floor((previewW - counter.length) / 2);
   let counterOut = ansi.moveTo(counterX, previewY + previewH);
@@ -544,7 +552,7 @@ function render(): void {
   let out = ansi.clear;
 
   // Window carousel (6 rows tall with gray box outline, 2 content lines per box)
-  const windowFocused = state.mode !== "layout"; // Carousel shows selection in typeahead modes
+  const windowFocused = state.focus === "carousel";
   const maxIndex = state.windows.length - 1;
 
   // Build the 4-row carousel content (each window/button is a bordered box with 2 content lines)
@@ -851,7 +859,43 @@ function render(): void {
   const previewH = Math.min(height - 11, 12);
 
   const activePicker = state.picker ?? state.branchPicker;
-  if (activePicker && state.mode !== "layout") {
+  if (state.focus === "layout") {
+    // Layout picker + rename form (shown after Enter on carousel window)
+    const layout = ALL_LAYOUTS[state.layoutIndex];
+    const previewW = Math.min(40, Math.floor(contentWidth / 2));
+    const previewX = contentMargin + 2;
+    out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
+
+    const paneCount = layout.panes.length;
+    const focusOnPicker = state.layoutField === "picker";
+    const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+    const counterX = previewX + Math.floor((previewW - counter.length) / 2);
+    out += ansi.moveTo(counterX, previewY + previewH);
+    if (focusOnPicker) out += ansi.inverse;
+    out += ` ${counter} `;
+    out += ansi.reset;
+
+    // Rename form below layout preview
+    const formY = previewY + previewH + 2;
+    const formX = previewX;
+    const selectedWindow = state.windows[state.carouselIndex];
+    const winName = selectedWindow?.name ?? "";
+
+    const fields: { label: string; value: string; field: LayoutField }[] = [
+      { label: "directory", value: winName, field: "directory" },
+      { label: "repo", value: winName.split("/")[0] || winName, field: "repo" },
+      { label: "branch", value: winName.split("/")[1] || "", field: "branch" },
+    ];
+
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i];
+      const isFocused = state.layoutField === f.field;
+      out += ansi.moveTo(formX, formY + i);
+      if (isFocused) out += ansi.inverse;
+      out += ` ${f.label}: ${f.value} `;
+      out += ansi.reset;
+    }
+  } else if (activePicker) {
     // Render typeahead picker centered in the middle section
     const pickerHeight = previewH + 2;
     const pickerLines = renderTypeaheadLines(
@@ -866,18 +910,6 @@ function render(): void {
     for (let i = 0; i < pickerLines.length; i++) {
       out += ansi.moveTo(pickerX, previewY + i) + pickerLines[i];
     }
-  } else if (state.mode === "layout") {
-    // Layout picker (shown after selecting a window from carousel)
-    const layout = ALL_LAYOUTS[state.layoutIndex];
-    const previewW = Math.min(40, Math.floor(contentWidth / 2));
-    const previewX = contentMargin + 2;
-    out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
-
-    const paneCount = layout.panes.length;
-    const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
-    const counterX = previewX + Math.floor((previewW - counter.length) / 2);
-    out += ansi.moveTo(counterX, previewY + previewH);
-    out += ansi.inverse + ` ${counter} ` + ansi.reset;
   }
 
   // Separator
@@ -885,12 +917,14 @@ function render(): void {
 
   // Key hints (bottom row)
   let hints: string;
-  if (state.mode === "branchPicker") {
+  if (state.focus === "layout") {
+    hints = "hl cycle  jk fields  ⏎ apply  esc back";
+  } else if (state.focus === "carousel") {
+    hints = "hl nav  ⏎ layout  tab typeahead  -x delete";
+  } else if (state.typeaheadMode === "branchPicker") {
     hints = "type to filter  jk nav  ⏎ select  ^X delete  esc cancel";
-  } else if (state.mode === "picker") {
-    hints = "type to filter  jk nav  ⏎ select  esc cancel";
   } else {
-    hints = "hl cycle  ⏎ apply  esc back";
+    hints = "type to filter  jk nav  ⏎ select  tab carousel";
   }
   out += ansi.moveTo(1, height - 1) + ansi.dim + hints + ansi.reset;
 
@@ -919,69 +953,6 @@ async function renameWindowsOnStartup(): Promise<void> {
 
 // ── Input handling ─────────────────────────────────────────────────────────
 
-/**
- * Handle carousel navigation keys that work in all modes.
- * Returns true if the key was handled, false if it should be passed to mode handler.
- */
-function handleCarouselKey(key: string): boolean | null {
-  const maxCarouselIndex = state.windows.length - 1;
-
-  // During window swap animation, ignore navigation
-  if (
-    state.windowSwapAnimating &&
-    (key === "h" || key === "l" || key === "\x1bh" || key === "\x1bl")
-  ) {
-    return true;
-  }
-
-  switch (key) {
-    case "1": case "2": case "3": case "4": case "5":
-    case "6": case "7": case "8": case "9": {
-      // Number keys select window and switch to layout mode
-      const windowIndex = parseInt(key, 10) - 1;
-      if (windowIndex < state.windows.length) {
-        state.carouselIndex = windowIndex;
-        state.mode = "layout";
-        updateLayoutForSelectedWindow();
-        return true;
-      }
-      return null; // Not handled, pass to mode
-    }
-    case "\x1bh": // Alt+h - move window left
-      if (!state.windowSwapAnimating) {
-        const currentIdx = state.carouselIndex;
-        if (currentIdx > 0 && currentIdx < state.windows.length) {
-          startWindowSwapAnimation(currentIdx, currentIdx - 1, "left");
-          return true;
-        }
-      }
-      return true;
-    case "\x1bl": // Alt+l - move window right
-      if (!state.windowSwapAnimating) {
-        const currentIdx = state.carouselIndex;
-        if (currentIdx >= 0 && currentIdx < state.windows.length - 1) {
-          startWindowSwapAnimation(currentIdx, currentIdx + 1, "right");
-          return true;
-        }
-      }
-      return true;
-    case "-":
-    case "x": // Delete window
-      if (state.confirmingDelete) {
-        removeCurrentWindow();
-        return false; // Exit UI after deletion (false = exit)
-      } else if (state.windows.length > 1) {
-        state.confirmingDelete = true;
-        return true;
-      }
-      return true;
-    case "q":
-      return false; // Exit
-  }
-
-  return null; // Not a carousel key
-}
-
 function handleKey(key: string): boolean {
   // Normalize arrow keys
   let normalizedKey = key;
@@ -989,19 +960,173 @@ function handleKey(key: string): boolean {
   else if (key === "\x1b[B") normalizedKey = "j";
   else if (key === "\x1b[C") normalizedKey = "l";
   else if (key === "\x1b[D") normalizedKey = "h";
+  // Ctrl+N/Ctrl+P synonyms for j/k
+  if (key === "\x0e") normalizedKey = "j";
+  if (key === "\x10") normalizedKey = "k";
 
-  // Try carousel keys first (work in all modes)
-  const carouselResult = handleCarouselKey(normalizedKey);
-  if (carouselResult !== null) return carouselResult;
+  // q always quits
+  if (normalizedKey === "q" && state.focus !== "typeahead") return false;
 
-  // Dispatch to mode-specific handler
-  if (state.mode === "picker") {
-    return handlePickerMode(key);
+  // Tab toggles between typeahead and carousel
+  if (normalizedKey === "\t") {
+    if (state.focus === "typeahead") {
+      state.focus = "carousel";
+    } else {
+      state.focus = "typeahead";
+      if (!state.picker) state.picker = initRepoPicker(state.windows);
+    }
+    state.confirmingDelete = false;
+    return true;
   }
-  if (state.mode === "branchPicker") {
+
+  // Dispatch by focus
+  switch (state.focus) {
+    case "typeahead":
+      return handleTypeaheadFocus(key);
+    case "carousel":
+      return handleCarouselFocus(normalizedKey);
+    case "layout":
+      return handleLayoutFocus(normalizedKey);
+  }
+}
+
+function handleTypeaheadFocus(key: string): boolean {
+  if (state.typeaheadMode === "branchPicker") {
     return handleBranchPickerMode(key);
   }
-  return handleLayoutMode(normalizedKey);
+  return handlePickerMode(key);
+}
+
+function handleCarouselFocus(key: string): boolean {
+  const maxCarouselIndex = state.windows.length - 1;
+
+  // During window swap animation, ignore navigation
+  if (state.windowSwapAnimating && (key === "h" || key === "l")) {
+    return true;
+  }
+
+  switch (key) {
+    case "h":
+      if (state.carouselIndex > 0) {
+        state.carouselIndex--;
+        state.confirmingDelete = false;
+        updateLayoutForSelectedWindow();
+      }
+      return true;
+    case "l":
+      if (state.carouselIndex < maxCarouselIndex) {
+        state.carouselIndex++;
+        state.confirmingDelete = false;
+        updateLayoutForSelectedWindow();
+      }
+      return true;
+    case "\r":
+    case " ":
+      if (state.confirmingDelete) {
+        removeCurrentWindow();
+        return false;
+      }
+      // Enter on carousel → layout mode
+      state.focus = "layout";
+      state.layoutField = "picker";
+      updateLayoutForSelectedWindow();
+      return true;
+    case "\x1b": // Escape
+      if (state.confirmingDelete) {
+        state.confirmingDelete = false;
+        return true;
+      }
+      // Escape from carousel → back to typeahead
+      state.focus = "typeahead";
+      if (!state.picker) state.picker = initRepoPicker(state.windows);
+      return true;
+    case "-":
+    case "x":
+      if (state.confirmingDelete) {
+        removeCurrentWindow();
+        return false;
+      } else if (state.windows.length > 1) {
+        state.confirmingDelete = true;
+      }
+      return true;
+    case "\x1bh": // Alt+h - move window left
+      if (!state.windowSwapAnimating) {
+        const currentIdx = state.carouselIndex;
+        if (currentIdx > 0) {
+          startWindowSwapAnimation(currentIdx, currentIdx - 1, "left");
+        }
+      }
+      return true;
+    case "\x1bl": // Alt+l - move window right
+      if (!state.windowSwapAnimating) {
+        const currentIdx = state.carouselIndex;
+        if (currentIdx < state.windows.length - 1) {
+          startWindowSwapAnimation(currentIdx, currentIdx + 1, "right");
+        }
+      }
+      return true;
+    case "1": case "2": case "3": case "4": case "5":
+    case "6": case "7": case "8": case "9": {
+      const windowIndex = parseInt(key, 10) - 1;
+      if (windowIndex < state.windows.length) {
+        state.carouselIndex = windowIndex;
+        state.focus = "layout";
+        state.layoutField = "picker";
+        updateLayoutForSelectedWindow();
+      }
+      return true;
+    }
+  }
+  return true;
+}
+
+function handleLayoutFocus(key: string): boolean {
+  const layoutFields: LayoutField[] = ["picker", "directory", "repo", "branch"];
+  const currentFieldIdx = layoutFields.indexOf(state.layoutField);
+
+  // During layout animation, ignore nav keys
+  if (state.animating && (key === "h" || key === "l")) {
+    return true;
+  }
+
+  switch (key) {
+    case "h":
+      if (state.layoutField === "picker") {
+        state.previousLayoutIndex = state.layoutIndex;
+        state.layoutIndex =
+          (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length;
+        startAnimation("left");
+        return true;
+      }
+      break;
+    case "l":
+      if (state.layoutField === "picker") {
+        state.previousLayoutIndex = state.layoutIndex;
+        state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length;
+        startAnimation("right");
+        return true;
+      }
+      break;
+    case "j": // Down — next field
+      if (currentFieldIdx < layoutFields.length - 1) {
+        state.layoutField = layoutFields[currentFieldIdx + 1];
+      }
+      return true;
+    case "k": // Up — previous field
+      if (currentFieldIdx > 0) {
+        state.layoutField = layoutFields[currentFieldIdx - 1];
+      }
+      return true;
+    case "\r":
+    case " ":
+      // Enter — apply layout and exit
+      applyAndExit();
+      return false;
+    case "\x1b": // Escape — back to carousel
+      state.focus = "carousel";
+      return true;
+  }
+  return true;
 }
 
 function handlePickerMode(key: string): boolean {
@@ -1023,7 +1148,7 @@ function handlePickerMode(key: string): boolean {
       // Open branch picker for this repo
       state.picker = null;
       state.branchPicker = initBranchPicker(result.repo.path, result.repo.name);
-      state.mode = "branchPicker";
+      state.typeaheadMode = "branchPicker";
       break;
     case "screen":
       // Switch to selected screen
@@ -1040,7 +1165,6 @@ function handlePickerMode(key: string): boolean {
     case "directory":
       // Create new window at this directory
       state.picker = null;
-      state.mode = "picker";
       createNewWindowAtPath(result.path);
       return false;
   }
@@ -1050,7 +1174,7 @@ function handlePickerMode(key: string): boolean {
 
 function handleBranchPickerMode(key: string): boolean {
   if (!state.branchPicker) {
-    state.mode = "picker";
+    state.typeaheadMode = "picker";
     return true;
   }
 
@@ -1063,19 +1187,19 @@ function handleBranchPickerMode(key: string): boolean {
     case "cancel":
       // Go back to repo picker
       state.branchPicker = null;
-      state.mode = "picker";
+      state.typeaheadMode = "picker";
       break;
     case "select":
       // Open window at the worktree path
       state.branchPicker = null;
-      state.mode = "picker";
+      state.typeaheadMode = "picker";
       createNewWindowAtPath(result.path);
       return false;
     case "create": {
       // Create worktree and open window
       const repoPath = state.branchPicker.repoPath;
       state.branchPicker = null;
-      state.mode = "picker";
+      state.typeaheadMode = "picker";
       try {
         // New branch from origin/main
         execFileSync(
@@ -1135,38 +1259,7 @@ function handleBranchPickerMode(key: string): boolean {
   return true;
 }
 
-function handleLayoutMode(key: string): boolean {
-  // During layout animation, ignore nav keys
-  if (
-    state.animating &&
-    (key === "h" || key === "l")
-  ) {
-    return true;
-  }
 
-  switch (key) {
-    case "h":
-      state.previousLayoutIndex = state.layoutIndex;
-      state.layoutIndex =
-        (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length;
-      startAnimation("left");
-      return true; // Animation handles render
-    case "l":
-      state.previousLayoutIndex = state.layoutIndex;
-      state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length;
-      startAnimation("right");
-      return true; // Animation handles render
-    case " ":
-    case "\r": // Enter - apply layout and exit
-      applyAndExit();
-      return false;
-    case "\x1b": // Escape - back to picker
-      state.mode = "picker";
-      if (!state.picker) state.picker = initRepoPicker(state?.windows ?? []);
-      break;
-  }
-  return true;
-}
 
 function createNewWindowAtPath(targetPath: string): void {
   log("createNewWindowAtPath called with:", targetPath);
@@ -1513,7 +1606,7 @@ function runUI(): void {
             arrowChar === "D"
           ) {
             // Pass arrow key escape sequence through as-is
-            // handleMainKey() will convert to hjkl for main mode
+            // handleKey() will convert arrow keys to hjkl
             key = input.slice(i, i + 3);
             i += 3;
           } else {
