@@ -10,8 +10,8 @@ import {
   initBranchPicker,
 } from "./branch-picker";
 import { renderLayoutPreview } from "./layout-preview";
-import { closeLayoutStore, recordTransition } from "./layout-store";
-import { closePickerStore } from "./picker-store";
+import { recordTransition } from "./layout-store";
+import { closeDb } from "./db";
 import { ALL_LAYOUTS, type LayoutTemplate, resolveLayout } from "./layouts";
 import { initLog, log } from "./logger";
 import { matchPanesToSlots, type Pane, type Slot } from "./pane-matcher";
@@ -21,7 +21,6 @@ import {
   type RepoPickerState,
 } from "./repo-picker";
 import {
-  closeRepoStore,
   collectReposFromWindows,
   trackRepo,
 } from "./repo-store";
@@ -1005,6 +1004,16 @@ function handleKey(key: string): boolean {
 }
 
 function handleTypeaheadFocus(key: string): boolean {
+  // Up/Ctrl+P at top of list → move focus to carousel
+  const isUp = key === "\x1b[A" || key === "\x10";
+  if (isUp) {
+    const picker = state.picker ?? state.branchPicker;
+    if (picker && picker.typeahead.selectedIndex === 0) {
+      state.focus = "carousel";
+      return true;
+    }
+  }
+
   if (state.typeaheadMode === "branchPicker") {
     return handleBranchPickerMode(key);
   }
@@ -1738,10 +1747,8 @@ function cleanup(exit: boolean = true) {
   process.stdout.write(ansi.showCursor + ansi.exitAltScreen);
   process.stdin.setRawMode(false);
 
-  // Close database connections and checkpoint WAL before exiting
-  closeRepoStore();
-  closeLayoutStore();
-  closePickerStore();
+  // Close shared database connection and checkpoint WAL before exiting
+  closeDb();
 
   if (exit) process.exit(0);
 }
