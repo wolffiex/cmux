@@ -1176,7 +1176,7 @@ function handlePickerMode(key: string): boolean {
         log("[shell] SHELL=" + (process.env.SHELL || "(unset)"));
         try {
           cleanup(false);
-          const marker = "⟪ cmux ⟫";
+          const marker = "⟪⟫⟪";
 
           // Write a temporary zshrc that sources user config, then adds
           // a preexec hook to print our marker before command output
