@@ -156,8 +156,16 @@ function buildItems(
       )
     : repos;
 
-  // Exclude current screen — you're already there
-  const otherWindows = windows.filter((w) => !w.active);
+  // Exclude current screen and screens that match a known repo name
+  // (the repo entry already covers them — selecting the repo drills into branches)
+  const repoNames = new Set(filteredRepos.map((r) => r.name));
+  const otherWindows = windows.filter((w) => {
+    if (w.active) return false; // Already on this screen
+    // Window name "foo" or "foo/branch" matches repo named "foo"
+    const screenRepo = w.name.split("/")[0];
+    if (repoNames.has(screenRepo)) return false;
+    return true;
+  });
   const screenItems = screensToItems(otherWindows);
   const repoItems = reposToItems(filteredRepos);
 
