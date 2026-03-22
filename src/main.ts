@@ -1170,6 +1170,19 @@ function handlePickerMode(key: string): boolean {
         // Ignore errors
       }
       return false;
+    case "command":
+      if (result.command === "shell") {
+        // Stub: open a popup that says hello world, then waits for keypress
+        try {
+          execFileSync("tmux", [
+            "display-popup", "-w", "80%", "-h", "80%", "-E",
+            "echo 'hello world from shell command'; read -p 'press enter to close'",
+          ]);
+        } catch {
+          // Popup was dismissed
+        }
+      }
+      return false;
     case "directory":
       // Create new window at this directory
       state.picker = null;

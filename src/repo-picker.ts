@@ -42,7 +42,8 @@ export type RepoPickerResult =
   | { action: "cancel" }
   | { action: "select"; repo: RepoInfo }
   | { action: "directory"; path: string }
-  | { action: "screen"; window: TmuxWindow };
+  | { action: "screen"; window: TmuxWindow }
+  | { action: "command"; command: string };
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,12 @@ function formatPath(path: string): string {
   }
   return path;
 }
+
+// ── Commands ────────────────────────────────────────────────────────────────
+
+const COMMANDS: TypeaheadItem[] = [
+  { id: "cmd:shell", label: "shell", hint: "quick command → clipboard", icon: "⚡" },
+];
 
 /**
  * Convert screens (tmux windows) to typeahead items.
@@ -165,8 +172,8 @@ function buildItems(
   const sortedRepos = sortByFrequency(repoItems, frequencies);
   const sortedDirs = sortByFrequency(dirItems, frequencies);
 
-  // Repos first, then screens, then directories
-  return [...sortedRepos, ...sortedScreens, ...sortedDirs];
+  // Commands, repos, screens, directories
+  return [...COMMANDS, ...sortedRepos, ...sortedScreens, ...sortedDirs];
 }
 
 // ── State Management ─────────────────────────────────────────────────────────
@@ -240,6 +247,7 @@ function updateItemsForFilter(
 function getTitleForSelection(typeahead: TypeaheadState): string {
   const selected = typeahead.filtered[typeahead.selectedIndex];
   if (!selected) return "select";
+  if (selected.id.startsWith("cmd:")) return "command";
   if (selected.id.startsWith("screen:")) return "screen";
   if (selected.id.startsWith("repo:")) return "repo";
   if (selected.id.startsWith("dir:")) return "directory";
@@ -292,6 +300,11 @@ export function handleRepoPickerKey(
 
     case "select": {
       const itemId = result.item.id;
+
+      if (itemId.startsWith("cmd:")) {
+        const command = itemId.slice(4);
+        return { action: "command", command };
+      }
 
       if (itemId.startsWith("screen:")) {
         const windowIndex = parseInt(itemId.slice(7), 10);
