@@ -279,21 +279,27 @@ export function renderTypeaheadLines(
     scrollOffset = selectedIndex - listHeight + 1;
   }
 
+  // Check if any visible item has an icon — if so, all items use wide prefix
+  const hasIcons = filtered.some((item) => item.icon);
+
   for (let i = 0; i < listHeight; i++) {
     const itemIndex = i + scrollOffset;
     if (itemIndex < filtered.length) {
       const item = filtered[itemIndex];
       const isSelected = itemIndex === selectedIndex;
-      // Icon only on selected, but reserve space to prevent layout shift
-      // Format: "📦 → label" (selected) or "     label" (not selected)
+      // All items use the same prefix width for alignment
       let prefix: string;
       let prefixWidth: number;
-      if (item.icon) {
-        // Items with icons: "📦 → " selected, "     " not selected
-        prefix = isSelected ? `${item.icon} \u2192 ` : "     ";
-        prefixWidth = 5; // emoji (2) + space + arrow + space
+      if (hasIcons) {
+        // Wide prefix: "📦 → " selected with icon, "  → " selected without, "     " not selected
+        if (isSelected) {
+          prefix = item.icon ? `${item.icon} \u2192 ` : `  \u2192 `;
+        } else {
+          prefix = "     ";
+        }
+        prefixWidth = 5;
       } else {
-        // Items without icons: "→ " selected, "  " not selected
+        // Narrow prefix: "→ " selected, "  " not selected
         prefix = isSelected ? "\u2192 " : "  ";
         prefixWidth = 2;
       }
