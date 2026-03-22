@@ -153,7 +153,11 @@ function buildItems(
   const otherWindows = windows.filter((w) => !w.active);
   const screenItems = screensToItems(otherWindows);
   const repoItems = reposToItems(filteredRepos);
-  const dirItems = dirsToItems(dirs);
+
+  // Exclude directories that are already shown as repos
+  const repoPaths = new Set(filteredRepos.map((r) => r.path));
+  const nonRepoDirs = dirs.filter((d) => !repoPaths.has(d));
+  const dirItems = dirsToItems(nonRepoDirs);
 
   // Sort each group by frequency independently
   const frequencies = getAllFrequencies();
