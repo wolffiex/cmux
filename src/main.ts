@@ -1029,6 +1029,10 @@ function handleCarouselFocus(key: string): boolean {
   }
 
   switch (key) {
+    case "j": // Down/Ctrl+N from carousel → typeahead
+      state.focus = "typeahead";
+      if (!state.picker) state.picker = initRepoPicker(state.windows);
+      return true;
     case "h":
       if (state.carouselIndex > 0) {
         state.carouselIndex--;
