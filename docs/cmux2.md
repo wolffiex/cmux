@@ -27,31 +27,58 @@ Creation flows:
 - Select a remote host → ssh + attach to remote tmux
 - Git browser: pick repo → pick branch → create worktree → open screen
 
-## Configuration (SQLite)
+## Data Model (SQLite)
 
-### Directory Roots
+Three tables for user annotations. Git state (branch, dirty) is derived live, never cached.
 
-Registered paths whose immediate children are also jump targets:
+### hosts
 
-```
-~/code         (children: yes)  → ~/code/cmux, ~/code/foo, ...
-~/.config      (children: yes)
-~/notes        (children: no)   → just ~/notes itself
-```
-
-### Remote Hosts
-
-```
-hosts:
-  devbox:
-    ssh: adam@devbox.internal
-    color: blue
-  prod:
-    ssh: adam@prod-bastion
-    color: red
+```sql
+hosts
+  name TEXT PRIMARY KEY     -- "local" | "devbox" | "prod"
+  ssh TEXT                  -- null for local, "adam@devbox.internal" for remote
+  color TEXT                -- accent color for UI
+  nickname TEXT             -- user display name
 ```
 
-Each host has an assigned color/color scheme. Remote screens display with that color accent in the carousel and elsewhere.
+### repos
+
+```sql
+repos
+  host TEXT DEFAULT 'local'
+  path TEXT                 -- canonical repo root (resolved from worktrees)
+  nickname TEXT             -- user-assigned name, e.g. "cli"
+  PRIMARY KEY (host, path)
+```
+
+### branches
+
+```sql
+branches
+  host TEXT DEFAULT 'local'
+  repo_path TEXT            -- FK to repos
+  name TEXT                 -- full branch name
+  nickname TEXT             -- user-assigned short name
+  PRIMARY KEY (host, repo_path, name)
+```
+
+### directories
+
+```sql
+directories
+  host TEXT DEFAULT 'local'
+  path TEXT
+  show_children BOOLEAN     -- list immediate children in typeahead
+  PRIMARY KEY (host, path)
+```
+
+### Design principles
+
+- DB holds user intent/annotations only. No cached derived state.
+- Git state (repo_path, branch, dirty) is derived live via git calls.
+- Display derivation: `repo.nickname ?? basename(repo_path)` for line 1, `branch.nickname ?? branch_name` for line 2.
+- Everything is scoped to a host. Same path on different hosts = different entities.
+- Repo nicknames are shared across worktrees (worktrees resolve to same repo_path via git).
 
 ### Config Editing
 
@@ -68,12 +95,40 @@ Biggest new feature. Each configured host runs tmux. Remote windows appear along
 - Host color applied as visual indicator throughout UI
 - Prefix key collision: TBD (different prefix per nesting level, or send-prefix passthrough)
 
-## Carousel
+## UI Structure
+
+```
+┌──────────────────────────────────────────────────┐
+│  ┌─────────────────¹┐ ┌─────────────────²┐       │
+│  │    repo-name     │ │   another-repo   │       │  <- Carousel (always visible)
+│  │  branch-name ●   │ │   feature-xyz    │       │
+│  └──────────────────┘ └──────────────────┘       │
+└──────────────────────────────────────────────────┘
+────────────────────────────────────────────────────
+     ┌──────────────────────────────────────┐
+     │ > search...                          │       <- Middle panel:
+     │ ──────────────────────────────────── │         Typeahead (default)
+     │   repo-name                          │         OR Layout picker
+     │   another-project                    │
+     │   ~/code/foo                         │
+     └──────────────────────────────────────┘
+────────────────────────────────────────────────────
+ type to filter  jk nav  ⏎ select  esc back
+```
+
+### Middle panel modes
+
+- **Typeahead** (default on startup): Search existing screens, directories, repos. Select to switch or create.
+- **Layout picker**: Appears when you select a carousel window and hit Enter. Pick a layout, Enter to apply, Escape to go back to typeahead.
+
+### Carousel
 
 Simplified — no [-] or [+] buttons. Just window boxes.
+- Always visible, navigable with h/l/number keys regardless of middle panel mode
 - Delete via keybind (- or x) with confirmation
 - Create via typeahead
 - Host color accent on remote window borders
+- Enter on a window → switches middle panel to layout picker for that window
 
 ## Layouts
 
