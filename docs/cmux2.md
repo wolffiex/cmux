@@ -11,21 +11,42 @@ Launch drops straight into typeahead. Everything is a destination:
 - Configured directories and their children
 - Remote host screens
 
-## Typeahead
+## Picker
 
-Unified fuzzy finder as the primary interface. Sources:
+Top-level picker shown on startup. Combines all known destinations in one filterable list.
 
-- **Screens**: Running tmux windows (local and remote)
-- **Directories**: Configured jump roots and their immediate children
-- **Worktrees**: Git worktrees for configured repos
-- **Remote screens**: tmux windows on configured remote hosts
+### Sources (in display order)
 
-Flat list, filterable. Selecting a destination switches to it (or creates it).
+1. **Existing screens** — running tmux windows (local and remote), always on top
+2. **Known repos** — repos you've opened before, sorted by selection frequency
+3. **Known hosts** — configured remote hosts, sorted by frequency
+4. **Configured directories** — jump roots and their immediate children, sorted by frequency
 
-Creation flows:
-- Select a directory → opens new screen there (two-pane split default)
-- Select a remote host → ssh + attach to remote tmux
-- Git browser: pick repo → pick branch → create worktree → open screen
+Worktrees are NOT in this list — they're created through the repo → branch drill-down.
+
+### Drill-down flow
+
+```
+Top-level picker
+  → Select a screen       → switch to it (or enter layout mode)
+  → Select a repo          → branch/worktree picker
+  → Select a host          → that host's screens/repos
+  → Select a directory     → open new screen there
+```
+
+### Frequency tracking
+
+Every selection bumps a counter. Picker items are ordered by frequency (most used first), then recency.
+
+```sql
+picker_frequency
+  host TEXT DEFAULT 'local'
+  type TEXT              -- 'screen' | 'repo' | 'host' | 'directory'
+  key TEXT               -- window name, repo path, host name, dir path
+  count INTEGER
+  last_used_at INTEGER
+  PRIMARY KEY (host, type, key)
+```
 
 ## Data Model (SQLite)
 
