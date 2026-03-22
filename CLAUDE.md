@@ -1,6 +1,6 @@
 # cmux
 
-tmux UI wrapper
+tmux UI wrapper — typeahead-first workspace manager.
 
 ## Installation
 
@@ -18,22 +18,24 @@ export PATH="$HOME/.local/bin:$PATH"
 # Outside tmux: starts or attaches to "cmux" session with Alt-Space bound
 cmux
 
-# Inside tmux: runs UI directly
+# Inside tmux: runs UI directly (usually via Alt-Space popup)
 cmux
-
-# Or via tmux popup (80% of terminal)
-tmux display-popup -w 80% -h 80% -E cmux
 ```
 
-When run outside tmux, cmux outputs a shell command that the wrapper script evals. This execs into tmux directly, avoiding intermediate processes and preventing environment variables (like API keys) from leaking to child processes.
+When run outside tmux, cmux outputs a shell command that the wrapper script evals. This execs into tmux directly, avoiding intermediate processes.
 
-## Configuration
+## Features
 
-- `~/.config/cmux/api-key` - Anthropic API key for AI window summaries (0600 perms). Created automatically by `--install` if `ANTHROPIC_API_KEY` is set.
+- **Typeahead picker** — unified fuzzy finder for repos, screens, directories, and commands. Opens on startup. Items sorted by selection frequency.
+- **Window carousel** — horizontal strip showing all tmux windows with repo/branch names. Navigate with h/l, Tab to switch focus.
+- **Layout picker** — cycle through 2-4 pane layouts with slide animation. Enter from carousel to apply.
+- **Quick shell** — run a single command, output copied to clipboard automatically. Full zsh completion and aliases.
+- **Worktree creation** — select a repo, type a branch name, get a new worktree branched from origin/main.
+- **Frequency tracking** — picker items and layout transitions are ranked by how often you use them.
+- **Smart deduplication** — repos that match open screens are shown once; directories that are repos appear only as repos.
 
 ## Environment Variables
 
-- `ANTHROPIC_API_KEY` - Fallback for API key (used during development if config file doesn't exist)
 - `CMUX_DEBUG=1` - Enables debug logging to `/tmp/cmux.log`
 - `CMUX_BENCHMARK=1` - Headless mode for benchmarking (exits after init)
 
@@ -43,15 +45,21 @@ Single binary (`src/main.ts`) using raw ANSI for fast startup (~22ms).
 
 ### Files
 
-- `src/main.ts` - Main UI, key handling, tmux integration
-- `src/layouts.ts` - Fixed layout templates (1-4 panes), `ALL_LAYOUTS` flat list
+- `src/main.ts` - Main UI, key handling, focus management, tmux integration
+- `src/db.ts` - Shared SQLite database (single file, no WAL)
+- `src/typeahead.ts` - Generic typeahead component with fuzzy filtering
+- `src/repo-picker.ts` - Top-level picker (repos, screens, directories, commands)
+- `src/branch-picker.ts` - Branch/worktree picker for a specific repo
+- `src/picker-store.ts` - Selection frequency tracking
+- `src/layout-store.ts` - Layout transition tracking
+- `src/layouts.ts` - Fixed layout templates (2-4 panes), `ALL_LAYOUTS` flat list
 - `src/layout-preview.ts` - ASCII box-drawing preview renderer
 - `src/tmux.ts` - tmux helpers (`getWindows`, `getWindowInfo`)
 - `src/tmux-layout.ts` - Generates tmux layout strings with checksum
-- `src/dir-picker.ts` - Directory picker overlay with typeahead filtering
 - `src/pane-matcher.ts` - Position-based pane matching for layout transitions
 - `src/swap-orchestrator.ts` - Computes and executes pane swap sequences
-- `src/window-naming.ts` - Intelligent window naming from git/directory context
+- `src/repo-store.ts` - Known git repo tracking
+- `src/window-naming.ts` - Window naming from git/directory context
 - `src/utils.ts` - Shared utilities (name truncation, sanitization)
 - `src/box-chars.ts` - Box-drawing character constants
 
@@ -59,49 +67,61 @@ Single binary (`src/main.ts`) using raw ANSI for fast startup (~22ms).
 
 ```
 ┌──────────────────────────────────────────────────┐
-│ ╔═══╗ ┌─────────────────¹┐ ┌─────────────────²┐  │
-│ ║ − ║ │    repo-name     │ │   another-repo   │  │  <- Window carousel
-│ ║   ║ │  branch-name ●   │ │   feature-xyz    │  │     (focus: window)
-│ ╚═══╝ └──────────────────┘ └──────────────────┘  │
+│  ┌─────────────────¹┐ ┌─────────────────²┐       │
+│  │    repo-name     │ │   another-repo   │       │  <- Carousel (always visible)
+│  │  branch-name ●   │ │   feature-xyz    │       │
+│  └──────────────────┘ └──────────────────┘       │
 └──────────────────────────────────────────────────┘
 ────────────────────────────────────────────────────
-            ┌─────────────┬───────┐
-            │      1      │   2   │                    <- Layout preview
-            └─────────────┴───────┘
-               2 panes · 2/10                          <- Layout counter
-────────────────────────────────────────────────────      (focus: layout)
- tab focus  hjkl nav  ⏎ apply
+     ┌──────────────────────────────────────┐
+     │ > search...                          │       <- Middle panel:
+     │ ──────────────────────────────────── │         Typeahead (default)
+     │ ⚡ → shell                           │         OR Layout picker + form
+     │   📦 cmux                            │
+     │   📺 other-screen                    │
+     │   📁 ~/code                          │
+     └──────────────────────────────────────┘
+────────────────────────────────────────────────────
+ type to filter  jk nav  ⏎ select  tab carousel
 ```
 
-The window selector is a **horizontal carousel**, not a dropdown:
-- `[-]` delete button on the left (double-line border when selected)
-- Window boxes showing repo/branch on two lines, with superscript numbers (1-9)
-- `[+]` create button on the right
-- Current window marked with `●`
-- Selected item has bright double-line border, others have dim single-line borders
+### Focus Model
 
-### Key Bindings
+Three focus states, navigable with Tab, up/down, and Escape:
 
-**Window carousel focused:**
-- `h/l` - Move selection left/right in carousel
-- `j` - Move focus down to layout area
-- `Enter` - Select window to switch, or activate [-]/[+] button
-- `1-9` - Quick select window by number
-- `-` - Show delete confirmation for current window
-- `+` or `=` - Open directory picker for new window
+**Typeahead** (default on startup):
+- Type to filter items
+- `j/k` or `Ctrl+N/Ctrl+P` - Navigate items (up at top → carousel)
+- `Enter` - Select item (switch screen, drill into repo, open directory, run command)
+- `Tab` - Switch to carousel
+- `Escape` - Quit
 
-**Layout area focused:**
+**Carousel** (Tab or up from typeahead):
+- `h/l` - Move selection left/right
+- `j` or `Ctrl+N` - Back to typeahead
+- `Enter` - Open layout picker for selected window
+- `1-9` - Quick select window → layout picker
+- `-` or `x` - Delete window (with confirmation)
+- `Alt+h/l` - Reorder windows
+- `Tab` - Back to typeahead
+- `Escape` - Back to typeahead
+
+**Layout + Form** (Enter from carousel):
 - `h/l` - Cycle through layouts (with slide animation)
-- `k` - Move focus up to window carousel
-
-**General:**
-- `Tab` - Switch focus between window carousel and layout area
-- `Enter` - Apply layout and exit (when on layout)
-- `q` or `Escape` - Quit (or cancel delete confirmation)
+- `j/k` - Move between layout picker and rename fields (directory, repo, branch)
+- `Enter` - Apply layout and exit
+- `Escape` - Back to carousel
 
 ### Layout Numbering
 
-Panes are numbered largest-to-smallest by area.
+Panes are numbered largest-to-smallest by area. No single-pane layout — minimum is two-pane split.
+
+### Data Storage
+
+Single SQLite database at `~/.cache/cmux/cmux.sqlite` (no WAL, single-writer). Tables:
+- `repos` - Known git repositories with activity tracking
+- `picker_frequency` - Selection counts per item type, ordered by frequency
+- `transitions` - Layout transition counts for smarter ordering
 
 ## Testing
 
