@@ -1200,15 +1200,13 @@ cmux-accept-line() {
 }
 zle -N accept-line cmux-accept-line
 
-cmux-vi-cmd-mode() {
+cmux-escape() {
   if [[ -z "$BUFFER" ]]; then
     exit
-  else
-    zle vi-cmd-mode
   fi
 }
-zle -N cmux-vi-cmd-mode
-bindkey '\\e' cmux-vi-cmd-mode
+zle -N cmux-escape
+bindkey '\\e' cmux-escape
 `;
           execFileSync("sh", ["-c", `cat > '${tmpDir}/.zshrc' << 'CMUX_EOF'\n${zshrc}\nCMUX_EOF`]);
 
