@@ -1172,16 +1172,23 @@ function handlePickerMode(key: string): boolean {
       return false;
     case "command":
       if (result.command === "shell") {
-        // Restore terminal, then exec into a login shell in the same popup.
-        // Output is tee'd to clipboard — when the shell exits, the popup closes.
-        cleanup();
-        const shell = process.env.SHELL || "/bin/bash";
-        const proc = Bun.spawnSync([shell, "--login"], {
-          stdin: "inherit",
-          stdout: "inherit",
-          stderr: "inherit",
-        });
-        process.exit(proc.exitCode);
+        log("[shell] command selected, starting shell");
+        log("[shell] SHELL=" + (process.env.SHELL || "(unset)"));
+        try {
+          // Restore terminal without exiting
+          cleanup(false);
+          log("[shell] cleanup done, spawning shell");
+          const shell = process.env.SHELL || "/bin/bash";
+          const proc = Bun.spawnSync([shell, "--login"], {
+            stdin: "inherit",
+            stdout: "inherit",
+            stderr: "inherit",
+          });
+          log("[shell] shell exited with code " + proc.exitCode);
+          process.exit(proc.exitCode);
+        } catch (e) {
+          log("[shell] error: " + e);
+        }
       }
       return false;
     case "directory":
@@ -1678,7 +1685,7 @@ function main(): void {
   runUI();
 }
 
-function cleanup() {
+function cleanup(exit: boolean = true) {
   stopPolling();
   process.stdout.write(ansi.showCursor + ansi.exitAltScreen);
   process.stdin.setRawMode(false);
@@ -1688,7 +1695,7 @@ function cleanup() {
   closeLayoutStore();
   closePickerStore();
 
-  process.exit(0);
+  if (exit) process.exit(0);
 }
 
 process.on("SIGINT", cleanup);
