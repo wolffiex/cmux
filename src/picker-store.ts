@@ -4,12 +4,9 @@
  * we bump its count. The picker orders by count DESC, last_used_at DESC.
  */
 
-import { Database } from "bun:sqlite";
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { getDb } from "./db";
 
-export type PickerItemType = "screen" | "repo" | "host" | "directory";
+export type PickerItemType = "screen" | "repo" | "host" | "dir" | "cmd";
 
 export interface PickerFrequency {
   host: string;
@@ -19,40 +16,23 @@ export interface PickerFrequency {
   last_used_at: number;
 }
 
-// ── Database Setup ──────────────────────────────────────────────────────────
+// ── Table Init ──────────────────────────────────────────────────────────────
 
-function getDbPath(): string {
-  const cacheDir = process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
-  const cmuxDir = join(cacheDir, "cmux");
-  if (!existsSync(cmuxDir)) {
-    mkdirSync(cmuxDir, { recursive: true });
-  }
-  return join(cmuxDir, "picker.sqlite");
-}
+let tableReady = false;
 
-let db: Database | null = null;
-
-function getDb(): Database {
-  if (!db) {
-    const dbPath = getDbPath();
-    db = new Database(dbPath, { create: true });
-    chmodSync(dbPath, 0o600);
-
-    db.run("PRAGMA journal_mode = WAL");
-    db.run("PRAGMA wal_checkpoint(TRUNCATE)");
-
-    db.run(`
-      CREATE TABLE IF NOT EXISTS picker_frequency (
-        host TEXT NOT NULL DEFAULT 'local',
-        type TEXT NOT NULL,
-        key TEXT NOT NULL,
-        count INTEGER NOT NULL DEFAULT 1,
-        last_used_at INTEGER NOT NULL,
-        PRIMARY KEY (host, type, key)
-      )
-    `);
-  }
-  return db;
+function ensureTable(): void {
+  if (tableReady) return;
+  getDb().run(`
+    CREATE TABLE IF NOT EXISTS picker_frequency (
+      host TEXT NOT NULL DEFAULT 'local',
+      type TEXT NOT NULL,
+      key TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 1,
+      last_used_at INTEGER NOT NULL,
+      PRIMARY KEY (host, type, key)
+    )
+  `);
+  tableReady = true;
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -65,6 +45,7 @@ export function recordSelection(
   key: string,
   host: string = "local",
 ): void {
+  ensureTable();
   getDb().run(
     `INSERT INTO picker_frequency (host, type, key, count, last_used_at)
      VALUES (?, ?, ?, 1, ?)
@@ -81,6 +62,7 @@ export function getFrequencies(
   type: PickerItemType,
   host: string = "local",
 ): PickerFrequency[] {
+  ensureTable();
   return getDb()
     .query(
       `SELECT host, type, key, count, last_used_at
@@ -98,6 +80,7 @@ export function getFrequencies(
 export function getAllFrequencies(
   host: string = "local",
 ): PickerFrequency[] {
+  ensureTable();
   return getDb()
     .query(
       `SELECT host, type, key, count, last_used_at
@@ -110,21 +93,6 @@ export function getAllFrequencies(
 
 /** Test helper: clear all frequency data. */
 export function _clearAll(): void {
+  ensureTable();
   getDb().run("DELETE FROM picker_frequency");
-}
-
-export function closePickerStore(): void {
-  if (db) {
-    try {
-      db.run("PRAGMA wal_checkpoint(TRUNCATE)");
-    } catch {
-      // Ignore checkpoint errors during shutdown
-    }
-    try {
-      db.close();
-    } catch {
-      // Ignore close errors during shutdown
-    }
-    db = null;
-  }
 }

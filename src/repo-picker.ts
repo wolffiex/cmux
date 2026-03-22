@@ -69,7 +69,7 @@ function formatPath(path: string): string {
 // ── Commands ────────────────────────────────────────────────────────────────
 
 const COMMANDS: TypeaheadItem[] = [
-  { id: "cmd:shell", label: "shell", hint: "quick command → clipboard", icon: "⚡" },
+  { id: "shell", type: "cmd", label: "shell", hint: "quick command → clipboard", icon: "⚡" },
 ];
 
 /**
@@ -77,7 +77,8 @@ const COMMANDS: TypeaheadItem[] = [
  */
 function screensToItems(windows: TmuxWindow[]): TypeaheadItem[] {
   return windows.map((win) => ({
-    id: `screen:${win.index}`,
+    id: String(win.index),
+    type: "screen",
     label: win.name,
     hint: win.active ? "●" : undefined,
     icon: "📺",
@@ -89,7 +90,8 @@ function screensToItems(windows: TmuxWindow[]): TypeaheadItem[] {
  */
 function reposToItems(repos: RepoInfo[]): TypeaheadItem[] {
   return repos.map((repo) => ({
-    id: `repo:${repo.path}`,
+    id: repo.path,
+    type: "repo",
     label: repo.name,
     hint: repo.path.replace(/^\/home\/[^/]+\//, "~/"),
     icon: "📦",
@@ -101,7 +103,8 @@ function reposToItems(repos: RepoInfo[]): TypeaheadItem[] {
  */
 function dirsToItems(dirs: string[]): TypeaheadItem[] {
   return dirs.map((path) => ({
-    id: `dir:${path}`,
+    id: path,
+    type: "dir",
     label: formatPath(path),
     icon: "📁",
   }));
@@ -112,28 +115,19 @@ function dirsToItems(dirs: string[]): TypeaheadItem[] {
  * Items not in the frequency table keep their original order but come after
  * items that have frequency data.
  */
-// Map picker store types to item id prefixes
-const TYPE_TO_PREFIX: Record<string, string> = {
-  screen: "screen:",
-  repo: "repo:",
-  directory: "dir:",
-  host: "host:",
-};
-
 function sortByFrequency(
   items: TypeaheadItem[],
   frequencies: PickerFrequency[],
 ): TypeaheadItem[] {
-  // Build a lookup: item_id -> count
+  // Build a lookup: "type:key" -> count
   const freqMap = new Map<string, number>();
   for (const f of frequencies) {
-    const prefix = TYPE_TO_PREFIX[f.type] ?? `${f.type}:`;
-    freqMap.set(`${prefix}${f.key}`, f.count);
+    freqMap.set(`${f.type}:${f.key}`, f.count);
   }
 
   return [...items].sort((a, b) => {
-    const freqA = freqMap.get(a.id) ?? 0;
-    const freqB = freqMap.get(b.id) ?? 0;
+    const freqA = freqMap.get(`${a.type}:${a.id}`) ?? 0;
+    const freqB = freqMap.get(`${b.type}:${b.id}`) ?? 0;
     return freqB - freqA; // Higher frequency first
   });
 }
@@ -255,11 +249,13 @@ function updateItemsForFilter(
 function getTitleForSelection(typeahead: TypeaheadState): string {
   const selected = typeahead.filtered[typeahead.selectedIndex];
   if (!selected) return "select";
-  if (selected.id.startsWith("cmd:")) return "command";
-  if (selected.id.startsWith("screen:")) return "screen";
-  if (selected.id.startsWith("repo:")) return "repo";
-  if (selected.id.startsWith("dir:")) return "directory";
-  return "select";
+  switch (selected.type) {
+    case "cmd": return "command";
+    case "screen": return "screen";
+    case "repo": return "repo";
+    case "dir": return "directory";
+    default: return "select";
+  }
 }
 
 /**
@@ -307,40 +303,38 @@ export function handleRepoPickerKey(
       return { action: "cancel" };
 
     case "select": {
-      const itemId = result.item.id;
+      const item = result.item;
 
-      if (itemId.startsWith("cmd:")) {
-        const command = itemId.slice(4);
-        return { action: "command", command };
-      }
+      switch (item.type) {
+        case "cmd":
+          return { action: "command", command: item.id };
 
-      if (itemId.startsWith("screen:")) {
-        const windowIndex = parseInt(itemId.slice(7), 10);
-        const win = state.windows.find((w) => w.index === windowIndex);
-        if (win) {
-          recordSelection("screen", win.name);
-          return { action: "screen", window: win };
+        case "screen": {
+          const windowIndex = parseInt(item.id, 10);
+          const win = state.windows.find((w) => w.index === windowIndex);
+          if (win) {
+            recordSelection("screen", win.name);
+            return { action: "screen", window: win };
+          }
+          return { action: "cancel" };
         }
-        return { action: "cancel" };
-      }
 
-      if (itemId.startsWith("repo:")) {
-        const repoPath = itemId.slice(5);
-        const repo = state.repos.find((r) => r.path === repoPath);
-        if (repo) {
-          recordSelection("repo", repo.path);
-          return { action: "select", repo };
+        case "repo": {
+          const repo = state.repos.find((r) => r.path === item.id);
+          if (repo) {
+            recordSelection("repo", repo.path);
+            return { action: "select", repo };
+          }
+          return { action: "cancel" };
         }
-        return { action: "cancel" };
-      }
 
-      if (itemId.startsWith("dir:")) {
-        const path = itemId.slice(4);
-        recordSelection("directory", path);
-        return { action: "directory", path };
-      }
+        case "dir":
+          recordSelection("dir", item.id);
+          return { action: "directory", path: item.id };
 
-      return { action: "cancel" };
+        default:
+          return { action: "cancel" };
+      }
     }
 
     case "create": {

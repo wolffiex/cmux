@@ -3,11 +3,9 @@
  * Repos are collected automatically as windows are opened.
  */
 
-import { Database } from "bun:sqlite";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { getDb } from "./db";
 import { getLastActivity, resolveRepoPath } from "./git-utils";
 
 // Re-export git utilities for external consumers
@@ -19,65 +17,44 @@ export interface RepoInfo {
   lastSeen: number; // timestamp when we last saw this repo
 }
 
-// ── Database Setup ──────────────────────────────────────────────────────────
+// ── Table Init ──────────────────────────────────────────────────────────────
 
-function getDbPath(): string {
-  const cacheDir = process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
-  const cmuxDir = join(cacheDir, "cmux");
-  if (!existsSync(cmuxDir)) {
-    mkdirSync(cmuxDir, { recursive: true });
-  }
-  return join(cmuxDir, "repos.sqlite");
-}
+let tableReady = false;
 
-let db: Database | null = null;
+function ensureTable(): void {
+  if (tableReady) return;
+  const db = getDb();
 
-function getDb(): Database {
-  if (!db) {
-    const dbPath = getDbPath();
-    db = new Database(dbPath, { create: true });
-    chmodSync(dbPath, 0o600);
+  // Check schema - blow away if it doesn't match expected base columns
+  const tableInfo = db.query("PRAGMA table_info(repos)").all() as {
+    name: string;
+  }[];
+  const columns = new Set(tableInfo.map((col) => col.name));
+  const requiredColumns = ["path", "name", "last_seen"];
+  const hasRequiredColumns = requiredColumns.every((col) => columns.has(col));
 
-    db.run("PRAGMA journal_mode = WAL");
-
-    // Checkpoint any existing WAL bloat from previous runs that exited
-    // without closing the DB. TRUNCATE resets the WAL file to zero size.
-    db.run("PRAGMA wal_checkpoint(TRUNCATE)");
-
-    // Check schema - blow away if it doesn't match expected base columns
-    const tableInfo = db.query("PRAGMA table_info(repos)").all() as {
-      name: string;
-    }[];
-    const columns = new Set(tableInfo.map((col) => col.name));
-    const requiredColumns = ["path", "name", "last_seen"];
-    const hasRequiredColumns = requiredColumns.every((col) =>
-      columns.has(col),
-    );
-
-    if (!hasRequiredColumns) {
-      db.run("DROP TABLE IF EXISTS repos");
-      db.run(`
-        CREATE TABLE repos (
-          path TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          last_seen INTEGER NOT NULL,
-          last_activity INTEGER,
-          last_activity_checked INTEGER
-        )
-      `);
-    } else {
-      // Migrate: add last_activity columns if missing
-      if (!columns.has("last_activity")) {
-        db.run("ALTER TABLE repos ADD COLUMN last_activity INTEGER");
-      }
-      if (!columns.has("last_activity_checked")) {
-        db.run(
-          "ALTER TABLE repos ADD COLUMN last_activity_checked INTEGER",
-        );
-      }
+  if (!hasRequiredColumns) {
+    db.run("DROP TABLE IF EXISTS repos");
+    db.run(`
+      CREATE TABLE IF NOT EXISTS repos (
+        path TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        last_seen INTEGER NOT NULL,
+        last_activity INTEGER,
+        last_activity_checked INTEGER
+      )
+    `);
+  } else {
+    // Migrate: add last_activity columns if missing
+    if (!columns.has("last_activity")) {
+      db.run("ALTER TABLE repos ADD COLUMN last_activity INTEGER");
+    }
+    if (!columns.has("last_activity_checked")) {
+      db.run("ALTER TABLE repos ADD COLUMN last_activity_checked INTEGER");
     }
   }
-  return db;
+
+  tableReady = true;
 }
 
 // ── Store Operations ────────────────────────────────────────────────────────
@@ -96,6 +73,7 @@ export function trackRepo(path: string): RepoInfo | null {
   const name = repoPath.split("/").pop() || "repo";
   const now = Date.now();
 
+  ensureTable();
   const database = getDb();
 
   // Check if we already have a recent entry - skip write if so
@@ -129,6 +107,7 @@ const ACTIVITY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  * Persists the activity cache in SQLite so it survives across cmux invocations.
  */
 function getCachedActivity(path: string): number {
+  ensureTable();
   const database = getDb();
   const now = Date.now();
 
@@ -165,6 +144,7 @@ function getCachedActivity(path: string): number {
  * Filters out repos whose paths no longer exist.
  */
 export function getKnownRepos(): RepoInfo[] {
+  ensureTable();
   const database = getDb();
   const rows = database
     .query("SELECT path, name, last_seen FROM repos")
@@ -223,25 +203,5 @@ export function collectReposFromWindows(): void {
     }
   } catch {
     // Ignore errors
-  }
-}
-
-/**
- * Close the repo store database connection.
- * Runs WAL checkpoint to compact the WAL file before closing.
- */
-export function closeRepoStore(): void {
-  if (db) {
-    try {
-      db.run("PRAGMA wal_checkpoint(TRUNCATE)");
-    } catch {
-      // Ignore checkpoint errors during shutdown
-    }
-    try {
-      db.close();
-    } catch {
-      // Ignore close errors during shutdown
-    }
-    db = null;
   }
 }

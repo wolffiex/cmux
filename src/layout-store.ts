@@ -5,43 +5,23 @@
  * destination is shown first.
  */
 
-import { Database } from "bun:sqlite";
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { getDb } from "./db";
 
-// ── Database Setup ──────────────────────────────────────────────────────────
+// ── Table Init ──────────────────────────────────────────────────────────────
 
-function getDbPath(): string {
-  const cacheDir = process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
-  const cmuxDir = join(cacheDir, "cmux");
-  if (!existsSync(cmuxDir)) {
-    mkdirSync(cmuxDir, { recursive: true });
-  }
-  return join(cmuxDir, "layout-transitions.sqlite");
-}
+let tableReady = false;
 
-let db: Database | null = null;
-
-function getDb(): Database {
-  if (!db) {
-    const dbPath = getDbPath();
-    db = new Database(dbPath, { create: true });
-    chmodSync(dbPath, 0o600);
-
-    db.run("PRAGMA journal_mode = WAL");
-    db.run("PRAGMA wal_checkpoint(TRUNCATE)");
-
-    db.run(`
-      CREATE TABLE IF NOT EXISTS transitions (
-        from_layout TEXT NOT NULL,
-        to_layout TEXT NOT NULL,
-        count INTEGER NOT NULL DEFAULT 1,
-        PRIMARY KEY (from_layout, to_layout)
-      )
-    `);
-  }
-  return db;
+function ensureTable(): void {
+  if (tableReady) return;
+  getDb().run(`
+    CREATE TABLE IF NOT EXISTS transitions (
+      from_layout TEXT NOT NULL,
+      to_layout TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (from_layout, to_layout)
+    )
+  `);
+  tableReady = true;
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -54,6 +34,7 @@ export function recordTransition(
   toLayout: string,
 ): void {
   if (fromLayout === toLayout) return;
+  ensureTable();
   getDb().run(
     `INSERT INTO transitions (from_layout, to_layout, count)
      VALUES (?, ?, 1)
@@ -71,6 +52,7 @@ export function recordTransition(
 export function getRankedTransitions(
   fromLayout: string,
 ): { name: string; count: number }[] {
+  ensureTable();
   return getDb()
     .query(
       `SELECT to_layout as name, count
@@ -79,20 +61,4 @@ export function getRankedTransitions(
        ORDER BY count DESC`,
     )
     .all(fromLayout) as { name: string; count: number }[];
-}
-
-export function closeLayoutStore(): void {
-  if (db) {
-    try {
-      db.run("PRAGMA wal_checkpoint(TRUNCATE)");
-    } catch {
-      // Ignore checkpoint errors during shutdown
-    }
-    try {
-      db.close();
-    } catch {
-      // Ignore close errors during shutdown
-    }
-    db = null;
-  }
 }

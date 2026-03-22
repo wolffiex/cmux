@@ -161,9 +161,11 @@ function getTitleForSelection(
   if (confirmingDelete) return "Delete? [⏎/esc]";
   const selected = typeahead.filtered[typeahead.selectedIndex];
   if (!selected) return "branch";
-  if (selected.id.startsWith("worktree:")) return "worktree";
-  if (selected.id.startsWith("branch:")) return "branch";
-  return "branch";
+  switch (selected.type) {
+    case "worktree": return "worktree";
+    case "branch": return "branch";
+    default: return "branch";
+  }
 }
 
 /**
@@ -197,7 +199,8 @@ export function initBranchPicker(
   // Add worktrees first (they're ready to use)
   for (const wt of worktrees) {
     items.push({
-      id: `worktree:${wt.path}`,
+      id: wt.path,
+      type: "worktree",
       label: wt.branch,
       hint: formatPath(wt.path),
       icon: "📂",
@@ -208,7 +211,8 @@ export function initBranchPicker(
   // Add branches without worktrees
   for (const branch of branches) {
     items.push({
-      id: `branch:${branch}`,
+      id: branch,
+      type: "branch",
       label: branch,
       icon: "🌿",
     });
@@ -239,9 +243,8 @@ function canDeleteSelected(state: BranchPickerState): boolean {
   if (!selected) return false;
 
   // Can't delete main worktree
-  if (selected.id.startsWith("worktree:")) {
-    const path = selected.id.slice(9);
-    const worktree = state.worktrees.find((w) => w.path === path);
+  if (selected.type === "worktree") {
+    const worktree = state.worktrees.find((w) => w.path === selected.id);
     if (worktree?.isMain) return false;
   }
 
@@ -261,13 +264,11 @@ export function handleBranchPickerKey(
       // Confirm delete
       const selected = getSelectedItem(state);
       if (selected) {
-        if (selected.id.startsWith("worktree:")) {
-          const path = selected.id.slice(9);
-          return { action: "delete", type: "worktree", path };
+        if (selected.type === "worktree") {
+          return { action: "delete", type: "worktree", path: selected.id };
         }
-        if (selected.id.startsWith("branch:")) {
-          const branch = selected.id.slice(7);
-          return { action: "delete", type: "branch", branch };
+        if (selected.type === "branch") {
+          return { action: "delete", type: "branch", branch: selected.id };
         }
       }
       const newTypeahead = withDynamicTitle(state.typeahead, false);
@@ -319,23 +320,23 @@ export function handleBranchPickerKey(
       return { action: "cancel" };
 
     case "select": {
-      const itemId = result.item.id;
+      const item = result.item;
 
-      if (itemId.startsWith("worktree:")) {
-        const path = itemId.slice(9);
-        return { action: "select", path };
+      switch (item.type) {
+        case "worktree":
+          return { action: "select", path: item.id };
+
+        case "branch": {
+          // Create worktree for this existing branch
+          const mainPath = getMainWorktreePath(state.repoPath);
+          const parentDir = dirname(mainPath);
+          const worktreePath = join(parentDir, `${state.repoName}-${item.id}`);
+          return { action: "create", branch: item.id, path: worktreePath };
+        }
+
+        default:
+          return { action: "cancel" };
       }
-
-      if (itemId.startsWith("branch:")) {
-        const branch = itemId.slice(7);
-        // Create worktree for this existing branch
-        const mainPath = getMainWorktreePath(state.repoPath);
-        const parentDir = dirname(mainPath);
-        const worktreePath = join(parentDir, `${state.repoName}-${branch}`);
-        return { action: "create", branch, path: worktreePath };
-      }
-
-      return { action: "cancel" };
     }
 
     case "create": {

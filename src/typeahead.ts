@@ -9,6 +9,7 @@ import { box } from "./box-chars";
 
 export interface TypeaheadItem {
   id: string; // unique identifier (used for selection)
+  type?: string; // item category (e.g., "screen", "repo", "dir", "cmd")
   label: string; // display text (used for filtering)
   hint?: string; // secondary text shown dimmed (e.g., branch name)
   marker?: string; // indicator shown after label (e.g., "·" for existing)
