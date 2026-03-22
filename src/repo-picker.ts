@@ -73,7 +73,7 @@ function screensToItems(windows: TmuxWindow[]): TypeaheadItem[] {
     id: `screen:${win.index}`,
     label: win.name,
     hint: win.active ? "●" : undefined,
-    icon: "🖥",
+    icon: "📺",
   }));
 }
 
