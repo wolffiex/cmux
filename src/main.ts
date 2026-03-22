@@ -1203,20 +1203,34 @@ function handlePickerMode(key: string): boolean {
           });
 
           // After zsh exits, capture pane and copy everything after the marker
+          let copied = false;
           try {
             const pane = execFileSync("tmux", ["capture-pane", "-p", "-S", "-200"])
               .toString();
             const markerIdx = pane.lastIndexOf(marker);
             if (markerIdx >= 0) {
-              // Take everything after the marker line, trim trailing blank lines
               const afterMarker = pane.slice(markerIdx + marker.length + 1).trimEnd();
               if (afterMarker) {
                 execFileSync("sh", ["-c", `printf '%s' "$1" | pbcopy`, "sh", afterMarker]);
+                copied = true;
               }
             }
           } catch {
             // Ignore capture errors
           }
+
+          // Show status and wait for any keypress before closing
+          const msg = copied
+            ? "\x1b[2m(copied to clipboard — press any key)\x1b[0m"
+            : "\x1b[2m(press any key to close)\x1b[0m";
+          process.stdout.write(`\n${msg}`);
+          process.stdin.setRawMode(true);
+          process.stdin.resume();
+          // Read one byte then exit
+          const buf = Buffer.alloc(1);
+          const fd = require("fs").openSync("/dev/tty", "r");
+          require("fs").readSync(fd, buf, 0, 1, null);
+          require("fs").closeSync(fd);
 
           // Clean up temp dir
           try { execFileSync("rm", ["-rf", tmpDir]); } catch { /* ignore */ }
