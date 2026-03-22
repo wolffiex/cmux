@@ -1,10 +1,16 @@
 /**
- * Repo picker - typeahead showing repos first, then directories.
+ * Picker - typeahead showing screens, repos, and directories.
  * Uses resumable filter for progressive directory search.
+ * Items are ordered by selection frequency (most used first).
  */
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  getAllFrequencies,
+  recordSelection,
+  type PickerFrequency,
+} from "./picker-store";
 import { getKnownRepos, isGitRepo, type RepoInfo } from "./repo-store";
 import {
   createFilter,
@@ -13,6 +19,7 @@ import {
   type ResumableFilter,
   updateFilter,
 } from "./resumable-filter";
+import type { TmuxWindow } from "./tmux";
 import {
   handleTypeaheadKey,
   initTypeahead,
@@ -26,6 +33,7 @@ import {
 export interface RepoPickerState {
   typeahead: TypeaheadState;
   repos: RepoInfo[];
+  windows: TmuxWindow[];
   dirFilter: ResumableFilter;
 }
 
@@ -33,7 +41,8 @@ export type RepoPickerResult =
   | { action: "continue"; state: RepoPickerState }
   | { action: "cancel" }
   | { action: "select"; repo: RepoInfo }
-  | { action: "directory"; path: string };
+  | { action: "directory"; path: string }
+  | { action: "screen"; window: TmuxWindow };
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -54,6 +63,18 @@ function formatPath(path: string): string {
     return "~";
   }
   return path;
+}
+
+/**
+ * Convert screens (tmux windows) to typeahead items.
+ */
+function screensToItems(windows: TmuxWindow[]): TypeaheadItem[] {
+  return windows.map((win) => ({
+    id: `screen:${win.index}`,
+    label: win.name,
+    hint: win.active ? "●" : undefined,
+    icon: "🖥",
+  }));
 }
 
 /**
@@ -80,9 +101,42 @@ function dirsToItems(dirs: string[]): TypeaheadItem[] {
 }
 
 /**
- * Build combined items list from repos and directories.
+ * Sort items by picker frequency. Items with higher frequency come first.
+ * Items not in the frequency table keep their original order but come after
+ * items that have frequency data.
+ */
+// Map picker store types to item id prefixes
+const TYPE_TO_PREFIX: Record<string, string> = {
+  screen: "screen:",
+  repo: "repo:",
+  directory: "dir:",
+  host: "host:",
+};
+
+function sortByFrequency(
+  items: TypeaheadItem[],
+  frequencies: PickerFrequency[],
+): TypeaheadItem[] {
+  // Build a lookup: item_id -> count
+  const freqMap = new Map<string, number>();
+  for (const f of frequencies) {
+    const prefix = TYPE_TO_PREFIX[f.type] ?? `${f.type}:`;
+    freqMap.set(`${prefix}${f.key}`, f.count);
+  }
+
+  return [...items].sort((a, b) => {
+    const freqA = freqMap.get(a.id) ?? 0;
+    const freqB = freqMap.get(b.id) ?? 0;
+    return freqB - freqA; // Higher frequency first
+  });
+}
+
+/**
+ * Build combined items list from screens, repos, and directories.
+ * Screens always come first, then repos and dirs sorted by frequency.
  */
 function buildItems(
+  windows: TmuxWindow[],
   repos: RepoInfo[],
   dirs: string[],
   filter: string,
@@ -94,10 +148,19 @@ function buildItems(
       )
     : repos;
 
+  const screenItems = screensToItems(windows);
   const repoItems = reposToItems(filteredRepos);
   const dirItems = dirsToItems(dirs);
 
-  return [...repoItems, ...dirItems];
+  // Get frequency data and sort repos + dirs by it
+  const frequencies = getAllFrequencies();
+  const sortedRepoDirItems = sortByFrequency(
+    [...repoItems, ...dirItems],
+    frequencies,
+  );
+
+  // Screens always first, then frequency-sorted repos/dirs
+  return [...screenItems, ...sortedRepoDirItems];
 }
 
 // ── State Management ─────────────────────────────────────────────────────────
@@ -105,7 +168,7 @@ function buildItems(
 /**
  * Initialize repo picker state.
  */
-export function initRepoPicker(): RepoPickerState {
+export function initRepoPicker(windows: TmuxWindow[] = []): RepoPickerState {
   const repos = getKnownRepos();
   const home = process.env.HOME || "/home";
 
@@ -121,12 +184,13 @@ export function initRepoPicker(): RepoPickerState {
 
   // Build initial items
   const dirs = getResults(dirFilter);
-  const items = buildItems(repos, dirs, "");
+  const items = buildItems(windows, repos, dirs, "");
 
   const typeahead = initTypeahead(items);
   return {
     typeahead: withDynamicTitle(typeahead),
     repos,
+    windows,
     dirFilter,
   };
 }
@@ -147,7 +211,7 @@ function updateItemsForFilter(
   const dirs = getResults(newDirFilter);
 
   // Build new items
-  const items = buildItems(state.repos, dirs, filter);
+  const items = buildItems(state.windows, state.repos, dirs, filter);
 
   // Update typeahead with new items (preserving input and selection where possible)
   const newTypeahead: TypeaheadState = {
@@ -170,6 +234,7 @@ function updateItemsForFilter(
 function getTitleForSelection(typeahead: TypeaheadState): string {
   const selected = typeahead.filtered[typeahead.selectedIndex];
   if (!selected) return "select";
+  if (selected.id.startsWith("screen:")) return "screen";
   if (selected.id.startsWith("repo:")) return "repo";
   if (selected.id.startsWith("dir:")) return "directory";
   return "select";
@@ -222,18 +287,29 @@ export function handleRepoPickerKey(
     case "select": {
       const itemId = result.item.id;
 
-      // Check if it's a repo or directory based on id prefix
+      if (itemId.startsWith("screen:")) {
+        const windowIndex = parseInt(itemId.slice(7), 10);
+        const win = state.windows.find((w) => w.index === windowIndex);
+        if (win) {
+          recordSelection("screen", win.name);
+          return { action: "screen", window: win };
+        }
+        return { action: "cancel" };
+      }
+
       if (itemId.startsWith("repo:")) {
-        const repoPath = itemId.slice(5); // Remove "repo:" prefix
+        const repoPath = itemId.slice(5);
         const repo = state.repos.find((r) => r.path === repoPath);
         if (repo) {
+          recordSelection("repo", repo.path);
           return { action: "select", repo };
         }
         return { action: "cancel" };
       }
 
       if (itemId.startsWith("dir:")) {
-        const path = itemId.slice(4); // Remove "dir:" prefix
+        const path = itemId.slice(4);
+        recordSelection("directory", path);
         return { action: "directory", path };
       }
 

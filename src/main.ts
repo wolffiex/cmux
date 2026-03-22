@@ -11,6 +11,7 @@ import {
 } from "./branch-picker";
 import { renderLayoutPreview } from "./layout-preview";
 import { closeLayoutStore, recordTransition } from "./layout-store";
+import { closePickerStore } from "./picker-store";
 import { ALL_LAYOUTS, type LayoutTemplate, resolveLayout } from "./layouts";
 import { initLog, log } from "./logger";
 import { matchPanesToSlots, type Pane, type Slot } from "./pane-matcher";
@@ -167,7 +168,7 @@ function initState(): State {
     // Delete confirmation state
     confirmingDelete: false,
     // Repo picker state (starts active)
-    picker: initRepoPicker(),
+    picker: initRepoPicker(windows),
     // Branch picker state
     branchPicker: null,
   };
@@ -1005,7 +1006,7 @@ function handleKey(key: string): boolean {
 
 function handlePickerMode(key: string): boolean {
   if (!state.picker) {
-    state.picker = initRepoPicker();
+    state.picker = initRepoPicker(state?.windows ?? []);
     return true;
   }
 
@@ -1024,6 +1025,18 @@ function handlePickerMode(key: string): boolean {
       state.branchPicker = initBranchPicker(result.repo.path);
       state.mode = "branchPicker";
       break;
+    case "screen":
+      // Switch to selected screen
+      try {
+        execFileSync("tmux", [
+          "select-window",
+          "-t",
+          `:${result.window.index}`,
+        ]);
+      } catch {
+        // Ignore errors
+      }
+      return false;
     case "directory":
       // Create new window at this directory
       state.picker = null;
@@ -1147,7 +1160,7 @@ function handleLayoutMode(key: string): boolean {
       return false;
     case "\x1b": // Escape - back to picker
       state.mode = "picker";
-      if (!state.picker) state.picker = initRepoPicker();
+      if (!state.picker) state.picker = initRepoPicker(state?.windows ?? []);
       break;
   }
   return true;
@@ -1556,6 +1569,7 @@ function cleanup() {
   // Close database connections and checkpoint WAL before exiting
   closeRepoStore();
   closeLayoutStore();
+  closePickerStore();
 
   process.exit(0);
 }
