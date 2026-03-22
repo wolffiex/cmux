@@ -108,6 +108,11 @@ export function getAllFrequencies(
     .all(host) as PickerFrequency[];
 }
 
+/** Test helper: clear all frequency data. */
+export function _clearAll(): void {
+  getDb().run("DELETE FROM picker_frequency");
+}
+
 export function closePickerStore(): void {
   if (db) {
     try {
