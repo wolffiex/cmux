@@ -1057,11 +1057,24 @@ function handleCarouselFocus(key: string): boolean {
         removeCurrentWindow();
         return false;
       }
-      // Enter on carousel → layout mode
-      state.focus = "layout";
-      state.layoutField = "picker";
-      updateLayoutForSelectedWindow();
-      return true;
+      if (state.carouselIndex === state.currentWindowIndex) {
+        // Enter on current window → layout picker
+        state.focus = "layout";
+        state.layoutField = "picker";
+        updateLayoutForSelectedWindow();
+        return true;
+      } else {
+        // Enter on different window → switch to it and exit
+        const selectedWindow = state.windows[state.carouselIndex];
+        if (selectedWindow) {
+          try {
+            execFileSync("tmux", [
+              "select-window", "-t", `:${selectedWindow.index}`,
+            ]);
+          } catch { /* ignore */ }
+        }
+        return false;
+      }
     case "\x1b": // Escape
       if (state.confirmingDelete) {
         state.confirmingDelete = false;
@@ -1100,10 +1113,20 @@ function handleCarouselFocus(key: string): boolean {
     case "6": case "7": case "8": case "9": {
       const windowIndex = parseInt(key, 10) - 1;
       if (windowIndex < state.windows.length) {
-        state.carouselIndex = windowIndex;
-        state.focus = "layout";
-        state.layoutField = "picker";
-        updateLayoutForSelectedWindow();
+        if (windowIndex === state.currentWindowIndex) {
+          // Number key on current window → layout picker
+          state.carouselIndex = windowIndex;
+          state.focus = "layout";
+          state.layoutField = "picker";
+          updateLayoutForSelectedWindow();
+        } else {
+          // Number key on different window → switch and exit
+          const win = state.windows[windowIndex];
+          try {
+            execFileSync("tmux", ["select-window", "-t", `:${win.index}`]);
+          } catch { /* ignore */ }
+          return false;
+        }
       }
       return true;
     }
