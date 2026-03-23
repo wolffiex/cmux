@@ -8,6 +8,8 @@
   },
   "scripts": {
     "start": "bun src/main.ts",
+    "build": "bun build src/main.ts --target=bun --outfile dist/cmux.js",
+    "install": "bun run build && bun dist/cmux.js --install",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src test && oxlint src test",
