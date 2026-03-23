@@ -103,8 +103,6 @@ const profile = BENCHMARK_MODE
 function initState(): State {
   let windows: TmuxWindow[] = [];
   let currentWindowIndex = 0;
-  let layoutIndex = 0;
-
   try {
     // Single batched tmux command for startup (combines renumber + list-windows + list-panes)
     let startupInfo!: ReturnType<typeof getStartupInfo>;
@@ -114,15 +112,6 @@ function initState(): State {
     windows = startupInfo.windows;
     currentWindowIndex = windows.findIndex((w) => w.active);
     if (currentWindowIndex < 0) currentWindowIndex = 0;
-
-    // Find best matching layout for current window (uses pane info from startup query)
-    profile("findBestMatchingLayout", () => {
-      layoutIndex = findBestMatchingLayout(
-        startupInfo.currentWindowInfo.width,
-        startupInfo.currentWindowInfo.height,
-        startupInfo.currentWindowInfo.panes,
-      );
-    });
   } catch (_e) {
     // Not in tmux - use dummy data for testing
     windows = [
@@ -156,7 +145,7 @@ function initState(): State {
   return {
     windows,
     currentWindowIndex,
-    layoutIndex,
+    layoutIndex: 0,
     carouselIndex: currentWindowIndex, // Start on current window
     focus: "typeahead",
     typeaheadMode: "picker",
@@ -165,7 +154,7 @@ function initState(): State {
     animating: false,
     animationDirection: null,
     animationFrame: 0,
-    previousLayoutIndex: layoutIndex,
+    previousLayoutIndex: 0,
     // Window swap animation state
     windowSwapAnimating: false,
     windowSwapDirection: null,
@@ -174,8 +163,8 @@ function initState(): State {
     windowSwapToIndex: -1,
     // Delete confirmation state
     confirmingDelete: false,
-    // Repo picker state (starts active)
-    picker: initRepoPicker(windows),
+    // Repo picker state (deferred — initialized after first render for faster startup)
+    picker: null,
     // Branch picker state
     branchPicker: null,
   };
@@ -1666,6 +1655,10 @@ function runUI(): void {
     console.error(`total: ${(performance.now() - _startTime).toFixed(1)}ms`);
     process.exit(0);
   }
+
+  // Initialize picker after first render (deferred for faster startup)
+  state.picker = initRepoPicker(state.windows);
+  render();
 
   startPolling();
 

@@ -197,6 +197,7 @@ export function initRepoPicker(windows: TmuxWindow[] = []): RepoPickerState {
     "",
   );
 
+
   // Build initial items
   const dirs = getResults(dirFilter);
   const items = buildItems(windows, repos, dirs, "");
