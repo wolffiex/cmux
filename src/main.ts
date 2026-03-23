@@ -1,7 +1,7 @@
 const _startTime = performance.now();
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { box } from "./box-chars";
 import {
@@ -30,6 +30,7 @@ import {
   getWindowInfo,
   getWindowInfoForWindow,
   getWindows,
+  STARTUP_COMMAND,
   type TmuxWindow,
 } from "./tmux";
 import { generateLayoutString } from "./tmux-layout";
@@ -104,9 +105,23 @@ function initState(): State {
   let windows: TmuxWindow[] = [];
   let currentWindowIndex = 0;
   try {
-    // Use pre-spawned tmux process if available (raced with module loading)
+    // Read prefetched tmux data from process substitution fd, or fall back to spawning
     let startupInfo!: ReturnType<typeof getStartupInfo>;
     profile("getStartupInfo", () => {
+      const prefetchPath = process.argv.find(
+        (a) => a.startsWith("/dev/fd/") || a.startsWith("/proc/"),
+      );
+      if (prefetchPath) {
+        try {
+          const text = readFileSync(prefetchPath, "utf-8").trim();
+          if (text) {
+            startupInfo = getStartupInfo(text);
+            return;
+          }
+        } catch {
+          // Fall through to synchronous spawn
+        }
+      }
       startupInfo = getStartupInfo();
     });
     windows = startupInfo.windows;
@@ -1572,16 +1587,16 @@ function outputTmuxCommand(): void {
     return;
   }
 
-  // Build popup command (API key read from config file, not passed here)
-  const popupCmd = `bun ${SELF_PATH}`;
+  // Build popup command with process substitution for prefetched tmux data
+  const popupCmd = `bun ${SELF_PATH} <(${STARTUP_COMMAND})`;
 
   // Escape single quotes in paths for shell safety
   const safeConfigPath = CONFIG_PATH.replace(/'/g, "'\\''");
-  const safePopupCmd = popupCmd.replace(/'/g, "'\\''");
 
+  // Popup needs bash for process substitution (<(...))
   console.log(
     `exec tmux -f '${safeConfigPath}' new-session -s ${SESSION_NAME} \\; ` +
-      `bind -n M-Space display-popup -w 80% -h 80% -E '${safePopupCmd}'`,
+      `bind -n M-Space display-popup -w 80% -h 80% -E 'bash -c "'"${popupCmd}"'"'`,
   );
 }
 
@@ -1604,9 +1619,9 @@ function install(): void {
     console.log(`created ${binDir}`);
   }
 
-  // Write the wrapper script
+  // Write the wrapper script (process substitution prefetches tmux data in parallel with bun startup)
   const script = `#!/bin/bash
-eval "$(bun ${SELF_PATH})"
+eval "$(bun ${SELF_PATH} <(${STARTUP_COMMAND}))"
 `;
 
   writeFileSync(scriptPath, script);

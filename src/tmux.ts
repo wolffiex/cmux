@@ -141,26 +141,35 @@ export function parseStartupInfo(output: string): StartupInfo {
   };
 }
 
+const WINDOW_FORMAT =
+  "#{window_index}|#{window_name}|#{window_active}|#{window_bell_flag}|#{window_activity_flag}|#{pane_current_command}";
+const PANE_FORMAT =
+  "#{window_width}|#{window_height}|#{pane_id}|#{pane_width}|#{pane_height}|#{pane_left}|#{pane_top}|#{pane_title}";
+
+/**
+ * Shell command that produces startup info output.
+ * Used by the wrapper script and popup binding for process substitution prefetch.
+ */
+export const STARTUP_COMMAND =
+  `tmux move-window -r \\; ` +
+  `list-windows -F '${WINDOW_FORMAT}' \\; ` +
+  `display-message -p SECTION_SEP \\; ` +
+  `list-panes -F '${PANE_FORMAT}'`;
+
 /**
  * Get all startup info in a single tmux command.
- * Combines: move-window -r, list-windows, and list-panes for current window.
- * If prefetchedOutput is provided (from a pre-spawned process), uses that instead of spawning.
+ * If prefetchedOutput is provided (from process substitution), uses that instead of spawning.
  */
 export function getStartupInfo(prefetchedOutput?: string): StartupInfo {
   if (prefetchedOutput !== undefined) {
     return parseStartupInfo(prefetchedOutput);
   }
 
-  const windowFormat =
-    "#{window_index}|#{window_name}|#{window_active}|#{window_bell_flag}|#{window_activity_flag}|#{pane_current_command}";
-  const paneFormat =
-    "#{window_width}|#{window_height}|#{pane_id}|#{pane_width}|#{pane_height}|#{pane_left}|#{pane_top}|#{pane_title}";
-
   const output = execFileSync("tmux", [
     "move-window", "-r", ";",
-    "list-windows", "-F", windowFormat, ";",
+    "list-windows", "-F", WINDOW_FORMAT, ";",
     "display-message", "-p", "SECTION_SEP", ";",
-    "list-panes", "-F", paneFormat,
+    "list-panes", "-F", PANE_FORMAT,
   ]).toString().trim();
 
   return parseStartupInfo(output);
