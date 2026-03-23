@@ -121,6 +121,15 @@ Single SQLite database at `~/.cache/cmux/cmux.sqlite` (no WAL, single-writer). T
 - `picker_frequency` - Selection counts per item type, ordered by frequency
 - `transitions` - Layout transition counts for smarter ordering
 
+## Building
+
+```bash
+bun run build     # bundle to dist/cmux.js
+bun run install   # build + install wrapper to ~/.local/bin/cmux
+```
+
+Run `bun run build` after code changes before testing interactively — the installed cmux runs the bundle, not the source files.
+
 ## Testing
 
 ```bash
@@ -132,9 +141,10 @@ bun test
 For UI changes, always verify interactively in a real tmux session:
 
 ```bash
-# Start a test session
+bun run build
+# Then trigger cmux via Alt-Space, or:
 tmux new-session -d -s test-cmux
-tmux send-keys -t test-cmux 'bun src/main.ts' Enter
+tmux send-keys -t test-cmux 'bun dist/cmux.js' Enter
 tmux attach -t test-cmux
 ```
 
