@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+  _clearAll,
   getAllFrequencies,
   getFrequencies,
   recordSelection,
-  _clearAll,
 } from "../src/picker-store";
 
 beforeEach(() => {
@@ -19,7 +19,7 @@ describe("picker frequency tracking", () => {
     const freqs = getFrequencies("dir");
     const home = freqs.find((f) => f.key === "/Users/test/home");
     expect(home).toBeDefined();
-    expect(home!.count).toBe(3);
+    expect(home?.count).toBe(3);
   });
 
   test("most selected item comes first", () => {
@@ -99,8 +99,8 @@ describe("picker UI uses frequency for ordering", () => {
 
     // Open picker and get the directory items
     const picker1 = initRepoPicker();
-    const dirItems1 = picker1.typeahead.items.filter((item) =>
-      item.type === "dir",
+    const dirItems1 = picker1.typeahead.items.filter(
+      (item) => item.type === "dir",
     );
 
     if (dirItems1.length < 2) {
@@ -118,8 +118,8 @@ describe("picker UI uses frequency for ordering", () => {
 
     // Reopen the picker
     const picker2 = initRepoPicker();
-    const dirItems2 = picker2.typeahead.items.filter((item) =>
-      item.type === "dir",
+    const dirItems2 = picker2.typeahead.items.filter(
+      (item) => item.type === "dir",
     );
 
     // THE FAILING ASSERTION: the frequently selected directory should now

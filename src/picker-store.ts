@@ -77,9 +77,7 @@ export function getFrequencies(
  * Get all items across all types, ordered by frequency then recency.
  * Useful for the top-level mixed picker.
  */
-export function getAllFrequencies(
-  host: string = "local",
-): PickerFrequency[] {
+export function getAllFrequencies(host: string = "local"): PickerFrequency[] {
   ensureTable();
   return getDb()
     .query(

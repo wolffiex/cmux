@@ -166,11 +166,23 @@ export function getStartupInfo(prefetchedOutput?: string): StartupInfo {
   }
 
   const output = execFileSync("tmux", [
-    "move-window", "-r", ";",
-    "list-windows", "-F", WINDOW_FORMAT, ";",
-    "display-message", "-p", "SECTION_SEP", ";",
-    "list-panes", "-F", PANE_FORMAT,
-  ]).toString().trim();
+    "move-window",
+    "-r",
+    ";",
+    "list-windows",
+    "-F",
+    WINDOW_FORMAT,
+    ";",
+    "display-message",
+    "-p",
+    "SECTION_SEP",
+    ";",
+    "list-panes",
+    "-F",
+    PANE_FORMAT,
+  ])
+    .toString()
+    .trim();
 
   return parseStartupInfo(output);
 }

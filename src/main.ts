@@ -1,7 +1,13 @@
 const _startTime = performance.now();
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { box } from "./box-chars";
 import {
@@ -9,9 +15,9 @@ import {
   handleBranchPickerKey,
   initBranchPicker,
 } from "./branch-picker";
+import { closeDb } from "./db";
 import { renderLayoutPreview } from "./layout-preview";
 import { recordTransition } from "./layout-store";
-import { closeDb } from "./db";
 import { ALL_LAYOUTS, type LayoutTemplate, resolveLayout } from "./layouts";
 import { initLog, log } from "./logger";
 import { matchPanesToSlots, type Pane, type Slot } from "./pane-matcher";
@@ -20,10 +26,7 @@ import {
   initRepoPicker,
   type RepoPickerState,
 } from "./repo-picker";
-import {
-  collectReposFromWindows,
-  trackRepo,
-} from "./repo-store";
+import { collectReposFromWindows, trackRepo } from "./repo-store";
 import { computeSwaps, executeSwaps } from "./swap-orchestrator";
 import {
   getStartupInfo,
@@ -238,7 +241,6 @@ function stopPolling(): void {
   }
 }
 
-
 // ── ANSI helpers ───────────────────────────────────────────────────────────
 const ESC = "\x1b";
 const CSI = `${ESC}[`;
@@ -260,7 +262,6 @@ const ansi = {
 
 // Superscript digits for window numbering
 const superscript = ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"];
-
 
 // ── Layout matching ─────────────────────────────────────────────────────────
 /**
@@ -556,7 +557,6 @@ function render(): void {
 
   // Window carousel (6 rows tall with gray box outline, 2 content lines per box)
   const windowFocused = state.focus === "carousel";
-  const maxIndex = state.windows.length - 1;
 
   // Build the 4-row carousel content (each window/button is a bordered box with 2 content lines)
   // Note: WINDOW_BOX_WIDTH is a module-level constant
@@ -890,9 +890,17 @@ function render(): void {
     let dirPath = "";
     try {
       dirPath = execFileSync("tmux", [
-        "display-message", "-t", `:${selectedWindow?.index ?? 0}`, "-p", "#{pane_current_path}",
-      ]).toString().trim();
-    } catch { /* ignore */ }
+        "display-message",
+        "-t",
+        `:${selectedWindow?.index ?? 0}`,
+        "-p",
+        "#{pane_current_path}",
+      ])
+        .toString()
+        .trim();
+    } catch {
+      /* ignore */
+    }
 
     const fields: { label: string; value: string; field: LayoutField }[] = [
       { label: "directory", value: dirPath, field: "directory" },
@@ -1069,9 +1077,13 @@ function handleCarouselFocus(key: string): boolean {
         if (selectedWindow) {
           try {
             execFileSync("tmux", [
-              "select-window", "-t", `:${selectedWindow.index}`,
+              "select-window",
+              "-t",
+              `:${selectedWindow.index}`,
             ]);
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
         }
         return false;
       }
@@ -1109,8 +1121,15 @@ function handleCarouselFocus(key: string): boolean {
         }
       }
       return true;
-    case "1": case "2": case "3": case "4": case "5":
-    case "6": case "7": case "8": case "9": {
+    case "1":
+    case "2":
+    case "3":
+    case "4":
+    case "5":
+    case "6":
+    case "7":
+    case "8":
+    case "9": {
       const windowIndex = parseInt(key, 10) - 1;
       if (windowIndex < state.windows.length) {
         if (windowIndex === state.currentWindowIndex) {
@@ -1124,7 +1143,9 @@ function handleCarouselFocus(key: string): boolean {
           const win = state.windows[windowIndex];
           try {
             execFileSync("tmux", ["select-window", "-t", `:${win.index}`]);
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           return false;
         }
       }
@@ -1197,7 +1218,6 @@ function handlePickerMode(key: string): boolean {
       break;
     case "cancel":
       return false; // Picker is home state — cancel exits cmux
-      break;
     case "select":
       // Open branch picker for this repo
       state.picker = null;
@@ -1219,7 +1239,7 @@ function handlePickerMode(key: string): boolean {
     case "command":
       if (result.command === "shell") {
         log("[shell] command selected, starting shell");
-        log("[shell] SHELL=" + (process.env.SHELL || "(unset)"));
+        log(`[shell] SHELL=${process.env.SHELL || "(unset)"}`);
         try {
           cleanup(false);
 
@@ -1256,7 +1276,10 @@ cmux-escape() {
 zle -N cmux-escape
 bindkey '\\e' cmux-escape
 `;
-          execFileSync("sh", ["-c", `cat > '${tmpDir}/.zshrc' << 'CMUX_EOF'\n${zshrc}\nCMUX_EOF`]);
+          execFileSync("sh", [
+            "-c",
+            `cat > '${tmpDir}/.zshrc' << 'CMUX_EOF'\n${zshrc}\nCMUX_EOF`,
+          ]);
 
           const realZdotdir = process.env.ZDOTDIR || process.env.HOME || "";
           const proc = Bun.spawnSync(["zsh", "-i"], {
@@ -1271,11 +1294,15 @@ bindkey '\\e' cmux-escape
           });
 
           // Clean up temp dir
-          try { execFileSync("rm", ["-rf", tmpDir]); } catch { /* ignore */ }
+          try {
+            execFileSync("rm", ["-rf", tmpDir]);
+          } catch {
+            /* ignore */
+          }
 
           process.exit(proc.exitCode);
         } catch (e) {
-          log("[shell] error: " + e);
+          log(`[shell] error: ${e}`);
         }
       }
       return false;
@@ -1321,7 +1348,16 @@ function handleBranchPickerMode(key: string): boolean {
         // New branch from origin/main
         execFileSync(
           "git",
-          ["-C", repoPath, "worktree", "add", result.path, "-b", result.branch, "origin/main"],
+          [
+            "-C",
+            repoPath,
+            "worktree",
+            "add",
+            result.path,
+            "-b",
+            result.branch,
+            "origin/main",
+          ],
           { timeout: 10000 },
         );
         createNewWindowAtPath(result.path);
@@ -1375,8 +1411,6 @@ function handleBranchPickerMode(key: string): boolean {
 
   return true;
 }
-
-
 
 function createNewWindowAtPath(targetPath: string): void {
   log("createNewWindowAtPath called with:", targetPath);

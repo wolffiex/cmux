@@ -8,8 +8,8 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   getAllFrequencies,
-  recordSelection,
   type PickerFrequency,
+  recordSelection,
 } from "./picker-store";
 import { getKnownRepos, isGitRepo, type RepoInfo } from "./repo-store";
 import {
@@ -69,7 +69,13 @@ function formatPath(path: string): string {
 // ── Commands ────────────────────────────────────────────────────────────────
 
 const COMMANDS: TypeaheadItem[] = [
-  { id: "shell", type: "cmd", label: "shell", hint: "quick command → clipboard", icon: "⚡" },
+  {
+    id: "shell",
+    type: "cmd",
+    label: "shell",
+    hint: "quick command → clipboard",
+    icon: "⚡",
+  },
 ];
 
 /**
@@ -197,7 +203,6 @@ export function initRepoPicker(windows: TmuxWindow[] = []): RepoPickerState {
     "",
   );
 
-
   // Build initial items
   const dirs = getResults(dirFilter);
   const items = buildItems(windows, repos, dirs, "");
@@ -251,11 +256,16 @@ function getTitleForSelection(typeahead: TypeaheadState): string {
   const selected = typeahead.filtered[typeahead.selectedIndex];
   if (!selected) return "select";
   switch (selected.type) {
-    case "cmd": return "command";
-    case "screen": return "screen";
-    case "repo": return "repo";
-    case "dir": return "directory";
-    default: return "select";
+    case "cmd":
+      return "command";
+    case "screen":
+      return "screen";
+    case "repo":
+      return "repo";
+    case "dir":
+      return "directory";
+    default:
+      return "select";
   }
 }
 

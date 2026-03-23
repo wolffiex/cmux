@@ -11,7 +11,7 @@
     "build": "bun build src/main.ts --target=bun --outfile dist/cmux.js",
     "install": "bun run build && bun dist/cmux.js --install",
     "test": "bun test",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bunx tsc --noEmit",
     "lint": "biome check src test && oxlint src test",
     "lint:fix": "biome check --write src test",
     "format": "biome format --write src test"

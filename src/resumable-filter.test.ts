@@ -248,12 +248,8 @@ describe("breadth-first ordering", () => {
     expect(results.some((d) => d.endsWith("/src/cmux"))).toBe(true);
 
     // The shallower one (testDir/src/cmux) should come BEFORE the deeper one (testDir/aaa/src/cmux)
-    const shallowIndex = results.findIndex(
-      (d) => d === join(testDir, "src/cmux"),
-    );
-    const deepIndex = results.findIndex(
-      (d) => d === join(testDir, "aaa/src/cmux"),
-    );
+    const shallowIndex = results.indexOf(join(testDir, "src/cmux"));
+    const deepIndex = results.indexOf(join(testDir, "aaa/src/cmux"));
 
     expect(shallowIndex).toBeGreaterThanOrEqual(0);
     expect(deepIndex).toBeGreaterThanOrEqual(0);
@@ -277,8 +273,8 @@ describe("breadth-first ordering", () => {
     const results = getResults(filter);
 
     // testDir/zzz (depth 1) should come before testDir/aaa/zzz (depth 2)
-    const shallowIndex = results.findIndex((d) => d === join(testDir, "zzz"));
-    const deepIndex = results.findIndex((d) => d === join(testDir, "aaa/zzz"));
+    const shallowIndex = results.indexOf(join(testDir, "zzz"));
+    const deepIndex = results.indexOf(join(testDir, "aaa/zzz"));
 
     expect(shallowIndex).toBeGreaterThanOrEqual(0);
     expect(deepIndex).toBeGreaterThanOrEqual(0);
@@ -320,10 +316,7 @@ describe("breadth-first ordering", () => {
     mkdirSync(join(testDir, "zzz/myrepo"), { recursive: true });
 
     // Start with empty filter (as repo-picker does)
-    let filter = createFilter(
-      { roots: [testDir], maxDepth: 5, limit: 20 },
-      "",
-    );
+    let filter = createFilter({ roots: [testDir], maxDepth: 5, limit: 20 }, "");
 
     // Progressively type "myrepo"
     for (const char of "myrepo") {
@@ -336,8 +329,8 @@ describe("breadth-first ordering", () => {
     const shallowMatch = join(testDir, "zzz/myrepo");
     const deepMatch = join(testDir, "aaa/bbb01/deep/myrepo");
 
-    const shallowIndex = results.findIndex((d) => d === shallowMatch);
-    const deepIndex = results.findIndex((d) => d === deepMatch);
+    const shallowIndex = results.indexOf(shallowMatch);
+    const deepIndex = results.indexOf(deepMatch);
 
     // Both should be found
     expect(shallowIndex).toBeGreaterThanOrEqual(0);
@@ -369,10 +362,7 @@ describe("breadth-first ordering", () => {
     mkdirSync(join(testDir, "parent/zzztarget"), { recursive: true });
 
     // Start with empty filter and low limit
-    let filter = createFilter(
-      { roots: [testDir], maxDepth: 3, limit: 10 },
-      "",
-    );
+    let filter = createFilter({ roots: [testDir], maxDepth: 3, limit: 10 }, "");
 
     // Type "zzz" to filter to just the target
     for (const char of "zzz") {

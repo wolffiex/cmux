@@ -29,10 +29,7 @@ function ensureTable(): void {
 /**
  * Record a layout transition. Increments the count for from -> to.
  */
-export function recordTransition(
-  fromLayout: string,
-  toLayout: string,
-): void {
+export function recordTransition(fromLayout: string, toLayout: string): void {
   if (fromLayout === toLayout) return;
   ensureTable();
   getDb().run(

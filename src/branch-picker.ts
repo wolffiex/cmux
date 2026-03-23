@@ -162,9 +162,12 @@ function getTitleForSelection(
   const selected = typeahead.filtered[typeahead.selectedIndex];
   if (!selected) return "branch";
   switch (selected.type) {
-    case "worktree": return "worktree";
-    case "branch": return "branch";
-    default: return "branch";
+    case "worktree":
+      return "worktree";
+    case "branch":
+      return "branch";
+    default:
+      return "branch";
   }
 }
 
