@@ -95,46 +95,13 @@ export interface StartupInfo {
 }
 
 /**
- * Get all startup info in a single tmux command.
- * Combines: move-window -r, list-windows, and list-panes for current window.
- * This reduces 3 subprocess spawns to 1 for faster startup.
+ * Parse the combined tmux output into StartupInfo.
  */
-export function getStartupInfo(): StartupInfo {
-  // Use \n as section separator and | as field separator within sections
-  // Section 1: list-windows output (one line per window)
-  // Section 2: list-panes output for current window (with full position info for layout matching)
-  const windowFormat =
-    "#{window_index}|#{window_name}|#{window_active}|#{window_bell_flag}|#{window_activity_flag}|#{pane_current_command}";
-  const paneFormat =
-    "#{window_width}|#{window_height}|#{pane_id}|#{pane_width}|#{pane_height}|#{pane_left}|#{pane_top}|#{pane_title}";
-
-  // Chain commands: renumber, then output windows, then separator, then panes
-  // Using ; to chain tmux commands (no escaping needed with execFileSync)
-  const output = execFileSync("tmux", [
-    "move-window",
-    "-r",
-    ";",
-    "list-windows",
-    "-F",
-    windowFormat,
-    ";",
-    "display-message",
-    "-p",
-    "SECTION_SEP",
-    ";",
-    "list-panes",
-    "-F",
-    paneFormat,
-  ])
-    .toString()
-    .trim();
-
-  // Split by the separator
+export function parseStartupInfo(output: string): StartupInfo {
   const sections = output.split("SECTION_SEP\n");
   const windowsSection = sections[0]?.trim() || "";
   const panesSection = sections[1]?.trim() || "";
 
-  // Parse windows
   const windows: TmuxWindow[] = windowsSection
     .split("\n")
     .filter((line) => line.length > 0)
@@ -151,7 +118,6 @@ export function getStartupInfo(): StartupInfo {
       };
     });
 
-  // Parse pane info for current window
   const paneLines = panesSection.split("\n").filter((line) => line.length > 0);
   let windowWidth = 80;
   let windowHeight = 24;
@@ -173,6 +139,31 @@ export function getStartupInfo(): StartupInfo {
     windows,
     currentWindowInfo: { width: windowWidth, height: windowHeight, panes },
   };
+}
+
+/**
+ * Get all startup info in a single tmux command.
+ * Combines: move-window -r, list-windows, and list-panes for current window.
+ * If prefetchedOutput is provided (from a pre-spawned process), uses that instead of spawning.
+ */
+export function getStartupInfo(prefetchedOutput?: string): StartupInfo {
+  if (prefetchedOutput !== undefined) {
+    return parseStartupInfo(prefetchedOutput);
+  }
+
+  const windowFormat =
+    "#{window_index}|#{window_name}|#{window_active}|#{window_bell_flag}|#{window_activity_flag}|#{pane_current_command}";
+  const paneFormat =
+    "#{window_width}|#{window_height}|#{pane_id}|#{pane_width}|#{pane_height}|#{pane_left}|#{pane_top}|#{pane_title}";
+
+  const output = execFileSync("tmux", [
+    "move-window", "-r", ";",
+    "list-windows", "-F", windowFormat, ";",
+    "display-message", "-p", "SECTION_SEP", ";",
+    "list-panes", "-F", paneFormat,
+  ]).toString().trim();
+
+  return parseStartupInfo(output);
 }
 
 /**

@@ -104,7 +104,7 @@ function initState(): State {
   let windows: TmuxWindow[] = [];
   let currentWindowIndex = 0;
   try {
-    // Single batched tmux command for startup (combines renumber + list-windows + list-panes)
+    // Use pre-spawned tmux process if available (raced with module loading)
     let startupInfo!: ReturnType<typeof getStartupInfo>;
     profile("getStartupInfo", () => {
       startupInfo = getStartupInfo();
