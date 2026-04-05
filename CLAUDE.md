@@ -5,12 +5,14 @@ tmux UI wrapper — typeahead-first workspace manager.
 ## Installation
 
 ```bash
-# Install wrapper script to ~/.local/bin/cmux
-bun src/main.ts --install
+# Build the bundle and install the wrapper script to ~/.local/bin/cmux
+bun run install
 
 # Make sure ~/.local/bin is in your PATH
 export PATH="$HOME/.local/bin:$PATH"
 ```
+
+`bun run install` builds `dist/cmux.js` first, then runs it with `--install` to write the wrapper. Do not run `bun src/main.ts --install` — the wrapper it installs would point back at the source file.
 
 ## How It Works
 
@@ -39,27 +41,34 @@ The `exec` pattern means environment variables (API keys, etc.) don't leak to ch
 
 ## Architecture
 
-Single binary (`src/main.ts`) using raw ANSI for fast startup (~22ms).
+Single binary (`src/main.ts`) using raw ANSI for fast startup (~16ms).
 
 ### Files
 
 - `src/main.ts` - Main UI, key handling, focus management, tmux integration
 - `src/db.ts` - Shared SQLite database (single file, no WAL)
+- `src/cache.ts` - Generic disk cache with its own WAL-mode SQLite file per instance
 - `src/typeahead.ts` - Generic typeahead component with fuzzy filtering
+- `src/resumable-filter.ts` - Resumable BFS directory scan used by the repo picker
 - `src/repo-picker.ts` - Top-level picker (repos, screens, directories, commands)
 - `src/branch-picker.ts` - Branch/worktree picker for a specific repo
 - `src/picker-store.ts` - Selection frequency tracking
 - `src/layout-store.ts` - Layout transition tracking
-- `src/layouts.ts` - Fixed layout templates (2-4 panes), `ALL_LAYOUTS` flat list
+- `src/layouts.ts` - Fixed layout templates (1-4 panes), `ALL_LAYOUTS` flat list
 - `src/layout-preview.ts` - ASCII box-drawing preview renderer
-- `src/tmux.ts` - tmux helpers (`getWindows`, `getWindowInfo`)
+- `src/tmux.ts` - tmux helpers (`getWindows`, `getWindowInfo`, `STARTUP_COMMAND`)
 - `src/tmux-layout.ts` - Generates tmux layout strings with checksum
 - `src/pane-matcher.ts` - Position-based pane matching for layout transitions
 - `src/swap-orchestrator.ts` - Computes and executes pane swap sequences
 - `src/repo-store.ts` - Known git repo tracking
+- `src/git-utils.ts` - `isGitRepo`, `resolveRepoPath`, `getBranch`, `getLastActivity`
+- `src/worktree-utils.ts` - `deleteWorktree` with force fallback
 - `src/window-naming.ts` - Window naming from git/directory context
+- `src/logger.ts` - Debug log to `/tmp/cmux.log` gated on `CMUX_DEBUG`
 - `src/utils.ts` - Shared utilities (name truncation, sanitization)
 - `src/box-chars.ts` - Box-drawing character constants
+
+Orphaned (candidates for removal): `src/window-summary.ts`, `src/summaries.ts`, `src/fonts.ts`, `src/dir-picker.ts`. None are imported by `main.ts`.
 
 ### UI Structure
 
@@ -87,24 +96,24 @@ Single binary (`src/main.ts`) using raw ANSI for fast startup (~22ms).
 
 Three focus states, navigable with Tab, up/down, and Escape:
 
-**Typeahead** (default on startup):
+**Carousel** (default on startup):
+- `h/l` - Move selection left/right
+- `j` or `Ctrl+N` - Switch to typeahead
+- `Enter` on current window → layout picker; on another window → switch to it and exit
+- `1-9` - Quick select window (same Enter semantics)
+- `-` or `x` - Delete window (with confirmation)
+- `Alt+h/l` - Reorder windows
+- `Tab` / `Escape` - Switch to typeahead
+- `q` - Quit
+
+**Typeahead** (Tab or down from carousel):
 - Type to filter items
 - `j/k` or `Ctrl+N/Ctrl+P` - Navigate items (up at top → carousel)
 - `Enter` - Select item (switch screen, drill into repo, open directory, run command)
 - `Tab` - Switch to carousel
 - `Escape` - Quit
 
-**Carousel** (Tab or up from typeahead):
-- `h/l` - Move selection left/right
-- `j` or `Ctrl+N` - Back to typeahead
-- `Enter` - Open layout picker for selected window
-- `1-9` - Quick select window → layout picker
-- `-` or `x` - Delete window (with confirmation)
-- `Alt+h/l` - Reorder windows
-- `Tab` - Back to typeahead
-- `Escape` - Back to typeahead
-
-**Layout + Form** (Enter from carousel):
+**Layout + Form** (Enter on current window from carousel):
 - `h/l` - Cycle through layouts (with slide animation)
 - `j/k` - Move between layout picker and rename fields (directory, repo, branch)
 - `Enter` - Apply layout and exit
@@ -112,14 +121,16 @@ Three focus states, navigable with Tab, up/down, and Escape:
 
 ### Layout Numbering
 
-Panes are numbered largest-to-smallest by area. No single-pane layout — minimum is two-pane split.
+Panes are numbered largest-to-smallest by area. Layouts cover 1-4 panes (1 + 1 + 4 + 4 = 10 total).
 
 ### Data Storage
 
-Single SQLite database at `~/.cache/cmux/cmux.sqlite` (no WAL, single-writer). Tables:
+Single shared SQLite database at `~/.cache/cmux/cmux.sqlite` (no WAL, single-writer). Tables:
 - `repos` - Known git repositories with activity tracking
 - `picker_frequency` - Selection counts per item type, ordered by frequency
 - `transitions` - Layout transition counts for smarter ordering
+
+Additional per-cache DBs are opened by `src/cache.ts` under the same cache directory (WAL-mode, one file per cache name). Used for the AI summary cache in the dead `window-summary.ts` path.
 
 ## Building
 

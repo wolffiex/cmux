@@ -1,17 +1,21 @@
-# cmux v2 Design
+# cmux v2 Design Notes (historical)
+
+> **Status note.** This is the design doc that drove cmux's redesign from a layout-only tool into a typeahead-first workspace manager. Large parts are now shipped; the remote-host / nested-tmux section is still aspirational. Sections below are tagged `[shipped]`, `[partial]`, or `[not started]`. For the current user-facing behaviour see `USER_GUIDE.md`; for the current code map see `ARCHITECTURE.md`.
 
 ## Philosophy
 
 Config-driven, not discovery-based. Typeahead-first. Local and remote screens as peers.
 
-## Startup
+## Startup `[partial]`
+
+> Launch lands on the carousel focused on the current window, not on the typeahead. `Tab` or `j` switches to the typeahead. Everything below is otherwise as shipped.
 
 Launch drops straight into typeahead. Everything is a destination:
 - Existing screens (local tmux windows)
 - Configured directories and their children
 - Remote host screens
 
-## Picker
+## Picker `[shipped]`
 
 Top-level picker shown on startup. Combines all known destinations in one filterable list.
 
@@ -48,7 +52,9 @@ picker_frequency
   PRIMARY KEY (host, type, key)
 ```
 
-## Data Model (SQLite)
+## Data Model (SQLite) `[partial]`
+
+> The `hosts`, `branches`, and `directories` tables below are **not implemented**. The actual `repos` table is path-keyed without a host column, and it does cache `last_activity` (contrary to the "no cached derived state" principle). See `ARCHITECTURE.md` for the current schema.
 
 Three tables for user annotations. Git state (branch, dirty) is derived live, never cached.
 
@@ -105,7 +111,9 @@ directories
 
 TBD — in-app settings screen, subcommand, or both.
 
-## Remote Nested tmux
+## Remote Nested tmux `[not started]`
+
+> None of this section is implemented. There is no host concept, no ssh integration, no remote window enumeration. If you are planning the feature, this is still a reasonable sketch to start from.
 
 Biggest new feature. Each configured host runs tmux. Remote windows appear alongside local windows in typeahead and carousel.
 
@@ -116,7 +124,7 @@ Biggest new feature. Each configured host runs tmux. Remote windows appear along
 - Host color applied as visual indicator throughout UI
 - Prefix key collision: TBD (different prefix per nesting level, or send-prefix passthrough)
 
-## UI Structure
+## UI Structure `[shipped]`
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -151,17 +159,21 @@ Simplified — no [-] or [+] buttons. Just window boxes.
 - Host color accent on remote window borders
 - Enter on a window → switches middle panel to layout picker for that window
 
-## Layouts
+## Layouts `[partial]`
+
+> "Smarter ordering" is partial: `layout-store.transitions` collects the data but no ranking function consumes it yet. "New screens default to two-pane split" is not enforced — cmux uses `findBestMatchingLayout` to pick the starting layout by current pane count and position overlap.
 
 - New screens default to two-pane split
 - Smarter ordering: rank by usage history for similar screens, match to current pane count, window dimensions
 - Layout history tracked in DB
 
-## Quick Shell (Opt+Shift+1)
+## Quick Shell (Opt+Shift+1) `[partial]`
+
+> Quick shell exists, but as the `⚡ shell` picker item rather than a direct keybind. It spawns a persistent login shell (not transient). The macOS clipboard capture still applies to single-command runs. The `Opt+Shift+1` binding was never wired up.
 
 A keybind that opens a transient shell prompt. Type a command, it runs in zsh, copies the output to clipboard, and closes. Useful for quick lookups without leaving your workflow.
 
-## Removed
+## Removed `[shipped]`
 
 - AI window summaries
 - Big font rendering

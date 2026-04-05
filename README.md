@@ -1,137 +1,108 @@
 # cmux
 
-A fast tmux layout manager with a popup UI.
+A typeahead-first workspace manager for tmux. Fuzzy-find repos, screens, and directories, manage worktrees, and switch layouts without losing pane content — all from a popup that opens in ~16 ms.
+
+## Install
+
+Requires tmux 3.2+ and [Bun](https://bun.sh/).
+
+```bash
+git clone <this-repo> && cd cmux
+bun run install
+```
+
+This builds `dist/cmux.js` and writes a wrapper script to `~/.local/bin/cmux`. Make sure `~/.local/bin` is on your `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+## Run
+
+```bash
+cmux
+```
+
+- **Outside tmux**, cmux launches (or attaches to) a tmux session named `cmux` with `Alt-Space` bound to open the popup.
+- **Inside tmux**, cmux opens the popup directly.
+
+The wrapper uses an `exec` plus `eval` trick to replace the current shell with tmux, so environment variables don't leak into child processes.
 
 ## Features
 
-- **Window carousel** - Visual horizontal selector for switching, creating, and deleting windows
-- **10 fixed layouts** - Preset layouts for 1-4 panes (full, split, stacked, grid)
-- **Window reordering** - Move windows left/right with Alt+h/l (animated)
-- **Smart pane matching** - Preserves pane positions when changing layouts
-- **Intelligent naming** - Windows auto-named from git repo/branch or directory
-- **Fast startup** - Raw ANSI rendering, ~22ms startup time
-- **AI summaries** - Context-aware summaries for each window (requires Anthropic API key)
-- **Directory picker** - Create new windows in any directory with typeahead filtering
+- **Typeahead picker** — a unified fuzzy finder for repos, open screens, directories, and commands. Ranked by selection frequency.
+- **Carousel** — an always-visible strip of tmux windows with repo/branch labels. Navigate, reorder, and delete with a single keystroke.
+- **Layout picker** — 10 fixed layouts covering 1–4 panes. Applying a layout **preserves pane content**: cmux matches existing panes to target slots by position and only creates or kills panes as needed.
+- **Branch picker** — drill into a repo to see its worktrees and branches, and create new worktrees from `origin/main` in one keystroke.
+- **Quick shell** — the `⚡ shell` picker item spawns a persistent login shell in the selected window's working directory. On macOS, single-command output is captured and copied to the clipboard.
+- **Smart window naming** — windows are auto-named from git repo and branch on cmux startup, with alias overrides from `~/.config/cmux/repos`.
+- **Frequency tracking** — picker items and layout choices are ranked by how often you use them.
+- **Fast startup** — ~16 ms popup-to-interactive, using process substitution to prefetch tmux data in parallel with Bun's module load.
 
-## Installation
+## Keybindings
 
-**Requirements:**
-- tmux 3.2+
-- Bun
-
-## Usage
-
-```zsh
-alias cmux=bun <path to ./src/main.ts>
-```
-
-```zsh
-# Outside tmux: starts or attaches to "cmux" session with Alt-Space bound
-cmux
-
-# Inside tmux: opens the layout UI directly
-cmux
-```
-
-When run outside tmux, cmux creates a session named "cmux" and binds Alt-Space to open the UI as a popup. If the session already exists, it attaches to it.
-
-## UI Overview
-
-```
-       ┌───────────────────────────────────────────────────────────────────────────────┐
-       │ ┌───────────────────────────────────────────────────────────────────────────┐ │
-       │ │ ┌───┐ ┌────────────────¹┐ ┌────────────────²┐ ┌────────────────³┐ ┌───┐   │ │
-       │ │ │ − │ │      cmux       │ │    shellbot     │ │      bun ●      │ │ + │   │ │
-       │ │ │   │ │                 │ │                 │ │                 │ │   │   │ │
-       │ │ └───┘ └─────────────────┘ └─────────────────┘ └─────────────────┘ └───┘   │ │
-       │ └───────────────────────────────────────────────────────────────────────────┘ │
-       │───────────────────────────────────────────────────────────────────────────────│
-       │                                                                               │
-       │                                   ┌───────────────────┬──────────────────┐    │
-       │          AI Summary               │                   │                  │    │
-       │                                   │                   │                  │    │
-       │                                   │                   │         2        │    │
-       │                                   │                   │                  │    │
-       │                                   │                   │                  │    │
-       │                                   │         1         ├──────────────────┤    │
-       │                                   │                   │                  │    │
-       │                                   │                   │                  │    │
-       │                                   │                   │         3        │    │
-       │                                   │                   │                  │    │
-       │                                   └───────────────────┴──────────────────┘    │
-       │                                                3 panes · 5/10                 │
-       │                                                                               │ 
-       │                                                                               │
-       │                                                                               │
-       │                                                                               │
-       │                                                                               │
-       │                What goes here?                                                │
-       │                  File picker?                                                 │
-       │                  Diff viewer?                                                 │
-       │                                                                               │
-       │                                                                               │
-       │                                                                               │
-       │───────────────────────────────────────────────────────────────────────────────│
-       │ tab focus  hjkl nav  ⏎ apply                                                  │
-       └───────────────────────────────────────────────────────────────────────────────┘
-```
-## Key Bindings
-
-### Window Carousel (top)
+### Carousel
 
 | Key | Action |
-|-----|--------|
-| `h` / `l` | Move selection left/right |
-| `j` | Move focus to layout area |
-| `Enter` | Switch to window, or activate `[-]`/`[+]` button |
-| `1`-`9` | Quick select window by number |
-| `-` or `x` | Delete current window (with confirmation) |
-| `+` or `=` | Create new window |
-| `Alt+h` / `Alt+l` | Reorder: move current window left/right |
+|---|---|
+| `h` / `l` | move left/right |
+| `1`-`9` | jump to window N |
+| `Enter` / `Space` | current window → layout picker; other → switch and exit |
+| `-` / `x` | delete window (press again to confirm) |
+| `Alt-h` / `Alt-l` | swap with neighbor (animated) |
+| `j` / `Tab` | back to typeahead |
+| `q` | quit |
 
-### Layout Area (bottom)
-
-| Key | Action |
-|-----|--------|
-| `h` / `l` | Cycle through layouts (with slide animation) |
-| `k` | Move focus to window carousel |
-| `Enter` | Apply layout and exit |
-
-### General
+### Typeahead
 
 | Key | Action |
-|-----|--------|
-| `Tab` | Switch focus between carousel and layout |
-| `Escape` / `q` | Quit (or cancel delete confirmation) |
-| Arrow keys | Same as `hjkl` |
+|---|---|
+| type | filter |
+| `↑` / `↓` | navigate (at top → carousel) |
+| `Enter` | select (or "create" if nothing matches) |
+| `Tab` | to carousel |
+| `Escape` | quit |
 
-## Layouts
+### Layout picker
 
-Fxed layouts organized by pane count.
-
-Data-driven layouts; intended for customization
-
-Panes are numbered largest-to-smallest by area.
+| Key | Action |
+|---|---|
+| `h` / `l` | cycle layouts |
+| `j` / `k` | move between fields |
+| `Enter` | apply layout and exit |
+| `Escape` | back to carousel |
 
 ## Configuration
 
-| File | Description |
-|------|-------------|
-| `~/.config/cmux/api-key` | Anthropic API key for AI summaries (created by `--install` if `ANTHROPIC_API_KEY` is set) |
-| `~/.config/cmux/repos` | Repo name aliases for window naming (format: `long-repo-name=short`) |
+| File | Purpose |
+|---|---|
+| `~/.cache/cmux/cmux.sqlite` | frequency, known repos, layout transitions |
+| `~/.config/cmux/repos` | `long-name=short-name` aliases for window labels |
 
-## Environment Variables
+Respects `XDG_CACHE_HOME` and `XDG_CONFIG_HOME`.
 
-| Variable | Description |
-|----------|-------------|
-| `ANTHROPIC_API_KEY` | Fallback API key (used if config file doesn't exist) |
-| `CMUX_DEBUG=1` | Enable debug logging to `/tmp/cmux.log` |
-| `CMUX_BENCHMARK=1` | Headless mode for benchmarking |
+## Environment variables
+
+| Variable | Effect |
+|---|---|
+| `CMUX_DEBUG=1` | writes debug log to `/tmp/cmux.log` |
+| `CMUX_BENCHMARK=1` | headless mode; exits after first render |
+
+## Documentation
+
+- [User Guide](docs/USER_GUIDE.md) — full walkthrough of every feature and keybinding.
+- [Architecture](docs/ARCHITECTURE.md) — developer-oriented map of the codebase.
+- [Testing](docs/TESTING.md) — unit, integration, and VHS-based UI verification.
+- [v2 Design Notes](docs/cmux2.md) — historical design doc; mixes shipped and aspirational sections.
 
 ## Development
 
 ```bash
-bun test              # Run tests
-bun src/main.ts       # Run directly
+bun src/main.ts       # run from source
+bun run build         # bundle to dist/cmux.js
+bun test              # run the full suite
+bun run typecheck     # tsc --noEmit
+bun run lint          # biome + oxlint
 ```
 
+Run `bun run build` after code changes, before interactive testing. The installed `cmux` wrapper runs the bundle, not the source files.
