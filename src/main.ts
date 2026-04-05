@@ -25,6 +25,7 @@ import {
   handleRepoPickerKey,
   initRepoPicker,
   type RepoPickerState,
+  setRepoPickerCwd,
 } from "./repo-picker";
 import { collectReposFromWindows, trackRepo } from "./repo-store";
 import { computeSwaps, executeSwaps } from "./swap-orchestrator";
@@ -165,7 +166,7 @@ function initState(): State {
     currentWindowIndex,
     layoutIndex: 0,
     carouselIndex: currentWindowIndex, // Start on current window
-    focus: "typeahead",
+    focus: "carousel",
     typeaheadMode: "picker",
     layoutField: "picker",
     // Animation state (for layout)
@@ -316,6 +317,39 @@ function findBestMatchingLayout(
   }
 
   return bestIndex;
+}
+
+/**
+ * Resolve the cwd of the currently selected carousel window via tmux.
+ * Falls back to $HOME on any failure.
+ */
+function getSelectedCarouselCwd(): string {
+  const fallback = process.env.HOME || "/";
+  const selectedWindow = state.windows[state.carouselIndex];
+  if (!selectedWindow) return fallback;
+  try {
+    const paneCwd = execFileSync("tmux", [
+      "display-message",
+      "-t",
+      `:${selectedWindow.index}`,
+      "-p",
+      "#{pane_current_path}",
+    ])
+      .toString()
+      .trim();
+    return paneCwd || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Refresh the picker's shell-command cwd hint if a picker exists.
+ */
+function refreshPickerCwd(): void {
+  if (state.picker) {
+    state.picker = setRepoPickerCwd(state.picker, getSelectedCarouselCwd());
+  }
 }
 
 /**
@@ -998,7 +1032,12 @@ function handleKey(key: string): boolean {
       state.focus = "carousel";
     } else {
       state.focus = "typeahead";
-      if (!state.picker) state.picker = initRepoPicker(state.windows);
+      if (!state.picker)
+        state.picker = initRepoPicker(
+          state.windows,
+          getSelectedCarouselCwd(),
+        );
+      else refreshPickerCwd();
     }
     state.confirmingDelete = false;
     return true;
@@ -1043,13 +1082,16 @@ function handleCarouselFocus(key: string): boolean {
   switch (key) {
     case "j": // Down/Ctrl+N from carousel → typeahead
       state.focus = "typeahead";
-      if (!state.picker) state.picker = initRepoPicker(state.windows);
+      if (!state.picker)
+        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd());
+      else refreshPickerCwd();
       return true;
     case "h":
       if (state.carouselIndex > 0) {
         state.carouselIndex--;
         state.confirmingDelete = false;
         updateLayoutForSelectedWindow();
+        refreshPickerCwd();
       }
       return true;
     case "l":
@@ -1057,6 +1099,7 @@ function handleCarouselFocus(key: string): boolean {
         state.carouselIndex++;
         state.confirmingDelete = false;
         updateLayoutForSelectedWindow();
+        refreshPickerCwd();
       }
       return true;
     case "\r":
@@ -1094,7 +1137,9 @@ function handleCarouselFocus(key: string): boolean {
       }
       // Escape from carousel → back to typeahead
       state.focus = "typeahead";
-      if (!state.picker) state.picker = initRepoPicker(state.windows);
+      if (!state.picker)
+        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd());
+      else refreshPickerCwd();
       return true;
     case "-":
     case "x":
@@ -1206,7 +1251,10 @@ function handleLayoutFocus(key: string): boolean {
 
 function handlePickerMode(key: string): boolean {
   if (!state.picker) {
-    state.picker = initRepoPicker(state?.windows ?? []);
+    state.picker = initRepoPicker(
+      state?.windows ?? [],
+      getSelectedCarouselCwd(),
+    );
     return true;
   }
 
@@ -1238,69 +1286,38 @@ function handlePickerMode(key: string): boolean {
       return false;
     case "command":
       if (result.command === "shell") {
-        log("[shell] command selected, starting shell");
-        log(`[shell] SHELL=${process.env.SHELL || "(unset)"}`);
+        log("[shell] command selected, starting login shell");
         try {
+          const selectedWindow = state.windows[state.carouselIndex];
+          let cwd = process.env.HOME || "/";
+          if (selectedWindow) {
+            try {
+              const paneCwd = execFileSync("tmux", [
+                "display-message",
+                "-t",
+                `:${selectedWindow.index}`,
+                "-p",
+                "#{pane_current_path}",
+              ])
+                .toString()
+                .trim();
+              if (paneCwd) cwd = paneCwd;
+            } catch {
+              /* fall back to HOME */
+            }
+          }
+
           cleanup(false);
 
-          // Write a temporary zshrc that:
-          // 1. Sources user config (completions, aliases, PATH)
-          // 2. Overrides accept-line to capture output in a subshell
-          // 3. Copies output to clipboard, shows it, waits for keypress
-          const tmpDir = execFileSync("mktemp", ["-d"]).toString().trim();
-          const zshrc = `
-[[ -f "\${CMUX_REAL_ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${CMUX_REAL_ZDOTDIR:-$HOME}/.zshrc"
-
-cmux-accept-line() {
-  local cmd="$BUFFER"
-  BUFFER=""
-  zle reset-prompt
-  print
-  local output
-  output=$(eval "$cmd" 2>&1)
-  print "$output"
-  printf '%s' "$output" | pbcopy
-  print -P "%F{8}(copied to clipboard — press any key)%f"
-  read -k 1
-  exit
-}
-zle -N accept-line cmux-accept-line
-
-cmux-escape() {
-  if [[ -z "$BUFFER" ]]; then
-    exit
-  else
-    zle vi-cmd-mode
-  fi
-}
-zle -N cmux-escape
-bindkey '\\e' cmux-escape
-`;
-          execFileSync("sh", [
-            "-c",
-            `cat > '${tmpDir}/.zshrc' << 'CMUX_EOF'\n${zshrc}\nCMUX_EOF`,
-          ]);
-
-          const realZdotdir = process.env.ZDOTDIR || process.env.HOME || "";
-          const proc = Bun.spawnSync(["zsh", "-i"], {
+          const shell = process.env.SHELL || "/bin/zsh";
+          const proc = Bun.spawnSync([shell, "-l"], {
+            cwd,
             stdin: "inherit",
             stdout: "inherit",
             stderr: "inherit",
-            env: {
-              ...process.env,
-              ZDOTDIR: tmpDir,
-              CMUX_REAL_ZDOTDIR: realZdotdir,
-            },
           });
 
-          // Clean up temp dir
-          try {
-            execFileSync("rm", ["-rf", tmpDir]);
-          } catch {
-            /* ignore */
-          }
-
-          process.exit(proc.exitCode);
+          process.exit(proc.exitCode ?? 0);
         } catch (e) {
           log(`[shell] error: ${e}`);
         }
@@ -1729,7 +1746,7 @@ function runUI(): void {
   }
 
   // Initialize picker after first render (deferred for faster startup)
-  state.picker = initRepoPicker(state.windows);
+  state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd());
   render();
 
   startPolling();

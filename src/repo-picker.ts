@@ -35,6 +35,7 @@ export interface RepoPickerState {
   repos: RepoInfo[];
   windows: TmuxWindow[];
   dirFilter: ResumableFilter;
+  cwd: string;
 }
 
 export type RepoPickerResult =
@@ -68,15 +69,16 @@ function formatPath(path: string): string {
 
 // ── Commands ────────────────────────────────────────────────────────────────
 
-const COMMANDS: TypeaheadItem[] = [
-  {
+function buildShellCommand(cwd: string): TypeaheadItem {
+  const hint = cwd ? `login shell in ${formatPath(cwd)}` : "login shell";
+  return {
     id: "shell",
     type: "cmd",
     label: "shell",
-    hint: "quick command → clipboard",
+    hint,
     icon: "⚡",
-  },
-];
+  };
+}
 
 /**
  * Convert screens (tmux windows) to typeahead items.
@@ -148,6 +150,7 @@ function buildItems(
   repos: RepoInfo[],
   dirs: string[],
   filter: string,
+  cwd: string,
 ): TypeaheadItem[] {
   // Filter repos by the search filter
   const filteredRepos = filter
@@ -181,7 +184,12 @@ function buildItems(
   const sortedDirs = sortByFrequency(dirItems, frequencies);
 
   // Commands, repos, screens, directories
-  return [...COMMANDS, ...sortedRepos, ...sortedScreens, ...sortedDirs];
+  return [
+    buildShellCommand(cwd),
+    ...sortedRepos,
+    ...sortedScreens,
+    ...sortedDirs,
+  ];
 }
 
 // ── State Management ─────────────────────────────────────────────────────────
@@ -189,7 +197,10 @@ function buildItems(
 /**
  * Initialize repo picker state.
  */
-export function initRepoPicker(windows: TmuxWindow[] = []): RepoPickerState {
+export function initRepoPicker(
+  windows: TmuxWindow[] = [],
+  cwd: string = "",
+): RepoPickerState {
   const repos = getKnownRepos();
   const home = process.env.HOME || "/home";
 
@@ -205,7 +216,7 @@ export function initRepoPicker(windows: TmuxWindow[] = []): RepoPickerState {
 
   // Build initial items
   const dirs = getResults(dirFilter);
-  const items = buildItems(windows, repos, dirs, "");
+  const items = buildItems(windows, repos, dirs, "", cwd);
 
   const typeahead = initTypeahead(items);
   return {
@@ -213,6 +224,36 @@ export function initRepoPicker(windows: TmuxWindow[] = []): RepoPickerState {
     repos,
     windows,
     dirFilter,
+    cwd,
+  };
+}
+
+/**
+ * Update the cwd used for the shell command hint, rebuilding items in place.
+ * Preserves current filter and selection where possible.
+ */
+export function setRepoPickerCwd(
+  state: RepoPickerState,
+  cwd: string,
+): RepoPickerState {
+  if (cwd === state.cwd) return state;
+  const dirs = getResults(state.dirFilter);
+  const items = buildItems(
+    state.windows,
+    state.repos,
+    dirs,
+    state.dirFilter.needle,
+    cwd,
+  );
+  const newTypeahead: TypeaheadState = {
+    ...state.typeahead,
+    items,
+    filtered: items,
+  };
+  return {
+    ...state,
+    typeahead: withDynamicTitle(newTypeahead),
+    cwd,
   };
 }
 
@@ -232,7 +273,7 @@ function updateItemsForFilter(
   const dirs = getResults(newDirFilter);
 
   // Build new items
-  const items = buildItems(state.windows, state.repos, dirs, filter);
+  const items = buildItems(state.windows, state.repos, dirs, filter, state.cwd);
 
   // Update typeahead with new items (preserving input and selection where possible)
   const newTypeahead: TypeaheadState = {
