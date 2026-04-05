@@ -1725,7 +1725,7 @@ function sessionExists(): boolean {
 function outputTmuxCommand(): void {
   // If session already exists, just attach to it
   if (sessionExists()) {
-    console.log(`exec tmux attach -t ${SESSION_NAME}`);
+    console.log(`tmux attach -t ${SESSION_NAME}`);
     return;
   }
 
@@ -1737,7 +1737,7 @@ function outputTmuxCommand(): void {
 
   // Popup needs bash for process substitution (<(...))
   console.log(
-    `exec tmux -f '${safeConfigPath}' new-session -s ${SESSION_NAME} \\; ` +
+    `tmux -f '${safeConfigPath}' new-session -s ${SESSION_NAME} \\; ` +
       `bind -n M-Space display-popup -w 80% -h 80% -E 'bash -c "'"${popupCmd}"'"'`,
   );
 }
@@ -1763,7 +1763,7 @@ function install(): void {
 
   // Write the wrapper script (process substitution prefetches tmux data in parallel with bun startup)
   const script = `#!/bin/bash
-eval "$(bun ${SELF_PATH} <(${STARTUP_COMMAND}))"
+eval "exec $(bun ${SELF_PATH} <(${STARTUP_COMMAND}))"
 `;
 
   writeFileSync(scriptPath, script);
