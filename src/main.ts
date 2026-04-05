@@ -474,13 +474,12 @@ function startAnimation(direction: AnimationDirection): void {
   const width = process.stdout.columns || 80;
   const height = process.stdout.rows || 24;
 
-  // Use same positioning as render() - left side of content area
+  // Use same positioning as render() - centered in the terminal
   const maxContentWidth = 100;
   const contentWidth = Math.min(width, maxContentWidth);
-  const contentMargin = Math.floor((width - contentWidth) / 2);
   const previewW = Math.min(40, Math.floor(contentWidth / 2));
   const previewH = Math.min(height - 11, 12);
-  const previewX = contentMargin + 2;
+  const previewX = Math.floor((width - previewW) / 2);
   const previewY = 8; // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
 
   // Update the counter immediately (shows new layout info)
@@ -892,7 +891,6 @@ function render(): void {
   // Constrain to 100 chars max width, centered if terminal is wider
   const maxContentWidth = 100;
   const contentWidth = Math.min(width, maxContentWidth);
-  const contentMargin = Math.floor((width - contentWidth) / 2);
 
   const previewY = 8; // Start after carousel (6 rows) + separator (1 row) + gap (1 row)
   const previewH = Math.min(height - 11, 12);
@@ -902,7 +900,7 @@ function render(): void {
     // Layout picker + rename form (shown after Enter on carousel window)
     const layout = ALL_LAYOUTS[state.layoutIndex];
     const previewW = Math.min(40, Math.floor(contentWidth / 2));
-    const previewX = contentMargin + 2;
+    const previewX = Math.floor((width - previewW) / 2);
     out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
 
     const paneCount = layout.panes.length;

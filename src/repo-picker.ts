@@ -70,12 +70,11 @@ function formatPath(path: string): string {
 // ── Commands ────────────────────────────────────────────────────────────────
 
 function buildShellCommand(cwd: string): TypeaheadItem {
-  const hint = cwd ? `login shell in ${formatPath(cwd)}` : "login shell";
   return {
     id: "shell",
     type: "cmd",
     label: "shell",
-    hint,
+    hint: cwd ? formatPath(cwd) : "",
     icon: "⚡",
   };
 }
