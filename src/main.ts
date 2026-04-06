@@ -17,7 +17,7 @@ import {
 } from "./branch-picker";
 import { closeDb } from "./db";
 import { renderLayoutPreview } from "./layout-preview";
-import { recordTransition } from "./layout-store";
+import { getRankedTransitions, recordTransition } from "./layout-store";
 import { ALL_LAYOUTS, type LayoutTemplate, resolveLayout } from "./layouts";
 import { initLog, log } from "./logger";
 import { matchPanesToSlots, type Pane, type Slot } from "./pane-matcher";
@@ -56,7 +56,13 @@ type TypeaheadMode = "picker" | "branchPicker";
 interface State {
   windows: TmuxWindow[];
   currentWindowIndex: number;
+  // Position in layoutOrder (not a raw ALL_LAYOUTS index). The visible
+  // layout is ALL_LAYOUTS[layoutOrder[layoutIndex]].
   layoutIndex: number;
+  // Permutation of [0..ALL_LAYOUTS.length-1]. Recomputed when entering
+  // the layout picker so the current layout's top transition destinations
+  // come first (ranked by the SQLite transitions table).
+  layoutOrder: number[];
   carouselIndex: number; // 0..n-1 = windows (direct index)
   focus: Focus;
   typeaheadMode: TypeaheadMode;
@@ -165,6 +171,7 @@ function initState(): State {
     windows,
     currentWindowIndex,
     layoutIndex: 0,
+    layoutOrder: ALL_LAYOUTS.map((_, i) => i),
     carouselIndex: currentWindowIndex, // Start on current window
     focus: "carousel",
     typeaheadMode: "picker",
@@ -353,6 +360,37 @@ function refreshPickerCwd(): void {
 }
 
 /**
+ * Compute a layout ordering permutation for the picker.
+ *
+ * Order: [current layout, ...ranked transition destinations from current,
+ * ...remaining layouts in original order]. This puts the starting layout
+ * at position 0 and makes pressing `l` advance directly to the most-used
+ * next destination (per the SQLite transitions table).
+ *
+ * If `fromLayoutName` is null or no current layout matches, returns the
+ * identity permutation (preserving the static `ALL_LAYOUTS` order).
+ */
+function computeLayoutOrder(fromLayoutName: string | null): number[] {
+  const identity = ALL_LAYOUTS.map((_, i) => i);
+  if (!fromLayoutName) return identity;
+
+  const currentIdx = ALL_LAYOUTS.findIndex((l) => l.name === fromLayoutName);
+  if (currentIdx < 0) return identity;
+
+  const seen = new Set<number>([currentIdx]);
+  const rankedIndices: number[] = [];
+  for (const { name } of getRankedTransitions(fromLayoutName)) {
+    const idx = ALL_LAYOUTS.findIndex((l) => l.name === name);
+    if (idx >= 0 && !seen.has(idx)) {
+      rankedIndices.push(idx);
+      seen.add(idx);
+    }
+  }
+  const tail = identity.filter((i) => !seen.has(i));
+  return [currentIdx, ...rankedIndices, ...tail];
+}
+
+/**
  * Update the layout picker to match the currently selected window's layout.
  * Called when carousel selection changes to a window.
  */
@@ -368,12 +406,42 @@ function updateLayoutForSelectedWindow(): void {
       windowInfo.height,
       windowInfo.panes,
     );
-    if (bestLayout !== state.layoutIndex) {
-      state.layoutIndex = bestLayout;
+    // bestLayout is a raw ALL_LAYOUTS index; convert to layoutOrder position.
+    const position = state.layoutOrder.indexOf(bestLayout);
+    const newLayoutIndex = position >= 0 ? position : 0;
+    if (newLayoutIndex !== state.layoutIndex) {
+      state.layoutIndex = newLayoutIndex;
     }
   } catch {
     // Ignore errors (e.g., window no longer exists)
   }
+}
+
+/**
+ * Rebuild layoutOrder from the currently selected window's detected layout,
+ * placing its top transition destinations first. Called when entering the
+ * layout picker so the most-used next layouts appear at the front.
+ */
+function refreshLayoutOrder(): void {
+  const windowIndex = state.carouselIndex;
+  if (windowIndex < 0 || windowIndex >= state.windows.length) {
+    state.layoutOrder = ALL_LAYOUTS.map((_, i) => i);
+    return;
+  }
+  const selectedWindow = state.windows[windowIndex];
+  let fromName: string | null = null;
+  try {
+    const windowInfo = getWindowInfoForWindow(selectedWindow.index);
+    const bestLayout = findBestMatchingLayout(
+      windowInfo.width,
+      windowInfo.height,
+      windowInfo.panes,
+    );
+    fromName = ALL_LAYOUTS[bestLayout]?.name ?? null;
+  } catch {
+    /* ignore — fromName stays null, order falls back to identity */
+  }
+  state.layoutOrder = computeLayoutOrder(fromName);
 }
 
 // ── Layout rendering ───────────────────────────────────────────────────────
@@ -468,8 +536,8 @@ function startAnimation(direction: AnimationDirection): void {
   state.animationDirection = direction;
   state.animationFrame = 0;
 
-  const prevLayout = ALL_LAYOUTS[state.previousLayoutIndex];
-  const nextLayout = ALL_LAYOUTS[state.layoutIndex];
+  const prevLayout = ALL_LAYOUTS[state.layoutOrder[state.previousLayoutIndex]];
+  const nextLayout = ALL_LAYOUTS[state.layoutOrder[state.layoutIndex]];
 
   const width = process.stdout.columns || 80;
   const height = process.stdout.rows || 24;
@@ -898,7 +966,7 @@ function render(): void {
   const activePicker = state.picker ?? state.branchPicker;
   if (state.focus === "layout") {
     // Layout picker + rename form (shown after Enter on carousel window)
-    const layout = ALL_LAYOUTS[state.layoutIndex];
+    const layout = ALL_LAYOUTS[state.layoutOrder[state.layoutIndex]];
     const previewW = Math.min(40, Math.floor(contentWidth / 2));
     const previewX = Math.floor((width - previewW) / 2);
     out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
@@ -1110,6 +1178,7 @@ function handleCarouselFocus(key: string): boolean {
         // Enter on current window → layout picker
         state.focus = "layout";
         state.layoutField = "picker";
+        refreshLayoutOrder();
         updateLayoutForSelectedWindow();
         return true;
       } else {
@@ -1180,6 +1249,7 @@ function handleCarouselFocus(key: string): boolean {
           state.carouselIndex = windowIndex;
           state.focus = "layout";
           state.layoutField = "picker";
+          refreshLayoutOrder();
           updateLayoutForSelectedWindow();
         } else {
           // Number key on different window → switch and exit
@@ -1459,7 +1529,7 @@ function removeCurrentWindow(): void {
 }
 
 function applyAndExit(): void {
-  const layout = ALL_LAYOUTS[state.layoutIndex];
+  const layout = ALL_LAYOUTS[state.layoutOrder[state.layoutIndex]];
   const targetWindow = state.windows[state.currentWindowIndex];
 
   // Record the layout transition (from detected layout to chosen layout)
