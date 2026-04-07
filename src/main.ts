@@ -422,6 +422,15 @@ function detectSelectedWindowLayout(): number | null {
 }
 
 /**
+ * Get the layout name for the currently selected carousel window.
+ * Returns "" if detection fails.
+ */
+function getSelectedLayoutName(): string {
+  const idx = detectSelectedWindowLayout();
+  return idx !== null ? (ALL_LAYOUTS[idx]?.name ?? "") : "";
+}
+
+/**
  * Snap the layout picker's selection to the currently selected window's
  * layout. Called when carousel selection changes — does not rebuild
  * layoutOrder.
@@ -1109,7 +1118,7 @@ function handleKey(key: string): boolean {
     } else {
       state.focus = "typeahead";
       if (!state.picker)
-        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd());
+        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd(), getSelectedLayoutName());
       else refreshPickerCwd();
     }
     state.confirmingDelete = false;
@@ -1156,7 +1165,7 @@ function handleCarouselFocus(key: string): boolean {
     case "j": // Down/Ctrl+N from carousel → typeahead
       state.focus = "typeahead";
       if (!state.picker)
-        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd());
+        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd(), getSelectedLayoutName());
       else refreshPickerCwd();
       return true;
     case "h":
@@ -1211,7 +1220,7 @@ function handleCarouselFocus(key: string): boolean {
       // Escape from carousel → back to typeahead
       state.focus = "typeahead";
       if (!state.picker)
-        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd());
+        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd(), getSelectedLayoutName());
       else refreshPickerCwd();
       return true;
     case "-":
@@ -1328,6 +1337,7 @@ function handlePickerMode(key: string): boolean {
     state.picker = initRepoPicker(
       state?.windows ?? [],
       getSelectedCarouselCwd(),
+      getSelectedLayoutName(),
     );
     return true;
   }
@@ -1824,7 +1834,7 @@ function runUI(): void {
   }
 
   // Initialize picker after first render (deferred for faster startup)
-  state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd());
+  state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd(), getSelectedLayoutName());
   render();
 
   startPolling();
