@@ -134,7 +134,7 @@ bun run build     # bundle to dist/cmux.js
 bun run install   # build + install wrapper to ~/.local/bin/cmux
 ```
 
-**Always run `bun run build` after making code changes.** The installed `cmux` command runs `dist/cmux.js`, not the source files, so any change — including new subcommands like `cmux open` — is invisible until the bundle is rebuilt. Rebuild before handing off to the user for testing.
+**Always run `bun run build` after making code changes.** The installed `cmux` command runs `dist/cmux.js`, not the source files, so any change is invisible until the bundle is rebuilt. Rebuild before handing off to the user for testing.
 
 ## Testing
 
