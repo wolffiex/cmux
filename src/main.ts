@@ -1769,7 +1769,11 @@ function install(): void {
 
   // Write the wrapper script (process substitution prefetches tmux data in parallel with bun startup)
   const script = `#!/bin/bash
-eval "exec $(bun ${SELF_PATH} <(${STARTUP_COMMAND}))"
+if [ "\$1" = "open" ]; then
+  exec bun ${SELF_PATH} "\$@"
+else
+  eval "exec $(bun ${SELF_PATH} <(${STARTUP_COMMAND}))"
+fi
 `;
 
   writeFileSync(scriptPath, script);
