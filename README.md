@@ -92,8 +92,7 @@ Respects `XDG_CACHE_HOME` and `XDG_CONFIG_HOME`.
 
 - [User Guide](docs/USER_GUIDE.md) — full walkthrough of every feature and keybinding.
 - [Architecture](docs/ARCHITECTURE.md) — developer-oriented map of the codebase.
-- [Testing](docs/TESTING.md) — unit, integration, and VHS-based UI verification.
-- [v2 Design Notes](docs/cmux2.md) — historical design doc; mixes shipped and aspirational sections.
+- [Testing](docs/TESTING.md) — unit tests and VHS-based UI verification.
 
 ## Development
 

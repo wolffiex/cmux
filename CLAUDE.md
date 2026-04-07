@@ -47,7 +47,6 @@ Single binary (`src/main.ts`) using raw ANSI for fast startup (~16ms).
 
 - `src/main.ts` - Main UI, key handling, focus management, tmux integration
 - `src/db.ts` - Shared SQLite database (single file, no WAL)
-- `src/cache.ts` - Generic disk cache with its own WAL-mode SQLite file per instance
 - `src/typeahead.ts` - Generic typeahead component with fuzzy filtering
 - `src/resumable-filter.ts` - Resumable BFS directory scan used by the repo picker
 - `src/repo-picker.ts` - Top-level picker (repos, screens, directories, commands)
@@ -67,8 +66,6 @@ Single binary (`src/main.ts`) using raw ANSI for fast startup (~16ms).
 - `src/logger.ts` - Debug log to `/tmp/cmux.log` gated on `CMUX_DEBUG`
 - `src/utils.ts` - Shared utilities (name truncation, sanitization)
 - `src/box-chars.ts` - Box-drawing character constants
-
-Orphaned (candidates for removal): `src/window-summary.ts`, `src/summaries.ts`, `src/fonts.ts`, `src/dir-picker.ts`. None are imported by `main.ts`.
 
 ### UI Structure
 
@@ -129,8 +126,6 @@ Single shared SQLite database at `~/.cache/cmux/cmux.sqlite` (no WAL, single-wri
 - `repos` - Known git repositories with activity tracking
 - `picker_frequency` - Selection counts per item type, ordered by frequency
 - `transitions` - Layout transition counts for smarter ordering
-
-Additional per-cache DBs are opened by `src/cache.ts` under the same cache directory (WAL-mode, one file per cache name). Used for the AI summary cache in the dead `window-summary.ts` path.
 
 ## Building
 

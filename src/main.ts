@@ -17,7 +17,7 @@ import {
 } from "./branch-picker";
 import { closeDb } from "./db";
 import { renderLayoutPreview } from "./layout-preview";
-import { recordTransition } from "./layout-store";
+import { getRankedTransitions, recordTransition } from "./layout-store";
 import { ALL_LAYOUTS, type LayoutTemplate, resolveLayout } from "./layouts";
 import { initLog, log } from "./logger";
 import { matchPanesToSlots, type Pane, type Slot } from "./pane-matcher";
@@ -56,7 +56,13 @@ type TypeaheadMode = "picker" | "branchPicker";
 interface State {
   windows: TmuxWindow[];
   currentWindowIndex: number;
+  // Position in layoutOrder (not a raw ALL_LAYOUTS index). The visible
+  // layout is ALL_LAYOUTS[layoutOrder[layoutIndex]].
   layoutIndex: number;
+  // Permutation of [0..ALL_LAYOUTS.length-1]. Recomputed when entering
+  // the layout picker so the current layout's top transition destinations
+  // come first (ranked by the SQLite transitions table).
+  layoutOrder: number[];
   carouselIndex: number; // 0..n-1 = windows (direct index)
   focus: Focus;
   typeaheadMode: TypeaheadMode;
@@ -165,6 +171,7 @@ function initState(): State {
     windows,
     currentWindowIndex,
     layoutIndex: 0,
+    layoutOrder: ALL_LAYOUTS.map((_, i) => i),
     carouselIndex: currentWindowIndex, // Start on current window
     focus: "carousel",
     typeaheadMode: "picker",
@@ -353,6 +360,43 @@ function refreshPickerCwd(): void {
 }
 
 /**
+ * Compute a layout ordering for the picker. Ranked transition destinations
+ * appear on BOTH sides of the current layout so navigation is symmetric:
+ *
+ *   [current, r1, r2, ..., rN, ...unranked tail, rN, rN-1, ..., r2, r1]
+ *
+ * Pressing `l` from current → r1 (top-ranked); pressing `h` from current
+ * wraps to the last position, which is also r1. `ll` → r2, `hh` → r2, etc.
+ * The ranked block is intentionally duplicated so both navigation directions
+ * surface preferred destinations immediately.
+ *
+ * If `fromLayoutName` is null or no ranked transitions exist, returns the
+ * identity permutation (preserving the static `ALL_LAYOUTS` order).
+ */
+function computeLayoutOrder(fromLayoutName: string | null): number[] {
+  const identity = ALL_LAYOUTS.map((_, i) => i);
+  if (!fromLayoutName) return identity;
+
+  const currentIdx = ALL_LAYOUTS.findIndex((l) => l.name === fromLayoutName);
+  if (currentIdx < 0) return identity;
+
+  const seen = new Set<number>([currentIdx]);
+  const ranked: number[] = [];
+  for (const { name } of getRankedTransitions(fromLayoutName)) {
+    const idx = ALL_LAYOUTS.findIndex((l) => l.name === name);
+    if (idx >= 0 && !seen.has(idx)) {
+      ranked.push(idx);
+      seen.add(idx);
+    }
+  }
+  if (ranked.length === 0) return identity;
+
+  const tail = identity.filter((i) => !seen.has(i));
+  const backward = [...ranked].reverse();
+  return [currentIdx, ...ranked, ...tail, ...backward];
+}
+
+/**
  * Update the layout picker to match the currently selected window's layout.
  * Called when carousel selection changes to a window.
  */
@@ -368,12 +412,42 @@ function updateLayoutForSelectedWindow(): void {
       windowInfo.height,
       windowInfo.panes,
     );
-    if (bestLayout !== state.layoutIndex) {
-      state.layoutIndex = bestLayout;
+    // bestLayout is a raw ALL_LAYOUTS index; convert to layoutOrder position.
+    const position = state.layoutOrder.indexOf(bestLayout);
+    const newLayoutIndex = position >= 0 ? position : 0;
+    if (newLayoutIndex !== state.layoutIndex) {
+      state.layoutIndex = newLayoutIndex;
     }
   } catch {
     // Ignore errors (e.g., window no longer exists)
   }
+}
+
+/**
+ * Rebuild layoutOrder from the currently selected window's detected layout,
+ * placing its top transition destinations first. Called when entering the
+ * layout picker so the most-used next layouts appear at the front.
+ */
+function refreshLayoutOrder(): void {
+  const windowIndex = state.carouselIndex;
+  if (windowIndex < 0 || windowIndex >= state.windows.length) {
+    state.layoutOrder = ALL_LAYOUTS.map((_, i) => i);
+    return;
+  }
+  const selectedWindow = state.windows[windowIndex];
+  let fromName: string | null = null;
+  try {
+    const windowInfo = getWindowInfoForWindow(selectedWindow.index);
+    const bestLayout = findBestMatchingLayout(
+      windowInfo.width,
+      windowInfo.height,
+      windowInfo.panes,
+    );
+    fromName = ALL_LAYOUTS[bestLayout]?.name ?? null;
+  } catch {
+    /* ignore — fromName stays null, order falls back to identity */
+  }
+  state.layoutOrder = computeLayoutOrder(fromName);
 }
 
 // ── Layout rendering ───────────────────────────────────────────────────────
@@ -468,8 +542,8 @@ function startAnimation(direction: AnimationDirection): void {
   state.animationDirection = direction;
   state.animationFrame = 0;
 
-  const prevLayout = ALL_LAYOUTS[state.previousLayoutIndex];
-  const nextLayout = ALL_LAYOUTS[state.layoutIndex];
+  const prevLayout = ALL_LAYOUTS[state.layoutOrder[state.previousLayoutIndex]];
+  const nextLayout = ALL_LAYOUTS[state.layoutOrder[state.layoutIndex]];
 
   const width = process.stdout.columns || 80;
   const height = process.stdout.rows || 24;
@@ -485,7 +559,7 @@ function startAnimation(direction: AnimationDirection): void {
   // Update the counter immediately (shows new layout info)
   const paneCount = nextLayout.panes.length;
   const layoutFocused = state.focus === "layout";
-  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutOrder[state.layoutIndex] + 1}/${ALL_LAYOUTS.length}`;
   const counterX = previewX + Math.floor((previewW - counter.length) / 2);
   let counterOut = ansi.moveTo(counterX, previewY + previewH);
   if (layoutFocused) counterOut += ansi.inverse;
@@ -523,10 +597,9 @@ function startAnimation(direction: AnimationDirection): void {
   setTimeout(tick, ANIMATION_FRAME_MS);
 }
 
-// ── Window swap animation constants (exported for test/debug-swap-animation.ts) ─
-export const WINDOW_SWAP_FRAMES = 8;
-export const WINDOW_SWAP_FRAME_MS = 25; // 8 frames * 25ms = 200ms total
-export const WINDOW_BOX_WIDTH = 17; // Inner width for window names
+const WINDOW_SWAP_FRAMES = 8;
+const WINDOW_SWAP_FRAME_MS = 25;
+const WINDOW_BOX_WIDTH = 17;
 
 function startWindowSwapAnimation(
   fromIndex: number,
@@ -898,14 +971,14 @@ function render(): void {
   const activePicker = state.picker ?? state.branchPicker;
   if (state.focus === "layout") {
     // Layout picker + rename form (shown after Enter on carousel window)
-    const layout = ALL_LAYOUTS[state.layoutIndex];
+    const layout = ALL_LAYOUTS[state.layoutOrder[state.layoutIndex]];
     const previewW = Math.min(40, Math.floor(contentWidth / 2));
     const previewX = Math.floor((width - previewW) / 2);
     out += drawLayoutPreview(layout, previewX, previewY, previewW, previewH);
 
     const paneCount = layout.panes.length;
     const focusOnPicker = state.layoutField === "picker";
-    const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+    const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutOrder[state.layoutIndex] + 1}/${ALL_LAYOUTS.length}`;
     const counterX = previewX + Math.floor((previewW - counter.length) / 2);
     out += ansi.moveTo(counterX, previewY + previewH);
     if (focusOnPicker) out += ansi.inverse;
@@ -1031,10 +1104,7 @@ function handleKey(key: string): boolean {
     } else {
       state.focus = "typeahead";
       if (!state.picker)
-        state.picker = initRepoPicker(
-          state.windows,
-          getSelectedCarouselCwd(),
-        );
+        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd());
       else refreshPickerCwd();
     }
     state.confirmingDelete = false;
@@ -1110,6 +1180,7 @@ function handleCarouselFocus(key: string): boolean {
         // Enter on current window → layout picker
         state.focus = "layout";
         state.layoutField = "picker";
+        refreshLayoutOrder();
         updateLayoutForSelectedWindow();
         return true;
       } else {
@@ -1180,6 +1251,7 @@ function handleCarouselFocus(key: string): boolean {
           state.carouselIndex = windowIndex;
           state.focus = "layout";
           state.layoutField = "picker";
+          refreshLayoutOrder();
           updateLayoutForSelectedWindow();
         } else {
           // Number key on different window → switch and exit
@@ -1211,8 +1283,8 @@ function handleLayoutFocus(key: string): boolean {
     case "h":
       if (state.layoutField === "picker") {
         state.previousLayoutIndex = state.layoutIndex;
-        state.layoutIndex =
-          (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length;
+        const len = state.layoutOrder.length;
+        state.layoutIndex = (state.layoutIndex - 1 + len) % len;
         startAnimation("left");
         return true;
       }
@@ -1220,7 +1292,8 @@ function handleLayoutFocus(key: string): boolean {
     case "l":
       if (state.layoutField === "picker") {
         state.previousLayoutIndex = state.layoutIndex;
-        state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length;
+        const len = state.layoutOrder.length;
+        state.layoutIndex = (state.layoutIndex + 1) % len;
         startAnimation("right");
         return true;
       }
@@ -1459,7 +1532,7 @@ function removeCurrentWindow(): void {
 }
 
 function applyAndExit(): void {
-  const layout = ALL_LAYOUTS[state.layoutIndex];
+  const layout = ALL_LAYOUTS[state.layoutOrder[state.layoutIndex]];
   const targetWindow = state.windows[state.currentWindowIndex];
 
   // Record the layout transition (from detected layout to chosen layout)
@@ -1655,7 +1728,7 @@ function sessionExists(): boolean {
 function outputTmuxCommand(): void {
   // If session already exists, just attach to it
   if (sessionExists()) {
-    console.log(`exec tmux attach -t ${SESSION_NAME}`);
+    console.log(`tmux attach -t ${SESSION_NAME}`);
     return;
   }
 
@@ -1667,7 +1740,7 @@ function outputTmuxCommand(): void {
 
   // Popup needs bash for process substitution (<(...))
   console.log(
-    `exec tmux -f '${safeConfigPath}' new-session -s ${SESSION_NAME} \\; ` +
+    `tmux -f '${safeConfigPath}' new-session -s ${SESSION_NAME} \\; ` +
       `bind -n M-Space display-popup -w 80% -h 80% -E 'bash -c "'"${popupCmd}"'"'`,
   );
 }
@@ -1693,7 +1766,7 @@ function install(): void {
 
   // Write the wrapper script (process substitution prefetches tmux data in parallel with bun startup)
   const script = `#!/bin/bash
-eval "$(bun ${SELF_PATH} <(${STARTUP_COMMAND}))"
+eval "exec $(bun ${SELF_PATH} <(${STARTUP_COMMAND}))"
 `;
 
   writeFileSync(scriptPath, script);
