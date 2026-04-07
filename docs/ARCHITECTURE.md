@@ -19,7 +19,7 @@ Design decisions worth internalizing before you touch the code:
 
 - `src/main.ts` — TUI entry point: `State` shape, focus state machine, render loop, input parsing, animation scheduling, `applyAndExit()` layout pipeline, the `--install` flag handler, and `outputTmuxCommand()` for the shell wrapper eval.
 - `src/box-chars.ts` — box-drawing glyph constants.
-- `src/utils.ts` — `stripAnsi`, `easeOut`, `truncateName`, `splitWindowName`, `wordWrap`, `sanitizeWindowName`.
+- `src/utils.ts` — `stripAnsi`, `easeOut`, `truncateName`, `splitWindowName`, `sanitizeWindowName`.
 - `src/logger.ts` — lazy file logger gated on `CMUX_DEBUG`.
 
 ### Tmux integration
@@ -46,19 +46,10 @@ Design decisions worth internalizing before you touch the code:
 ### Git / store
 
 - `src/db.ts` — `getDb()` singleton. Schema bootstrap lives in each store module.
-- `src/cache.ts` — generic `Cache<T>` class backed by its own WAL-mode SQLite file. Only consumer is `window-summary.ts`.
 - `src/repo-store.ts` — tracks known git repos with throttled writes (one per hour) and a 5-minute activity cache.
 - `src/git-utils.ts` — `isGitRepo`, `resolveRepoPath` (handles worktrees via `git rev-parse --git-common-dir`), `getBranch`, `getLastActivity`.
 - `src/worktree-utils.ts` — `deleteWorktree` with force fallback.
 - `src/window-naming.ts` — startup rename: `generateWindowName(panePath, config)` + `renameAllWindows()`. Reads aliases from `~/.config/cmux/repos`.
-
-### Dead code (slated for removal)
-
-- `src/window-summary.ts` — Anthropic-based AI summaries. Not imported by `main.ts`.
-- `src/summaries.ts` — older heuristic name generator, superseded by `window-naming.ts`.
-- `src/fonts.ts` — big-font rendering, no callers.
-- `src/dir-picker.ts` — older sibling-directory picker. Not used by `main.ts`, though it still has tests.
-- The `@anthropic-ai/sdk` dependency can go once `window-summary.ts` is deleted.
 
 ## Focus state machine
 
@@ -107,7 +98,7 @@ Animations bypass the full redraw. `startAnimation` (layout slide, 12 frames × 
 
 ## SQLite schema
 
-Single shared DB at `$XDG_CACHE_HOME/cmux/cmux.sqlite`, chmod 0600. No WAL — single-writer assumption. Additional per-cache DBs are opened by `src/cache.ts`.
+Single shared DB at `$XDG_CACHE_HOME/cmux/cmux.sqlite`, chmod 0600. No WAL — single-writer assumption.
 
 ```sql
 -- picker-store.ts: tracks how often each picker item is selected
@@ -139,10 +130,6 @@ transitions (
 ```
 
 **Migration pattern.** `repo-store.ts` uses a lenient `PRAGMA table_info()` check followed by a conditional `ALTER TABLE ADD COLUMN`. There is no migration version table. Keep migrations additive: if you need a schema change that cannot be expressed as a new column, drop and recreate the table inside `ensureTable()`.
-
-### The aspirational schema in `docs/cmux2.md`
-
-The v2 design doc proposes `hosts`, `branches`, `directories`, and a `(host, path)`-keyed `repos` table for a remote-nested-tmux feature. **None of that is implemented.** When you read cmux2.md, treat the data-model section as a proposal, not as current state.
 
 ## Tmux integration
 
@@ -296,12 +283,11 @@ Settings: `maxDepth = 4`, `limit = 20` (see `repo-picker.ts:50-51`).
 |---|---|---|
 | `TMUX` | `main.ts:1624` | detects in-tmux vs outside-tmux |
 | `HOME` | install, various | required for `--install`; home path fallback |
-| `XDG_CACHE_HOME` | `db.ts:20`, `cache.ts:7` | DB + cache location |
+| `XDG_CACHE_HOME` | `db.ts:20` | DB location |
 | `XDG_CONFIG_HOME` | `window-naming.ts:19` | repo alias config location |
 | `CMUX_DEBUG` | `logger.ts:4` | enables `/tmp/cmux.log` |
 | `CMUX_BENCHMARK` | `main.ts:96` | exits after first render |
 | `ZDOTDIR` | `main.ts:1284` | saved as `CMUX_REAL_ZDOTDIR` for the quick-shell |
-| `ANTHROPIC_API_KEY` | `window-summary.ts:19` | only the dead AI path — no live effect |
 
 ## Conventions for new contributors
 

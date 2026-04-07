@@ -597,10 +597,9 @@ function startAnimation(direction: AnimationDirection): void {
   setTimeout(tick, ANIMATION_FRAME_MS);
 }
 
-// ── Window swap animation constants (exported for test/debug-swap-animation.ts) ─
-export const WINDOW_SWAP_FRAMES = 8;
-export const WINDOW_SWAP_FRAME_MS = 25; // 8 frames * 25ms = 200ms total
-export const WINDOW_BOX_WIDTH = 17; // Inner width for window names
+const WINDOW_SWAP_FRAMES = 8;
+const WINDOW_SWAP_FRAME_MS = 25;
+const WINDOW_BOX_WIDTH = 17;
 
 function startWindowSwapAnimation(
   fromIndex: number,
@@ -1105,10 +1104,7 @@ function handleKey(key: string): boolean {
     } else {
       state.focus = "typeahead";
       if (!state.picker)
-        state.picker = initRepoPicker(
-          state.windows,
-          getSelectedCarouselCwd(),
-        );
+        state.picker = initRepoPicker(state.windows, getSelectedCarouselCwd());
       else refreshPickerCwd();
     }
     state.confirmingDelete = false;

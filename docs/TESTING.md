@@ -17,20 +17,15 @@ For UI changes, also run the VHS tapes — see "Visual verification" below.
 
 ```
 test/
-├── integration/
-│   ├── layout-apply.test.ts    # pane preservation during layout changes
-│   └── ui.test.ts              # full UI interaction
 ├── vhs/
 │   ├── carousel-default.tape   # baseline boot screenshot
 │   ├── layout-picker.tape      # carousel Enter → layout picker
 │   └── shell-hint-cwd.tape     # shell hint cwd across navigation
 ├── branch-picker.test.ts
-├── dir-picker.test.ts
 ├── layout-preview.test.ts
 ├── layouts.test.ts
 ├── pane-matcher.test.ts
 ├── picker-store.test.ts
-├── summaries.test.ts
 ├── swap-orchestrator.test.ts
 ├── tmux-layout.test.ts
 ├── tmux.test.ts
@@ -38,7 +33,6 @@ test/
 └── window-naming.test.ts
 
 src/
-├── cache.test.ts               # colocated: generic cache
 ├── typeahead.test.ts           # colocated: fuzzy-path + key handling
 └── resumable-filter.test.ts    # colocated: resumable BFS scan
 ```
@@ -51,51 +45,12 @@ Unit tests run without tmux and cover pure logic:
 - **Layout templates** — `layouts.test.ts`: coordinate resolution, negative-value encoding, usable-width math.
 - **Pane matching** — `pane-matcher.test.ts`: overlap scoring, center-distance fallback, top-bias multiplier.
 - **Swap orchestration** — `swap-orchestrator.test.ts`: selection-sort swap sequences.
-- **Window naming** — `window-naming.test.ts`, `summaries.test.ts`: git repo/branch heuristics, alias file parsing.
-- **Pickers** — `branch-picker.test.ts`, `dir-picker.test.ts`, `picker-store.test.ts`: filter/selection logic.
+- **Window naming** — `window-naming.test.ts`: git repo/branch heuristics, alias file parsing.
+- **Pickers** — `branch-picker.test.ts`, `picker-store.test.ts`: filter/selection logic.
 - **Typeahead + resumable filter** — `src/typeahead.test.ts`, `src/resumable-filter.test.ts`: fuzzy matching, narrow-vs-reset, BFS state.
-- **Cache** — `src/cache.test.ts`: TTL, prune, invalidate.
-- **Utilities** — `utils.test.ts`: truncation, ansi stripping, word wrap.
+- **Utilities** — `utils.test.ts`: truncation, ansi stripping, sanitization.
 
 `picker-store.test.ts` uses the real shared DB and calls `_clearAll()` in `beforeEach` for isolation.
-
-## Integration tests
-
-Integration tests require tmux and run cmux inside isolated tmux sockets.
-
-```ts
-// test/integration/ui.test.ts
-const SOCKET = `cmux_test_${process.pid}`;
-execSync(`tmux -L ${SOCKET} -f /dev/null new-session -d -s test -x 120 -y 24`);
-```
-
-Key flags:
-
-- **`-L <socket>`** runs an isolated tmux server, one per test process. This prevents collisions with the developer's real tmux session and with parallel test runs.
-- **`-f /dev/null`** ignores the user's tmux config. Without this, settings like `base-index 1` produce spurious failures.
-
-Each test wraps `beforeEach(startCmux)` / `afterEach(quitCmux)`. `startCmux` types `bun src/main.ts 2>/dev/null` into the test pane and polls via `capture-pane` until the carousel appears. `quitCmux` sends `q`.
-
-The two integration files cover:
-
-- `layout-apply.test.ts` — pane IDs and working directories are preserved through layout changes. This is the ground truth for the `matchPanesToSlots` → swap → `select-layout` pipeline.
-- `ui.test.ts` — end-to-end rendering and key navigation. It uses `tmux capture-pane` to snapshot the UI as text and asserts on substrings.
-
-### Why unit tests are not enough
-
-Two properties of tmux layout strings bite unit tests:
-
-1. **Pane IDs are immutable for a pane's lifetime** (`%0`, `%1`, …).
-2. **tmux ignores pane IDs inside layout strings and assigns panes to slots in creation order.**
-
-So verifying pane preservation means actually interacting with tmux and comparing pane IDs before and after. That is what `layout-apply.test.ts` does.
-
-```bash
-# Track pane identity
-tmux list-panes -F '#{pane_id}:#{pane_pid}'
-# Before: %0:1234, %1:5678
-# After:  %0:1234, %1:5678  ← preserved
-```
 
 ## Visual verification (VHS)
 
@@ -183,6 +138,4 @@ bun run format      # format code
 ## CI considerations
 
 - Unit tests run in CI without tmux.
-- Integration tests require tmux to be available.
-- All tmux-using tests use isolated `-L <socket>` servers to avoid conflicts.
 - VHS is not wired into CI; it's a local verification loop.

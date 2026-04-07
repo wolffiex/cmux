@@ -69,7 +69,6 @@ describe("worktree deletion", () => {
     });
     expect(worktreesAfter).not.toContain(branchName);
 
-    // Verify branch is also gone - THIS SHOULD FAIL until we implement the feature
     const branchesAfter = execFileSync("git", ["branch"], {
       cwd: mainRepoPath,
       encoding: "utf-8",

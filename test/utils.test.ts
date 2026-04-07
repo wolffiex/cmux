@@ -5,17 +5,6 @@ import {
   truncateName,
 } from "../src/utils";
 
-/**
- * Regression tests for long window name handling.
- *
- * The Bug We're Preventing:
- * sanitizeWindowName() previously had a 15-char limit + word-boundary cutting that destroyed names like:
- * - "research-apps/v2-rewrite" -> "research" (catastrophic truncation)
- * - The slash and everything after was lost before reaching splitWindowName
- *
- * The fix increased the limit to 50 chars so the display layer can properly handle truncation.
- */
-
 describe("sanitizeWindowName", () => {
   test("preserves repo/branch format under 50 chars", () => {
     // These should NOT be truncated to 15 chars or cut at word boundary
@@ -53,7 +42,8 @@ describe("sanitizeWindowName", () => {
   });
 
   test("removes non-ASCII characters", () => {
-    expect(sanitizeWindowName("repo-emoji-test")).toBe("repo-emoji-test");
+    expect(sanitizeWindowName("repo-😀-name")).toBe("repo--name");
+    expect(sanitizeWindowName("café")).toBe("caf");
   });
 
   test("trims whitespace", () => {
