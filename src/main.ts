@@ -59,9 +59,13 @@ interface State {
   // Position in layoutOrder (not a raw ALL_LAYOUTS index). The visible
   // layout is ALL_LAYOUTS[layoutOrder[layoutIndex]].
   layoutIndex: number;
-  // Permutation of [0..ALL_LAYOUTS.length-1]. Recomputed when entering
-  // the layout picker so the current layout's top transition destinations
-  // come first (ranked by the SQLite transitions table).
+  // Ordered list of ALL_LAYOUTS indices used to drive h/l navigation in the
+  // layout picker. Recomputed when entering the picker so the current
+  // layout's top transition destinations (from the SQLite transitions
+  // table) appear immediately after the current entry. The ranked block is
+  // intentionally appended in reverse at the tail so wrap-around in the
+  // opposite direction also lands on a top destination — i.e. layoutOrder
+  // may contain the same ALL_LAYOUTS index more than once.
   layoutOrder: number[];
   carouselIndex: number; // 0..n-1 = windows (direct index)
   focus: Focus;
@@ -397,57 +401,58 @@ function computeLayoutOrder(fromLayoutName: string | null): number[] {
 }
 
 /**
- * Update the layout picker to match the currently selected window's layout.
- * Called when carousel selection changes to a window.
+ * Detect the selected window's current layout. Returns the raw ALL_LAYOUTS
+ * index, or null if the window is gone or detection fails. One tmux
+ * subprocess per call.
  */
-function updateLayoutForSelectedWindow(): void {
+function detectSelectedWindowLayout(): number | null {
   const windowIndex = state.carouselIndex;
-  if (windowIndex < 0 || windowIndex >= state.windows.length) return;
-
+  if (windowIndex < 0 || windowIndex >= state.windows.length) return null;
   const selectedWindow = state.windows[windowIndex];
   try {
     const windowInfo = getWindowInfoForWindow(selectedWindow.index);
-    const bestLayout = findBestMatchingLayout(
+    return findBestMatchingLayout(
       windowInfo.width,
       windowInfo.height,
       windowInfo.panes,
     );
-    // bestLayout is a raw ALL_LAYOUTS index; convert to layoutOrder position.
-    const position = state.layoutOrder.indexOf(bestLayout);
-    const newLayoutIndex = position >= 0 ? position : 0;
-    if (newLayoutIndex !== state.layoutIndex) {
-      state.layoutIndex = newLayoutIndex;
-    }
   } catch {
-    // Ignore errors (e.g., window no longer exists)
+    return null;
   }
 }
 
 /**
- * Rebuild layoutOrder from the currently selected window's detected layout,
- * placing its top transition destinations first. Called when entering the
- * layout picker so the most-used next layouts appear at the front.
+ * Snap the layout picker's selection to the currently selected window's
+ * layout. Called when carousel selection changes — does not rebuild
+ * layoutOrder.
  */
-function refreshLayoutOrder(): void {
-  const windowIndex = state.carouselIndex;
-  if (windowIndex < 0 || windowIndex >= state.windows.length) {
-    state.layoutOrder = ALL_LAYOUTS.map((_, i) => i);
+function updateLayoutForSelectedWindow(): void {
+  const bestLayout = detectSelectedWindowLayout();
+  if (bestLayout === null) return;
+  const position = state.layoutOrder.indexOf(bestLayout);
+  const newLayoutIndex = position >= 0 ? position : 0;
+  if (newLayoutIndex !== state.layoutIndex) {
+    state.layoutIndex = newLayoutIndex;
+  }
+}
+
+/**
+ * Enter the layout picker for the currently selected window. Rebuilds
+ * layoutOrder from the detected layout's top transition destinations and
+ * snaps layoutIndex to the detected layout's position — both from a single
+ * tmux query.
+ */
+function enterLayoutPickerForSelectedWindow(): void {
+  const bestLayout = detectSelectedWindowLayout();
+  const fromName =
+    bestLayout !== null ? (ALL_LAYOUTS[bestLayout]?.name ?? null) : null;
+  state.layoutOrder = computeLayoutOrder(fromName);
+  if (bestLayout === null) {
+    state.layoutIndex = 0;
     return;
   }
-  const selectedWindow = state.windows[windowIndex];
-  let fromName: string | null = null;
-  try {
-    const windowInfo = getWindowInfoForWindow(selectedWindow.index);
-    const bestLayout = findBestMatchingLayout(
-      windowInfo.width,
-      windowInfo.height,
-      windowInfo.panes,
-    );
-    fromName = ALL_LAYOUTS[bestLayout]?.name ?? null;
-  } catch {
-    /* ignore — fromName stays null, order falls back to identity */
-  }
-  state.layoutOrder = computeLayoutOrder(fromName);
+  const position = state.layoutOrder.indexOf(bestLayout);
+  state.layoutIndex = position >= 0 ? position : 0;
 }
 
 // ── Layout rendering ───────────────────────────────────────────────────────
@@ -1180,8 +1185,7 @@ function handleCarouselFocus(key: string): boolean {
         // Enter on current window → layout picker
         state.focus = "layout";
         state.layoutField = "picker";
-        refreshLayoutOrder();
-        updateLayoutForSelectedWindow();
+        enterLayoutPickerForSelectedWindow();
         return true;
       } else {
         // Enter on different window → switch to it and exit
@@ -1251,8 +1255,7 @@ function handleCarouselFocus(key: string): boolean {
           state.carouselIndex = windowIndex;
           state.focus = "layout";
           state.layoutField = "picker";
-          refreshLayoutOrder();
-          updateLayoutForSelectedWindow();
+          enterLayoutPickerForSelectedWindow();
         } else {
           // Number key on different window → switch and exit
           const win = state.windows[windowIndex];

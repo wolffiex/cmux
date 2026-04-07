@@ -46,7 +46,11 @@ export function recordTransition(fromLayout: string, toLayout: string): void {
  * via past transitions. The relationship is symmetric: a recorded
  * transition `A → B` biases the picker in BOTH directions, so the
  * count for `B` when on `A` is `count(A→B) + count(B→A)`.
- * Returns layout names in descending order of combined count.
+ * Returns layout names in descending order of combined count, with
+ * `name` as a deterministic tiebreaker. Self-loop rows (from = to) are
+ * excluded — `recordTransition` already refuses to write them, but
+ * filtering on read defends against pre-existing rows that would
+ * otherwise be double-counted by the symmetric union.
  */
 export function getRankedTransitions(
   layout: string,
@@ -58,14 +62,17 @@ export function getRankedTransitions(
        FROM (
          SELECT to_layout AS name, count
          FROM transitions
-         WHERE from_layout = ?
+         WHERE from_layout = ? AND to_layout != ?
          UNION ALL
          SELECT from_layout AS name, count
          FROM transitions
-         WHERE to_layout = ?
+         WHERE to_layout = ? AND from_layout != ?
        )
        GROUP BY name
-       ORDER BY count DESC`,
+       ORDER BY count DESC, name ASC`,
     )
-    .all(layout, layout) as { name: string; count: number }[];
+    .all(layout, layout, layout, layout) as {
+    name: string;
+    count: number;
+  }[];
 }
