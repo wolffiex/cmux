@@ -360,14 +360,17 @@ function refreshPickerCwd(): void {
 }
 
 /**
- * Compute a layout ordering permutation for the picker.
+ * Compute a layout ordering for the picker. Ranked transition destinations
+ * appear on BOTH sides of the current layout so navigation is symmetric:
  *
- * Order: [current layout, ...ranked transition destinations from current,
- * ...remaining layouts in original order]. This puts the starting layout
- * at position 0 and makes pressing `l` advance directly to the most-used
- * next destination (per the SQLite transitions table).
+ *   [current, r1, r2, ..., rN, ...unranked tail, rN, rN-1, ..., r2, r1]
  *
- * If `fromLayoutName` is null or no current layout matches, returns the
+ * Pressing `l` from current → r1 (top-ranked); pressing `h` from current
+ * wraps to the last position, which is also r1. `ll` → r2, `hh` → r2, etc.
+ * The ranked block is intentionally duplicated so both navigation directions
+ * surface preferred destinations immediately.
+ *
+ * If `fromLayoutName` is null or no ranked transitions exist, returns the
  * identity permutation (preserving the static `ALL_LAYOUTS` order).
  */
 function computeLayoutOrder(fromLayoutName: string | null): number[] {
@@ -378,16 +381,19 @@ function computeLayoutOrder(fromLayoutName: string | null): number[] {
   if (currentIdx < 0) return identity;
 
   const seen = new Set<number>([currentIdx]);
-  const rankedIndices: number[] = [];
+  const ranked: number[] = [];
   for (const { name } of getRankedTransitions(fromLayoutName)) {
     const idx = ALL_LAYOUTS.findIndex((l) => l.name === name);
     if (idx >= 0 && !seen.has(idx)) {
-      rankedIndices.push(idx);
+      ranked.push(idx);
       seen.add(idx);
     }
   }
+  if (ranked.length === 0) return identity;
+
   const tail = identity.filter((i) => !seen.has(i));
-  return [currentIdx, ...rankedIndices, ...tail];
+  const backward = [...ranked].reverse();
+  return [currentIdx, ...ranked, ...tail, ...backward];
 }
 
 /**
@@ -553,7 +559,7 @@ function startAnimation(direction: AnimationDirection): void {
   // Update the counter immediately (shows new layout info)
   const paneCount = nextLayout.panes.length;
   const layoutFocused = state.focus === "layout";
-  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+  const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutOrder[state.layoutIndex] + 1}/${ALL_LAYOUTS.length}`;
   const counterX = previewX + Math.floor((previewW - counter.length) / 2);
   let counterOut = ansi.moveTo(counterX, previewY + previewH);
   if (layoutFocused) counterOut += ansi.inverse;
@@ -973,7 +979,7 @@ function render(): void {
 
     const paneCount = layout.panes.length;
     const focusOnPicker = state.layoutField === "picker";
-    const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutIndex + 1}/${ALL_LAYOUTS.length}`;
+    const counter = `${paneCount} pane${paneCount > 1 ? "s" : ""} · ${state.layoutOrder[state.layoutIndex] + 1}/${ALL_LAYOUTS.length}`;
     const counterX = previewX + Math.floor((previewW - counter.length) / 2);
     out += ansi.moveTo(counterX, previewY + previewH);
     if (focusOnPicker) out += ansi.inverse;
@@ -1281,8 +1287,8 @@ function handleLayoutFocus(key: string): boolean {
     case "h":
       if (state.layoutField === "picker") {
         state.previousLayoutIndex = state.layoutIndex;
-        state.layoutIndex =
-          (state.layoutIndex - 1 + ALL_LAYOUTS.length) % ALL_LAYOUTS.length;
+        const len = state.layoutOrder.length;
+        state.layoutIndex = (state.layoutIndex - 1 + len) % len;
         startAnimation("left");
         return true;
       }
@@ -1290,7 +1296,8 @@ function handleLayoutFocus(key: string): boolean {
     case "l":
       if (state.layoutField === "picker") {
         state.previousLayoutIndex = state.layoutIndex;
-        state.layoutIndex = (state.layoutIndex + 1) % ALL_LAYOUTS.length;
+        const len = state.layoutOrder.length;
+        state.layoutIndex = (state.layoutIndex + 1) % len;
         startAnimation("right");
         return true;
       }

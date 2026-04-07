@@ -42,20 +42,30 @@ export function recordTransition(fromLayout: string, toLayout: string): void {
 }
 
 /**
- * Get layout names ranked by how often the user transitions to them
- * from the given source layout. Returns layout names in descending
- * order of count.
+ * Get layout names ranked by how strongly they're related to `layout`
+ * via past transitions. The relationship is symmetric: a recorded
+ * transition `A → B` biases the picker in BOTH directions, so the
+ * count for `B` when on `A` is `count(A→B) + count(B→A)`.
+ * Returns layout names in descending order of combined count.
  */
 export function getRankedTransitions(
-  fromLayout: string,
+  layout: string,
 ): { name: string; count: number }[] {
   ensureTable();
   return getDb()
     .query(
-      `SELECT to_layout as name, count
-       FROM transitions
-       WHERE from_layout = ?
+      `SELECT name, SUM(count) AS count
+       FROM (
+         SELECT to_layout AS name, count
+         FROM transitions
+         WHERE from_layout = ?
+         UNION ALL
+         SELECT from_layout AS name, count
+         FROM transitions
+         WHERE to_layout = ?
+       )
+       GROUP BY name
        ORDER BY count DESC`,
     )
-    .all(fromLayout) as { name: string; count: number }[];
+    .all(layout, layout) as { name: string; count: number }[];
 }
