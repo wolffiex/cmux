@@ -36,6 +36,7 @@ export interface RepoPickerState {
   windows: TmuxWindow[];
   dirFilter: ResumableFilter;
   cwd: string;
+  fromLayout: string;
 }
 
 export type RepoPickerResult =
@@ -150,6 +151,7 @@ function buildItems(
   dirs: string[],
   filter: string,
   cwd: string,
+  fromLayout: string,
 ): TypeaheadItem[] {
   // Filter repos by the search filter
   const filteredRepos = filter
@@ -177,7 +179,7 @@ function buildItems(
   const dirItems = dirsToItems(nonRepoDirs);
 
   // Sort each group by frequency independently
-  const frequencies = getAllFrequencies();
+  const frequencies = getAllFrequencies(fromLayout);
   const sortedScreens = sortByFrequency(screenItems, frequencies);
   const sortedRepos = sortByFrequency(repoItems, frequencies);
   const sortedDirs = sortByFrequency(dirItems, frequencies);
@@ -199,6 +201,7 @@ function buildItems(
 export function initRepoPicker(
   windows: TmuxWindow[] = [],
   cwd: string = "",
+  fromLayout: string = "",
 ): RepoPickerState {
   const repos = getKnownRepos();
   const home = process.env.HOME || "/home";
@@ -215,7 +218,7 @@ export function initRepoPicker(
 
   // Build initial items
   const dirs = getResults(dirFilter);
-  const items = buildItems(windows, repos, dirs, "", cwd);
+  const items = buildItems(windows, repos, dirs, "", cwd, fromLayout);
 
   const typeahead = initTypeahead(items);
   return {
@@ -224,6 +227,7 @@ export function initRepoPicker(
     windows,
     dirFilter,
     cwd,
+    fromLayout,
   };
 }
 
@@ -243,6 +247,7 @@ export function setRepoPickerCwd(
     dirs,
     state.dirFilter.needle,
     cwd,
+    state.fromLayout,
   );
   const newTypeahead: TypeaheadState = {
     ...state.typeahead,
@@ -272,7 +277,7 @@ function updateItemsForFilter(
   const dirs = getResults(newDirFilter);
 
   // Build new items
-  const items = buildItems(state.windows, state.repos, dirs, filter, state.cwd);
+  const items = buildItems(state.windows, state.repos, dirs, filter, state.cwd, state.fromLayout);
 
   // Update typeahead with new items (preserving input and selection where possible)
   const newTypeahead: TypeaheadState = {
@@ -364,7 +369,7 @@ export function handleRepoPickerKey(
           const windowIndex = parseInt(item.id, 10);
           const win = state.windows.find((w) => w.index === windowIndex);
           if (win) {
-            recordSelection("screen", win.name);
+            recordSelection(state.fromLayout, "screen", win.name);
             return { action: "screen", window: win };
           }
           return { action: "cancel" };
@@ -373,14 +378,14 @@ export function handleRepoPickerKey(
         case "repo": {
           const repo = state.repos.find((r) => r.path === item.id);
           if (repo) {
-            recordSelection("repo", repo.path);
+            recordSelection(state.fromLayout, "repo", repo.path);
             return { action: "select", repo };
           }
           return { action: "cancel" };
         }
 
         case "dir":
-          recordSelection("dir", item.id);
+          recordSelection(state.fromLayout, "dir", item.id);
           return { action: "directory", path: item.id };
 
         default:
