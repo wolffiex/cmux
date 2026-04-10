@@ -1,3 +1,4 @@
+import "./test-db-isolate";
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
   _clearAll,

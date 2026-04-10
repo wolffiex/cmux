@@ -42,15 +42,12 @@ export function recordTransition(fromLayout: string, toLayout: string): void {
 }
 
 /**
- * Get layout names ranked by how strongly they're related to `layout`
- * via past transitions. The relationship is symmetric: a recorded
- * transition `A → B` biases the picker in BOTH directions, so the
- * count for `B` when on `A` is `count(A→B) + count(B→A)`.
- * Returns layout names in descending order of combined count, with
- * `name` as a deterministic tiebreaker. Self-loop rows (from = to) are
- * excluded — `recordTransition` already refuses to write them, but
- * filtering on read defends against pre-existing rows that would
- * otherwise be double-counted by the symmetric union.
+ * Get the top destination layouts when the user is currently on `layout`,
+ * ranked by how often they've switched `layout → X` in the past. Purely
+ * directional: `B → A` transitions do NOT influence the ranking when
+ * ranking from `A`. Self-loop rows (from = to) are excluded defensively —
+ * `recordTransition` already refuses to write them. Ties are broken by
+ * `name` ascending for determinism.
  */
 export function getRankedTransitions(
   layout: string,
@@ -58,20 +55,12 @@ export function getRankedTransitions(
   ensureTable();
   return getDb()
     .query(
-      `SELECT name, SUM(count) AS count
-       FROM (
-         SELECT to_layout AS name, count
-         FROM transitions
-         WHERE from_layout = ? AND to_layout != ?
-         UNION ALL
-         SELECT from_layout AS name, count
-         FROM transitions
-         WHERE to_layout = ? AND from_layout != ?
-       )
-       GROUP BY name
+      `SELECT to_layout AS name, count
+       FROM transitions
+       WHERE from_layout = ? AND to_layout != ?
        ORDER BY count DESC, name ASC`,
     )
-    .all(layout, layout, layout, layout) as {
+    .all(layout, layout) as {
     name: string;
     count: number;
   }[];
